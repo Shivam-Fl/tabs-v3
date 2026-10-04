@@ -731,6 +731,11 @@
       "prior_signatures": [
         "root-cause:unknown:02004bc36963fc04"
       ]
+    },
+    "triage": {
+      "verdict": "resume",
+      "diagnosis": "The root-cause stage did its whole job and its own last step refused the result. post-work-order.mjs refused the revised work order because none of its acceptance criteria carries `source`, so unansweredSplitCriteria found IAC-1, IAC-2 and IAC-3 unanswered from the issue's \"## Acceptance (from the split)\" (\"the work order neither answers nor defers IAC-1, IAC-2, IAC-3 ... give each a criterion with `source` set to its id, or put \\\"IAC-n: why it is not in this change\\\" in out_of_scope\"). The objection is correct about the artifact: on the ledger the refused v4 has 13 criteria and every one carries only `id` and `check` — `source`, `how_to_verify` and `verify` are gone from all 13. Nothing else broke: the plan's content is sound (v3 is posted; the QA bug from the last round is covered by the new AC-13; AC-4 reworded), the code is not implicated, and no outage or limit appears in the log. The fields are missing because of the channel: the artifact the job gates is the session's structured result, not the file the agent wrote — sdlc-root-cause.yml's step `The result of \"Diagnose\", as its file` writes work-order.json from that result and its own comment says it replaces anything the agent wrote there. The result was a condensed re-emission (shorter prose, trimmed checks, optional fields dropped) while the file the agent wrote was 16,688 characters and its last words are \"Preflight is clean\" — the framework's self-check approved an object that was not the one graded. That divergence is an agent-side emission failure the gate caught correctly; one clause for whoever owns the packs: .sdlc/agents/root-cause.md never states the split rule post-work-order.mjs enforces (planner.md:161 does). Either way, the next run does not need to redo the work.",
+      "evidence": "failed-run.log, job `publish`, step \"Post it and route\": \"sdlc: the work order neither answers nor defers IAC-1, IAC-2, IAC-3 from the issue's \\\"## Acceptance (from the split)\\\"\" then \"##[error]Process completed with exit code 1\" — the step name is not the cause, this message is. The artifact it graded: state/5.json -> rejected_artifacts['work-order'] (7,687 chars, 2026-10-04T23:32:54.340Z, errors = that same message); parsing it, all 13 acceptance entries have exactly the keys [check, id]. failure-packet.json raw_excerpt from the same job: \"Write /home/runner/work/tabs-v3/tabs-v3/work-order.json (16688 chars)\" and \"final reply 228 chars\", whose text is \"Preflight is clean. The setOutput error is just the CI-only GitHub output mechanism failing in this sandbox...\" (root-cause-transcript.json). The replace-the-file mechanism: .github/workflows/sdlc-root-cause.yml, step \"The result of \\\"Diagnose\\\", as its file\" (comment: \"It replaces anything the agent wrote there itself\"). The hand-back is armed: state/5.json work_order_posted_at 2026-10-04T22:31:46.166Z is earlier than the rejection at 23:32:54.340Z, which is the condition sdlc-root-cause.yml's prepare job tests. Precedent on this issue: state/5.json failure_history — the identical refusal at attempt 3 (signature root-cause:unknown:02004bc36963fc04, 21:30Z), triaged `resume` (confidence 88), after which the next root-cause run posted v3 at 22:31:46 with `source` on all 12 criteria and how_to_verify + verify on each."
     }
   },
   "triage_history": [
@@ -741,6 +746,14 @@
       "confidence": 88,
       "diagnosis": "The root-cause stage did its work and then its last step refused it. `Post it and route` failed because the work order it had just written carries no `acceptance[].source` on any of its ten criteria and no `out_of_scope`, so the split gate (check-split-criteria.mjs, reached through post-work-order.mjs:78-82) found IAC-1, IAC-2 and IAC-3 from the issue's \"## Acceptance (from the split)\" neither answered nor deferred. The revision kept every id and every criterion's text verbatim but lost every no",
       "run": "37235962948"
+    },
+    {
+      "at": "2026-10-04T23:43:14.456Z",
+      "stage": "root-cause",
+      "verdict": "resume",
+      "confidence": 75,
+      "diagnosis": "The root-cause stage did its whole job and its own last step refused the result. post-work-order.mjs refused the revised work order because none of its acceptance criteria carries `source`, so unansweredSplitCriteria found IAC-1, IAC-2 and IAC-3 unanswered from the issue's \"## Acceptance (from the split)\" (\"the work order neither answers nor defers IAC-1, IAC-2, IAC-3 ... give each a criterion with `source` set to its id, or put \\\"IAC-n: why it is not in this change\\\" in out_of_scope\"). The obje",
+      "run": "37243850514"
     }
   ]
 }

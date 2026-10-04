@@ -1,0 +1,166 @@
+# The default branch, verified after every change lands on it — and taken back out when it is red.
+#
+# Nothing checked what merged. ci-verify tests a PR's head, so two PRs QA'd against the same base
+# merged as a combination nothing had run (actual-budget-sdlc #10 and #12, tabs-app #13), and an
+# owner's push went straight in. No workflow ran on push, and nothing would have noticed a red
+# default branch until the next PR built on it.
+#
+#   verify   read-only token: the pushed commit, installed and checked exactly as ci-verify checks
+#            a PR (run-check.sh is the one implementation of both). It runs product code, so it
+#            can write nothing.
+#   revert   write token, a fresh checkout of the default branch, no product code and no agent:
+#            only when verify failed. Halts the pipeline (`sdlc halt`), opens a PR reverting the
+#            commit — never merges it — and says so on the issue the merge closed.
+name: sdlc-main-verify
+
+on:
+  # A person's merge or push. Every branch, because which one is the default is the repository's
+  # setting, not this file's: the jobs run only for it. A tag is not a branch.
+  push:
+    branches: ['**']
+  # The pipeline's own merges. merge-pr merges with GITHUB_TOKEN, and GitHub starts no workflow
+  # from an event that token causes, so `push` alone never sees a single autonomous merge.
+  # on-merge, which runs after every merge, dispatches this with the merge commit.
+  workflow_dispatch:
+    inputs:
+      sha: { required: true, type: string }
+
+# One run per commit. A merge on-merge dispatches for can also arrive as a push, and the second
+# run would check the same tree again; a run already going is never cancelled for it.
+concurrency:
+  group: sdlc-main-verify-${{ inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+# No job runs with this block: each declares its own, which replaces it. It is the union of
+# theirs because the shared permission suite reads the workflow-level block.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      checks_failed: ${{ steps.checks.outcome == 'failure' }}
+      summary: ${{ steps.digest.outputs.summary }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0          # the commit before the push, to see what it changed
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 22
+          cache: ${{ hashFiles('**/package-lock.json') != '' && 'npm' || '' }}
+
+      - name: Kill switch
+        run: node .sdlc/bin/sdlc-ctl.mjs guard
+        env: { SDLC_ENABLED: "${{ vars.SDLC_ENABLED }}" }
+
+      # A push that changed no product file has nothing product-side to verify and nothing to take
+      # back: a framework install or sync, a doc, the repo's metadata. Verifying it anyway goes red
+      # on a greenfield repo's install commit — verify.unit is `npm run sdlc:verify` before any
+      # package.json exists — and would halt the pipeline and revert its own install, or revert a
+      # sync because the product was already red. Against the commit before the push, or the merge
+      # commit's first parent when the pipeline dispatched this; everything, on a branch's first push.
+      - name: What the push changed
+        id: changed
+        env:
+          SHA: ${{ inputs.sha || github.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$' && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            BASE=$BEFORE
+          elif [ -z "$BEFORE" ] && git rev-parse -q --verify "$SHA^" >/dev/null; then
+            BASE="$SHA^"
+          else
+            BASE=$(git hash-object -t tree /dev/null)
+          fi
+          PRODUCT=$(git diff --name-only "$BASE" "$SHA" | grep -vE '^(\.sdlc/|\.github/|docs/|bin/sdlc$|LICENSE|\.gitignore$|\.gitattributes$)|\.md$' || true)
+          if [ -n "$PRODUCT" ]; then
+            echo "product=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "product=false" >> "$GITHUB_OUTPUT"
+            echo "only the framework, docs or repo metadata changed — nothing product-side to verify"
+          fi
+
+      # Install scripts off, as in ci-verify: a dependency's postinstall could stub the checks.
+      - name: Bootstrap
+        if: steps.changed.outputs.product == 'true'
+        run: |
+          bash .sdlc/bin/install-deps.sh --ignore-scripts
+          node .sdlc/bin/ensure-deps.mjs
+
+      # Every check runs, so the digest names every failure. verify.mode: existing means the
+      # repo's own CI is the verdict, on the default branch as on a PR.
+      - name: Checks
+        id: checks
+        if: steps.changed.outputs.product == 'true'
+        run: |
+          if [ "$(node .sdlc/bin/read-config.mjs verify.mode)" = existing ]; then
+            echo "verify.mode is 'existing' — this repo's own CI verifies the default branch"; exit 0
+          fi
+          bash .sdlc/bin/run-check.sh prepare /tmp/ci.log
+          FAILED=""
+          for CHECK in typecheck lint unit build e2e; do
+            bash .sdlc/bin/run-check.sh "$CHECK" /tmp/ci.log || FAILED="$FAILED $CHECK"
+          done
+          if [ -n "$FAILED" ]; then echo "::error::red on the default branch:$FAILED"; exit 1; fi
+
+      - name: Digest failures
+        id: digest
+        if: failure() && steps.checks.outcome == 'failure'
+        run: node .sdlc/bin/sdlc-ctl.mjs digest --file /tmp/ci.log
+
+  # Not on a cancelled run: a halt cancels every run but its own, and a red that another run is
+  # already answering is not this one's to answer again. One at a time, so two red commits
+  # landing together never halt and revert over each other.
+  revert:
+    needs: verify
+    if: ${{ !cancelled() && needs.verify.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: sdlc-main-red
+      cancel-in-progress: false
+    permissions:
+      contents: write         # pushes the revert branch
+      pull-requests: write    # opens the revert PR
+      issues: write           # says so on the issue, or opens one
+      actions: write          # sdlc halt disables the workflows and cancels their runs
+    steps:
+      # The framework from the default branch, and its whole history: the commit to revert and
+      # its parents. Credentials kept, because this job pushes the revert branch — which is why
+      # nothing here installs or runs the product.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 22
+      - name: Kill switch
+        run: node .sdlc/bin/sdlc-ctl.mjs guard
+        env: { SDLC_ENABLED: "${{ vars.SDLC_ENABLED }}" }
+
+      - name: Halt, and propose the revert
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ inputs.sha || github.sha }}
+          BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHECKS_FAILED: ${{ needs.verify.outputs.checks_failed }}
+          SUMMARY: ${{ needs.verify.outputs.summary }}
+        run: node .sdlc/bin/main-red.mjs

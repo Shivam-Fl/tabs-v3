@@ -1,0 +1,89 @@
+# The daily canary. One model call with this repository's own credential and provider, whether
+# or not anything is running.
+#
+# A dead credential used to be found by the first stage that needed it, read as an outage, and
+# waited out for about four hours of cooldowns before a person heard — on a quiet repository, not
+# until the next issue. This asks once a day, says so on ONE issue (sdlc:alert) when the answer is
+# no, and with `alerts.heartbeat_url` set it pings a dead-man service outside GitHub when the answer
+# is yes: GitHub's schedule fired the fifteen-minute watchdog about 3% of the times it should have
+# on two fresh repositories, and only something outside GitHub can notice that it stopped.
+name: sdlc-canary
+
+on:
+  # Off the hour: GitHub delays scheduled runs most at the start of every hour.
+  schedule: [{ cron: "17 6 * * *" }]
+  workflow_dispatch:
+
+concurrency:
+  group: sdlc-canary
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The model secrets and Claude Code from npm, and no token that can write anything — the same
+  # separation as every agent job.
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      ok: ${{ steps.call.outputs.ok }}
+      class: ${{ steps.call.outputs.class }}
+      detail: ${{ steps.call.outputs.detail }}
+      model: ${{ steps.call.outputs.model }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 22
+      - name: Kill switch
+        run: node .sdlc/bin/sdlc-ctl.mjs guard
+        env: { SDLC_ENABLED: "${{ vars.SDLC_ENABLED }}" }
+      - name: Provider
+        id: prov
+        run: node .sdlc/bin/provider-settings.mjs
+      - name: Claude Code, which every agent step runs
+        run: npm install -g --no-audit --no-fund @anthropic-ai/claude-code >/dev/null
+      - name: One model call
+        id: call
+        env:
+          ANTHROPIC_BASE_URL: ${{ steps.prov.outputs.base_url }}
+          ANTHROPIC_CUSTOM_HEADERS: ${{ steps.prov.outputs.headers }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: node .sdlc/bin/canary.mjs call
+
+  # Writes the alert and pings the heartbeat; runs no npm and holds no model secret. Fails the run
+  # when the model did not answer, so the run is red as well as the issue said.
+  report:
+    needs: call
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write         # the one sdlc:alert issue
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 22
+      - name: Kill switch
+        run: node .sdlc/bin/sdlc-ctl.mjs guard
+        env: { SDLC_ENABLED: "${{ vars.SDLC_ENABLED }}" }
+      - name: Say so, on one issue, when the model did not answer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OK: ${{ needs.call.outputs.ok }}
+          CLASS: ${{ needs.call.outputs.class }}
+          DETAIL: ${{ needs.call.outputs.detail }}
+          MODEL: ${{ needs.call.outputs.model }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .sdlc/bin/canary.mjs report
+      - name: Tell the dead-man switch the canary passed
+        run: node .sdlc/bin/heartbeat.mjs

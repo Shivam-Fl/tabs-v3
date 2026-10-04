@@ -135,7 +135,13 @@
     "understanding": "Issue #13 carries two review follow-ups from PR #12, both verified still broken on current main: (1) signup throttling is bypassed entirely by unparseable forwarding headers, because signup gates only on the IP hint and keySpecs drops null/blank IPs, leaving zero buckets; signin is unaffected via its per-email key. (2) The /profile Save button is a plain server-action submit with no pending/double-submit guard, so double-clicking fires two updateProfile requests, unlike the auth island which disables while pending. There are no binding decisions and no prior rejections in plan/brief.md.",
     "version": 1
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/auth/rate-limit.ts",
+    "components/profile-save-button.tsx",
+    "app/profile/page.tsx",
+    "lib/auth/rate-limit.test.ts",
+    "lib/auth/actions.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

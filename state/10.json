@@ -74,5 +74,70 @@
     "decided_at": "2026-10-04T18:40:33.347Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "README verbs-table row for `npm run sdlc:seed` no longer claims it writes seed data; it states migrations run and no fixture rows are written yet",
+        "how_to_verify": "Read README.md line 41 and confirm the cell reads 'Applies the migrations and exits 0 (no fixture rows yet — fixtures belong to the seed ticket)'; run `npx vitest run scripts/seed.test.ts` to confirm seed behavior is unchanged",
+        "id": "AC-1",
+        "source": "TR-12",
+        "verify": "test"
+      },
+      {
+        "check": "README Seed section still states the seed writes no fixture rows and TR-12 seed proof is still open, consistent with the corrected verbs table",
+        "how_to_verify": "Read README.md Seed section (around lines 105-112) and confirm it still says no fixture rows are written; `npx vitest run scripts/seed.test.ts` passes",
+        "id": "AC-2",
+        "source": "TR-12",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Add real fixture rows in runSeed() now so the old table cell becomes true",
+        "rejected_because": "Fixtures (known-password users, every split type, multi-payer expense, payments, placeholder) are explicitly the seed ticket's scope; shipping them here smuggles that ticket's work into a docs fix"
+      },
+      {
+        "approach": "Rewrite the Seed section instead of the verbs-table cell",
+        "rejected_because": "The Seed section (lines 105-112) and scripts/seed.ts already agree and are correct; only the line-41 table cell is wrong"
+      }
+    ],
+    "approach": "Edit exactly one table cell in README.md line 41 from 'Applies the migrations, then writes the seed data' to 'Applies the migrations and exits 0 (no fixture rows yet — fixtures belong to the seed ticket)', matching the fix the review finding prescribes and the already-correct Seed section (lines 107-111). Touch nothing else: scripts/seed.ts and scripts/seed.test.ts already assert the zero-fixture behavior. Verify by grepping README for the stale phrase and running the existing seed test.",
+    "confidence": 95,
+    "confidence_rationale": "Single-cell docs fix with the exact replacement text given in the issue; behavior verified by reading README, scripts/seed.ts, and scripts/seed.test.ts, all of which agree except line 41",
+    "evidence": [
+      "README.md:41 reads 'Applies the migrations, then writes the seed data'",
+      "README.md:107-111 reads 'applies the migrations and exits 0' plus 'It currently writes no fixture rows'",
+      "scripts/seed.ts runSeed() only calls runMigrations and logs '0 fixture rows written'",
+      "scripts/seed.test.ts asserts publicTables() equals ['schema_migrations']"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Replace the `npm run sdlc:seed` verbs-table cell 'Applies the migrations, then writes the seed data' with 'Applies the migrations and exits 0 (no fixture rows yet — fixtures belong to the seed ticket)'",
+        "path": "README.md",
+        "why": "This is the only statement that contradicts the Seed section and runSeed(); the review finding prescribes exactly this wording"
+      }
+    ],
+    "issue": 10,
+    "kind": "chore",
+    "out_of_scope": [
+      "Seed fixtures themselves (known-password users, groups per split type, multi-payer expense, payments, placeholder): they belong to the seed ticket and TR-12 proof, not this docs fix",
+      "Any change to scripts/seed.ts or scripts/seed.test.ts: both already encode the correct zero-fixture behavior"
+    ],
+    "qa_script": [
+      "Read README.md line 41 and confirm the sdlc:seed cell no longer claims seed data is written",
+      "Grep README for 'then writes the seed data' and confirm zero matches",
+      "Run `npx vitest run scripts/seed.test.ts` and confirm both cases pass (migrations applied, only schema_migrations table, idempotent rerun)"
+    ],
+    "reproduced": true,
+    "risks": [
+      "Docs-only change; no runtime, migration, or auth surface is touched"
+    ],
+    "understanding": "Issue #10 carries one review finding from PR #9: the README verbs table (line 41) says `npm run sdlc:seed` 'Applies the migrations, then writes the seed data', but runSeed() in scripts/seed.ts only runs migrations and logs '0 fixture rows written', and the README's own Seed section (lines 107-111) plus scripts/seed.test.ts both confirm zero fixture rows. The claim still reproduces on this branch. The fix is docs-only: correct the single table cell; fixtures belong to the seed ticket.",
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-04T18:44:14.403Z",
+  "validated_ac_changes": []
 }

@@ -354,7 +354,7 @@
         "risk": "Money-trust risk: balances derived by one recompute path and never stored, greedy min-cash-flow capped at N-1 transfers, payments as ledger entries with involved-member-only delete.",
         "title": "Balances with simplified debts and settle-up payments",
         "why": "Members can see who owes whom with at most N-1 simplified transfers and record settle-up payments until the group reads all-zero.",
-        "issue": null
+        "issue": 7
       },
       {
         "acceptance": [
@@ -392,6 +392,7 @@
     3,
     4,
     5,
-    6
+    6,
+    7
   ]
 }

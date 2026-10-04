@@ -231,11 +231,15 @@
     "version": 3
   },
   "touch_paths": [
-    "lib/groups/actions.ts",
-    "app/join/[token]/page.tsx",
-    "components/groups-panels.tsx",
     "lib/groups/validation.ts",
-    "lib/groups/actions.test.ts"
+    "lib/groups/actions.ts",
+    "components/groups-panels.tsx",
+    "app/groups/[id]/members/page.tsx",
+    "app/groups/[id]/page.tsx",
+    "app/page.tsx",
+    "app/groups/[id]/members/loading.tsx",
+    "lib/groups/actions.test.ts",
+    "app/groups/[id]/members/loading.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

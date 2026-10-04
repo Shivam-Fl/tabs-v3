@@ -1,7 +1,7 @@
 {
   "issue": 10,
   "pr": null,
-  "state": "triage",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -24,8 +24,14 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-04T18:22:24.794Z",
-  "updated_at": "2026-10-04T18:22:24.794Z",
-  "history": [],
+  "updated_at": "2026-10-04T18:22:42.212Z",
+  "history": [
+    {
+      "at": "2026-10-04T18:22:42.212Z",
+      "agent": "intake",
+      "action": "-> planning"
+    }
+  ],
   "issue_snapshot": {
     "title": "Follow-ups from #3: 1 from the review",
     "body": "What the review and QA of PR #9 (for #3) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### README verbs table says `npm run sdlc:seed` 'Applies the migrations, then writes the seed data', but runSeed() writes zero fixture rows today.\n\n> README verbs table says `npm run sdlc:seed` 'Applies the migrations, then writes the seed data', but runSeed() writes zero fixture rows today.\n> \n> `README.md:41`\n> \n> Evidence: README.md line 41 ('then writes the seed data') vs lines 107-111 ('It currently writes no fixture rows'); scripts/seed.ts runSeed() only calls runMigrations and logs '0 fixture rows written'; scripts/seed.test.ts asserts publicTables() equals ['schema_migrations']\n> \n> Fix: Change the table cell to 'Applies the migrations and exits 0 (no fixture rows yet — fixtures belong to the seed ticket)'.\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #3.",

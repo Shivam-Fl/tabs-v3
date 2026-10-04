@@ -18,7 +18,341 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "acceptance": [
+      {
+        "check": "With DATABASE_URL unset, `npm run sdlc:serve` boots, the boot log notes safe local defaults (PGlite, dev-only secret), and the home page at http://localhost:3000 renders the Tabs placeholder with no crash",
+        "how_to_verify": "QA runs sdlc:serve capturing output to a file, greps the safe-defaults line, opens / in a browser",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "GET /api/health returns 200 `{status:'ok', db:'ok', latencyMs:<non-negative number>}` by reading the schema_migrations ledger on the serving instance (not SELECT 1), proving boot migrations applied to the instance that serves traffic",
+        "how_to_verify": "QA curls /api/health and asserts the JSON shape; stopping the server and deleting any local state then rebooting still returns ok",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "api"
+      },
+      {
+        "check": "`npm run sdlc:ready` exits 0 against the booted app",
+        "how_to_verify": "QA boots via sdlc:serve then runs sdlc:ready",
+        "id": "AC-3",
+        "source": "IAC-2",
+        "verify": "api"
+      },
+      {
+        "check": "`npm run sdlc:verify` passes end to end on a fresh clone: npm ci (lockfile committed), tsc --noEmit, full Vitest suite, Next.js production build",
+        "how_to_verify": "CI runs sdlc:verify on a clean runner",
+        "id": "AC-4",
+        "source": "IAC-3",
+        "verify": "test"
+      },
+      {
+        "check": "With VERCEL_ENV=production and SESSION_SECRET unset, boot refuses with an error naming SESSION_SECRET; with VERCEL_ENV=production and DATABASE_URL blank or unset, boot refuses naming DATABASE_URL; local `next build`/`next start` via sdlc:serve with no secrets still boots on safe defaults (guard is never keyed on NODE_ENV alone)",
+        "how_to_verify": "QA runs the production-shaped boot with each secret missing and reads the failure message, then boots normally via sdlc:serve",
+        "id": "AC-5",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "The same SQL migration set applies automatically at boot on a fresh database, is re-runnable without error (version insert is conflict-safe, filenames immutable), and a failing transaction leaves no rows behind and no ledger entry",
+        "how_to_verify": "Vitest migrate/transaction cases on PGlite in CI; manual scripts/neon-smoke.ts against a real Neon URL",
+        "id": "AC-6",
+        "source": "TR-2",
+        "verify": "test"
+      },
+      {
+        "check": "The app ships as one Next.js App Router production build served by `next start` on port 3000 with no background process and no durable local disk use; the migration SQL ships inside the server bundle (trace include or generated index), proven from the build artefact rather than the source tree",
+        "how_to_verify": "QA drives the production build served by sdlc:serve; review rejects disk/process code and checks the trace/index",
+        "id": "AC-7",
+        "source": "TR-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Missing secrets fall back to logged safe local defaults unless VERCEL_ENV=production, where they throw naming the variable; blank/whitespace DATABASE_URL counts as unset for backend selection",
+        "how_to_verify": "Vitest lib/env.test.ts and lib/db/client.test.ts cases run in CI",
+        "id": "AC-8",
+        "source": "TR-5",
+        "verify": "test"
+      },
+      {
+        "check": "`npm run sdlc:seed` exits 0 after running migrations and ships no fixture rows; the README states fixture rows belong to the seed ticket, so TR-12's seed proof stays open and this criterion cannot be misread as meeting it",
+        "how_to_verify": "CI runs scripts/seed.test.ts (seed entry applies migrations on PGlite and asserts zero fixture rows); QA additionally runs `npm run sdlc:seed` (exits 0) and reviewer reads README against a fresh clone",
+        "id": "AC-9",
+        "source": "TR-12",
+        "verify": "test"
+      },
+      {
+        "check": "No non-test source file outside lib/db/client.ts references DATABASE_URL, PGlite, neon-serverless or ws; drizzle.config.ts and scripts/neon-smoke.ts obtain the connection string only through the helper exported by client.ts; enforced by a failing-if-violated test scoped to app/**, lib/** and scripts/** (excluding *.test.ts and neon-smoke.ts) so docs, plan and build artefacts cannot trip it",
+        "how_to_verify": "Vitest lib/db/backend-invariant.test.ts scans the scoped set in CI",
+        "id": "AC-10",
+        "source": "TR-2",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Run migrations with drizzle-kit CLI migrate commands configured per driver",
+        "rejected_because": "Needs a DATABASE_URL-aware CLI config per backend, which is itself a second branch on backend outside getDb(); a single custom SQL-file applier over the shared db.execute interface needs no branch at all."
+      },
+      {
+        "approach": "Use Drizzle's neon-http driver for the Neon side (simpler, no WebSocket, no ws dependency)",
+        "rejected_because": "Already rejected in ADR-0002 and the binding replan-project decision: one-shot HTTP requests hold no session, so expense create/edit/delete could not commit expense, payers, split lines and activity atomically in one interactive transaction (TR-8)."
+      },
+      {
+        "approach": "Apply migrations at build time (Vercel build command) instead of at runtime boot",
+        "rejected_because": "The build environment does not reliably carry the runtime pooled DATABASE_URL (previews especially); registering migrations on server boot via instrumentation.ts covers every instance with an idempotent runner."
+      },
+      {
+        "approach": "Leave sdlc:seed a stub for the seed ticket",
+        "rejected_because": "The admitted issue contract says this slice 'makes sdlc:verify, sdlc:serve, sdlc:seed and sdlc:ready real'; a stub would contradict the ticket, so the verb goes real but honestly minimal with fixtures deferred."
+      }
+    ],
+    "approach": "Greenfield skeleton: replace the four stub verbs with real scripts, add a minimal Next.js App Router shell (placeholder home styled from the ui.md tokens, GET /api/health using only Web-standard Request/Response so it is unit-testable and reading the migration ledger so it proves the serving instance migrated), and a lib/db layer that is the only place allowed to know which backend is active. getDb() returns a { db, close, backend } handle: when DATABASE_URL is unset or blank, a process-scoped PGlite singleton (with memoized migration state) shared across requests in dev/CI/QA; when set, a neon-serverless WebSocket Pool opened per call and closed per request including on error. Production is keyed on VERCEL_ENV=production, never on NODE_ENV alone (Next sets NODE_ENV=production for every build and start, which would otherwise make the safe-defaults boot and the production guard mutually exclusive), and in production a missing or blank DATABASE_URL throws naming it. Migrations are plain SQL files applied at boot by a backend-agnostic runner (db.execute only, CREATE TABLE IF NOT EXISTS ledger bootstrap, each file in its own transaction, version insert ON CONFLICT DO NOTHING, filenames immutable) invoked from an instrumentation.ts register() guarded on NEXT_RUNTIME=nodejs and from npm run db:migrate / db:seed; the SQL set ships in the server bundle via tracing include or a generated index. env handling lives in lib/env.ts (zod, SESSION_SECRET only, no DATABASE_URL and no backend references); the db layer reports the backend it selected and instrumentation logs it. The first migration creates only the ledger table; domain tables belong to later tickets. A scoped source-scanning test enforces the only-getDb-branches invariant, and scripts/neon-smoke.ts (manual, needs a real DATABASE_URL, reads it only via the client.ts helper) proves the Neon transaction-rollback behavior CI cannot reach on PGlite. v2 answers the single v1 rejection: AC-9 (seed verb) was the only verify:test criterion with no CI-run tests[] proof, so scripts/seed.ts exports a side-effect-free runSeed() for import, vitest covers scripts/**/*.test.ts, and scripts/seed.test.ts asserts the seed entry runs migrations and writes zero fixture rows on PGlite.",
+    "assumptions": [
+      "npm registry is reachable from CI so the first install can generate the lockfile that later `npm ci` runs consume",
+      "@neondatabase/serverless Pool construction is lazy (no connection until first query), so constructing-and-closing a Pool with an untrusted DATABASE_URL in tests does not touch the network",
+      "Setting neonConfig.webSocketConstructor = ws inside the getDb module is sufficient for the Node serverless runtime; the global WebSocket alone is not relied on",
+      "PGlite runs fully in-process with no native bindings or background process, satisfying the CI clean-runner (node/npm only) constraint",
+      "QA boots via `npm run sdlc:serve` against localhost:3000 per .sdlc/config.yml env.boot (the full build in serve is accepted per ADR-0006)",
+      "Next 16 needs no instrumentation flag (instrumentation is stable since 15) and honors the NEXT_RUNTIME guard; implementer verifies both keys against the installed Next version",
+      "scripts/seed.ts exports runSeed() with no side effects on import, so the Vitest seed case can import it without booting Next or touching the network"
+    ],
+    "confidence": 80,
+    "confidence_rationale": "Load-bearing repo facts verified first-hand in this round (stub verbs, no tracked lockfile, forbidden paths, QA seed step, no migrations guard); the stack is standard and the v2 delta answers the only recorded rejection with a concrete CI test. Docked from the 90s because Next 16 config keys and neon-serverless packaging must be re-verified against the installed packages at implement time, the Neon rollback proof stays manual-only, and the PGlite-singleton reading of 'nothing at module scope', while the best interpretation, is still an interpretation.",
+    "debate_summary": "The critique file is empty ({}): no findings to accept, dismiss, or fold in, so there was nothing to judge and no difference to split. I verified the proposal directly against the repo and the brief instead. package.json holds only the four stub verbs; no lockfile is tracked in git (and /package-lock.json is ignored via the runner-local .git/info/exclude, so the implementer must use git add -f -- folded into the package-lock.json change text, correcting the earlier claim that no force-add is needed); config.yml forbidden_paths contains no migrations entry and none of the 21 planned paths touch docs, memory, or framework paths; .github/workflows/sdlc-qa.yml runs sdlc:seed when the script exists, consistent with a minimal real seed; and every split IAC has a sourced criterion (IAC-1 to AC-1, IAC-2 to AC-2/AC-3, IAC-3 to AC-4/AC-5), which is exactly what the previous work order's validation failure was about -- this work order restores the source/verify/how_to_verify fields the failed one dropped. The v2 delta answers the only recorded rejection (AC-9 verify:test with no CI proof) with scripts/seed.test.ts run in CI and named in AC-9. One judgment call confirmed: the process-scoped PGlite singleton beside a strictly per-request Neon Pool. Read in isolation, 'nothing at module scope' could forbid it, but the binding decision scopes the per-request lifecycle to 'the Neon side' on serverless, PGlite never runs on Vercel, and per-request PGlite would wipe data on every request; the singleton honors the decision's intent. No route change: the route stands as admitted.",
+    "evidence": [
+      "git ls-files shows only .gitignore, README.md, package.json outside framework/docs -- no lockfile, so sdlc:verify's `npm ci` fails on fresh checkout",
+      ".gitignore ignores node_modules/.next/.env*/logs but not package-lock.json; the /package-lock.json ignore lives only in .git/info/exclude (runner-local), so committing the lock needs git add -f and no gitignore change",
+      "sdlc-qa.yml runs `npm run sdlc:seed` when the script exists and boots via sdlc:serve with no NODE_ENV/secret setup",
+      "docs/trd.md getDb() interface and the 2026-10-04T16:25 route note scope per-request open/close plus nothing-at-module-scope to the Neon Pool side; project.md Deploy confirms PGlite is dev/CI/QA-only",
+      "app/**, lib/** and scripts/** globs return nothing and README.md is 10 lines with no env docs -- greenfield, so there are no existing callers to preserve and the vitest include must explicitly cover scripts/** for the new seed test to run in CI"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Replace the four stub scripts with real targets: sdlc:verify=`npm ci && npm run typecheck && npm run test:ci && npm run build`, sdlc:serve=`npm run build && npm run start -- --port 3000`, sdlc:seed=`npm run db:seed`, sdlc:ready=`curl -fsS http://localhost:3000/api/health`; add scripts typecheck/test:ci/dev/build/start/db:migrate/db:seed/db:generate/neon:smoke; add deps next, react, react-dom, drizzle-orm, @electric-sql/pglite, @neondatabase/serverless, ws, zod and devDeps typescript, vitest, drizzle-kit, tsx, tailwindcss, @tailwindcss/postcss, postcss, @types/*",
+        "path": "package.json",
+        "why": "The verbs are the pipeline contract (ADR-0006); they stay stubs until this ticket, and ci-verify fails code-with-stub-verbs, so making them real is the core of the slice"
+      },
+      {
+        "action": "create",
+        "change": "Lockfile generated by the first npm install and committed with git add -f (the runner-local .git/info/exclude ignores /package-lock.json, so a plain git add skips it) so sdlc:verify's `npm ci` works on a fresh clone and CI; never hand-edited",
+        "path": "package-lock.json",
+        "why": "Without it `npm ci` fails on every fresh checkout and AC-4 is unmeetable; the repo gitignore does not exclude it"
+      },
+      {
+        "action": "create",
+        "change": "Strict tsconfig (strict, moduleResolution bundler, jsx preserve, Next plugin) covering app/, lib/, scripts/",
+        "path": "tsconfig.json",
+        "why": "typecheck step of sdlc:verify needs it; strict is a repo rule"
+      },
+      {
+        "action": "create",
+        "change": "Next config with NO instrumentationHook flag (not a Next 16 top-level option; instrumentation is stable since 15) and a server-bundle include for lib/db/migrations/** (outputFileTracingIncludes or equivalent -- implementer verifies the key against installed Next); no other behavior",
+        "path": "next.config.ts",
+        "why": "Omitting a nonexistent flag keeps the build honest, and the include keeps runtime-read migration SQL inside the Vercel server bundle"
+      },
+      {
+        "action": "create",
+        "change": "async register() opening with `if (process.env.NEXT_RUNTIME !== 'nodejs') return;`, then getEnv() (logs safe-defaults line or throws naming the missing secret in production) then runMigrations() inside withDb, logging the backend reported by the db layer; any failure is thrown so boot visibly refuses",
+        "path": "instrumentation.ts",
+        "why": "Automatic same-migrations-on-boot mechanism plus the loud-production-failure and safe-defaults boot log (IAC-1, IAC-3), kept out of the edge runtime"
+      },
+      {
+        "action": "create",
+        "change": "Root layout: html lang, Inter/system font stack, tabular-nums, single top-level structure importing globals.css",
+        "path": "app/layout.tsx",
+        "why": "Shell every later screen builds on; carries the font/typography rules from ui.md"
+      },
+      {
+        "action": "create",
+        "change": "Server-component placeholder: h1 Tabs, one-line what-it-does, link to /api/health; uses token classes only, no data fetching (keeps `next build` free of DB/env needs per ADR-0001)",
+        "path": "app/page.tsx",
+        "why": "Bootable home page for IAC-1; explicitly a placeholder, not a product screen"
+      },
+      {
+        "action": "create",
+        "change": "Tailwind import plus :root tokens and base styles from docs/ui.md; no dark mode",
+        "path": "app/globals.css",
+        "why": "Styling-from-the-token-set contract for this slice"
+      },
+      {
+        "action": "create",
+        "change": "postcss config wiring @tailwindcss/postcss",
+        "path": "postcss.config.mjs",
+        "why": "Required for Tailwind v4 under Next.js"
+      },
+      {
+        "action": "create",
+        "change": "GET handler using only global Request/Response (no next/server import, stays unit-testable): times a ledger read (SELECT against schema_migrations, proving the serving instance applied boot migrations), returns 200 {status:'ok',db:'ok',latencyMs} on success and 503 {status:'degraded',db:'down',latencyMs} on any error",
+        "path": "app/api/health/route.ts",
+        "why": "TR-12 health proof with latencyMs; ledger read (not SELECT 1) proves migration wiring, and the 503 body keeps curl -fsS (sdlc:ready) red exactly when the DB is down"
+      },
+      {
+        "action": "create",
+        "change": "zod-parsed env for app secrets (SESSION_SECRET with dev-only fallback); production means VERCEL_ENV=production, never NODE_ENV alone; logs safe defaults outside production and throws 'Missing required secret: <NAME>' in production. Must not reference DATABASE_URL, PGlite, neon-serverless or ws in any form.",
+        "path": "lib/env.ts",
+        "why": "TR-5 single choke point for app secrets without becoming a second backend brancher; Next sets NODE_ENV=production on every local build/start so it cannot signal production"
+      },
+      {
+        "action": "create",
+        "change": "getDb(): Promise<{db, close, backend}> -- the ONLY place that branches on backend. Trims DATABASE_URL (empty/whitespace counts as unset); in production (VERCEL_ENV=production) a missing/blank DATABASE_URL throws naming it. Unset: process-scoped PGlite singleton (plus memoized migration state) shared across requests, close is a no-op. Set: neon-serverless WebSocket Pool opened per call via withDb(fn) try/finally close, including on error; no Pool or client held at module scope. Exports the shared Db union type plus a helper exposing the selected backend/connection string for tests, smoke script and drizzle config.",
+        "path": "lib/db/client.ts",
+        "why": "The contract this slice DEFINES: per-request Neon Pool lifecycle including on error, durable PGlite across requests in dev/CI/QA, production refuses PGlite-by-misconfiguration"
+      },
+      {
+        "action": "create",
+        "change": "runMigrations(db): CREATE TABLE IF NOT EXISTS ledger bootstrap, read lib/db/migrations/*.sql in sorted order, apply each pending file with db.execute inside db.transaction and record its version with INSERT ... ON CONFLICT DO NOTHING; same code path for both backends; comment states an applied filename is immutable and drizzle-kit generate must be re-run clean after any schema edit",
+        "path": "lib/db/migrate.ts",
+        "why": "Automatic same-SQL-migrations mechanism (TR-2) with zero backend branching and race-safe re-application across concurrent cold starts"
+      },
+      {
+        "action": "create",
+        "change": "Drizzle pgTable definition of schema_migrations(version text PK, applied_at timestamptz default now) exported for drizzle-kit generate consistency with a comment that it is the operational ledger, not a domain table; domain tables land in later tickets",
+        "path": "lib/db/schema.ts",
+        "why": "Drizzle schema as single source of truth starts here; ledger is the only table this slice owns"
+      },
+      {
+        "action": "create",
+        "change": "SQL creating schema_migrations if not exists (matches schema.ts); the runner records itself here",
+        "path": "lib/db/migrations/0001_schema_ledger.sql",
+        "why": "First migration proving the generate-and-apply loop end to end"
+      },
+      {
+        "action": "create",
+        "change": "drizzle-kit config: schema ./lib/db/schema.ts, out ./lib/db/migrations, dialect postgresql (generate-only; applying is the custom runner); obtains any connection string only via the helper exported from lib/db/client.ts",
+        "path": "drizzle.config.ts",
+        "why": "Keeps future schema edits generating SQL into the same directory the runner applies, without becoming a second backend brancher"
+      },
+      {
+        "action": "create",
+        "change": "vitest config: node environment, include lib/**/*.test.ts, app/**/*.test.ts and scripts/**/*.test.ts, no browser/server",
+        "path": "vitest.config.ts",
+        "why": "test:ci runner for the colocated suite (repo rule: no test needs network or a real server); scripts/** must be included so the seed-entry test runs in CI"
+      },
+      {
+        "action": "create",
+        "change": "tsx entry calling runMigrations() inside withDb then exiting; used by db:migrate and at deploy time",
+        "path": "scripts/db-migrate.ts",
+        "why": "Manual/CI migration entry independent of booting the app"
+      },
+      {
+        "action": "create",
+        "change": "tsx entry exporting runSeed() (no side effects on import; direct execution calls it) that runs migrations inside withDb -- obtaining the db only through withDb from lib/db/client.ts, never by referencing DATABASE_URL/PGlite/neon directly -- then logs that the skeleton slice ships no fixture rows (full seed fixtures belong to the seed ticket) and exits 0",
+        "path": "scripts/seed.ts",
+        "why": "Makes sdlc:seed a real verb now without smuggling the out-of-scope seed data into this ticket; the exported runSeed keeps the entry importable by its CI test"
+      },
+      {
+        "action": "create",
+        "change": "Manual-only tsx script (requires real DATABASE_URL, never run in CI, obtains it only via the client.ts helper): opens a transaction inserting a ledger probe row, throws, then asserts the probe row is absent; logs clean rollback or fails",
+        "path": "scripts/neon-smoke.ts",
+        "why": "TR-2 proof for the Neon side that CI cannot reach on PGlite-only runners, per the binding decision"
+      },
+      {
+        "action": "edit",
+        "change": "Document required/optional env vars (DATABASE_URL, SESSION_SECRET, VERCEL_ENV production behavior -- never NODE_ENV), one-command local run (npm run sdlc:serve), the four verbs, from-scratch Vercel deploy (connect repo, add Neon pooled URL, set secrets, migrations run at boot), the manual neon:smoke step, and an explicit note that sdlc:seed currently runs migrations only with fixture rows deferred to the seed ticket; no .env.example (forbidden path **/*.env*)",
+        "path": "README.md",
+        "why": "TR-12 README contract and TR-5 secrets documentation; .env files are untouchable so the README carries it"
+      }
+    ],
+    "issue": 3,
+    "kind": "feature",
+    "mode": "committed",
+    "out_of_scope": [
+      "IAC scope kept: full seed fixtures (users, groups, every split type, multi-payer expense, payments, placeholder) belong to the seed ticket -- sdlc:seed runs migrations and exits 0, and TR-12's seed proof stays open",
+      "Accounts/sessions, groups, expenses, balances, activity product screens and tables",
+      "Vercel project connection, Neon provisioning, and setting production secrets -- a person does that per the README guide",
+      "Words in docs/spec, docs/prd.md, docs/trd.md, docs/ui.md and .sdlc/memory: already updated for the Neon Pool lifecycle, split-rule storage and edited-entry before/after via the project brief; tickets must not touch those paths",
+      "qa_auth mode decision (open question in project.md) -- no login exists in this slice"
+    ],
+    "qa_script": [
+      "npm run sdlc:verify passes on a clean checkout (proves the committed lockfile)",
+      "DATABASE_URL unset: npm run sdlc:serve boots; boot log notes safe local defaults; http://localhost:3000 shows the Tabs placeholder with no console errors",
+      "curl http://localhost:3000/api/health returns {status:'ok', db:'ok', latencyMs:<number>}",
+      "npm run sdlc:ready exits 0 against the booted app",
+      "npm run sdlc:seed exits 0 and ships no fixture rows",
+      "VERCEL_ENV=production without SESSION_SECRET refuses to boot naming SESSION_SECRET; VERCEL_ENV=production with blank DATABASE_URL refuses naming DATABASE_URL; with both set, boot succeeds",
+      "Stop the server, reboot, re-curl health: second boot re-applies migrations idempotently with no error"
+    ],
+    "residual_risks": [
+      "The Neon transaction-rollback proof cannot run in CI (no DATABASE_URL there); the shared db.transaction mechanism is proven on PGlite and scripts/neon-smoke.ts covers Neon manually",
+      "Concurrent cold starts racing the first migration now resolve via IF NOT EXISTS plus ON CONFLICT DO NOTHING, but a fleet-wide simultaneous first boot is still untested",
+      "A malformed DATABASE_URL or a direct (unpooled) Neon URL surfaces as a connection error at first query rather than a named missing secret; health maps it to 503 and the README should tell the deployer which URL shape to paste",
+      "No statement timeout on the health query and no --max-time on sdlc:ready's curl: a blackholed DB hangs the probe rather than failing fast",
+      "Migrations run inside register() before any request is served, so a future slow migration taxes every cold start's first request against TR-11's under-1s target -- later tickets keep migrations small and idempotent",
+      "drizzle-kit journal/numbering behavior after hand-written 0001 must be re-verified at implement time by running generate clean; if it emits ledger DDL, the ledger leaves the drizzle schema and lives only in SQL plus the runner bootstrap",
+      "PGlite data is per-process memory in dev/CI/QA; later tickets must never assume it survives restarts -- production durability comes from Neon only (TR-2)"
+    ],
+    "risks": [
+      "Adding next/react/drizzle/pglite/tailwind in one ticket is a big first install; mitigated by npm ci on the Node 22 CI image with no native bindings anywhere in the tree",
+      "sdlc:serve does a full production build before start (ADR-0006), so QA boot is minutes; accepted as the cost of testing what ships",
+      "No .env.example is possible (forbidden path **/*.env*), so secret documentation lives only in README and lib/env.ts error text"
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "dev defaults: SESSION_SECRET falls back with a logged warning and no VERCEL_ENV set",
+          "VERCEL_ENV=production without SESSION_SECRET throws naming SESSION_SECRET",
+          "NODE_ENV=production alone (no VERCEL_ENV) still boots on safe defaults -- the sdlc:serve shape",
+          "production with all secrets set boots silently"
+        ],
+        "path": "lib/env.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "DATABASE_URL unset returns a working PGlite db and reports the pglite backend",
+          "blank/whitespace DATABASE_URL counts as unset and selects PGlite",
+          "production with blank DATABASE_URL throws naming DATABASE_URL",
+          "data written through one withDb call is visible to the next (singleton, no per-request wipe)",
+          "Neon path constructs the Pool and still closes on success and on handler throw (close spy, no network)",
+          "failed transaction leaves no rows (rollback proof on PGlite)"
+        ],
+        "path": "lib/db/client.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "0001 applies on a fresh database and records its version in schema_migrations",
+          "second run is a no-op success (idempotent, conflict-safe double record)"
+        ],
+        "path": "lib/db/migrate.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "scoped scan of app/**, lib/**, scripts/** (excluding *.test.ts and neon-smoke.ts): only lib/db/client.ts references DATABASE_URL/PGlite/neon-serverless/ws; lib/env.ts and all other source files fail the test if they do",
+          "a later migration failing mid-file leaves no partial rows and no ledger entry"
+        ],
+        "path": "lib/db/backend-invariant.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "GET returns 200 with {status:'ok', db:'ok', latencyMs>=0} against in-process PGlite with migrations applied",
+          "missing ledger table maps to 503 {status:'degraded', db:'down'}; DB throw maps to the same 503 shape"
+        ],
+        "path": "app/api/health/route.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "runSeed() on a fresh PGlite database applies migrations (schema_migrations records 0001) and writes zero fixture rows",
+          "second runSeed() is a no-op success (idempotent, still zero fixture rows)"
+        ],
+        "path": "scripts/seed.test.ts"
+      }
+    ],
+    "understanding": "Issue #3 is the bootable-foundation slice: a Next.js shell (home placeholder + GET /api/health {status,db,latencyMs}), the getDb() contract (PGlite when DATABASE_URL unset, neon-serverless WebSocket Pool when set, Neon Pool opened/closed per request including on error), the Drizzle schema plus automatic same-SQL-migrations mechanism, env secrets with safe local defaults and loud production failure, and real sdlc:verify/serve/seed/ready verbs -- under TR-1/TR-2/TR-5/TR-12, the backend invariant (only getDb() branches), and the two binding replan-project decisions (neon-serverless Pool with per-request lifecycle; split-rule storage and edited-entry before/after already recorded in the approved docs). The repo is greenfield (package.json holds only the four stub verbs; app/, lib/, scripts/ do not exist), so there are no existing callers to preserve. This v2 replan answers the single v1 rejection: AC-9 was the only verify:test criterion with no CI-run tests[] proof, so the seed entry is now importable (runSeed) and covered by scripts/seed.test.ts, named in AC-9's how_to_verify.",
+    "unknowns": [
+      "Whether @neondatabase/serverless on Node 22 strictly requires the ws package or works on the global WebSocket -- the plan includes ws regardless, so either outcome works",
+      "Exact Next 16 config key names for the server-bundle include and register() timing under `next start` -- verified against the installed packages at implement time; the db:migrate script is the fallback entry"
+    ],
+    "version": 1
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -159,675 +493,9 @@
       "run": "37219063883"
     }
   ],
-  "validated_work_order": {
-    "acceptance": [
-      {
-        "check": "With DATABASE_URL unset, `npm run sdlc:serve` boots, the boot log notes safe local defaults (PGlite, dev-only secret), and the home page at http://localhost:3000 renders the Tabs placeholder with no crash",
-        "how_to_verify": "QA runs sdlc:serve capturing output to a file, greps the safe-defaults line, opens / in a browser",
-        "id": "AC-1",
-        "source": "IAC-1",
-        "verify": "browser"
-      },
-      {
-        "check": "GET /api/health returns 200 `{status:'ok', db:'ok', latencyMs:<non-negative number>}` by reading the schema_migrations ledger on the serving instance (not SELECT 1), proving boot migrations applied to the instance that serves traffic",
-        "how_to_verify": "QA curls /api/health and asserts the JSON shape; stopping the server and deleting any local state then rebooting still returns ok",
-        "id": "AC-2",
-        "source": "IAC-2",
-        "verify": "api"
-      },
-      {
-        "check": "`npm run sdlc:ready` exits 0 against the booted app",
-        "how_to_verify": "QA boots via sdlc:serve then runs sdlc:ready",
-        "id": "AC-3",
-        "source": "IAC-2",
-        "verify": "api"
-      },
-      {
-        "check": "`npm run sdlc:verify` passes end to end on a fresh clone: npm ci (lockfile committed), tsc --noEmit, full Vitest suite, Next.js production build",
-        "how_to_verify": "CI runs sdlc:verify on a clean runner",
-        "id": "AC-4",
-        "source": "IAC-3",
-        "verify": "test"
-      },
-      {
-        "check": "With VERCEL_ENV=production and SESSION_SECRET unset, boot refuses with an error naming SESSION_SECRET; with VERCEL_ENV=production and DATABASE_URL blank or unset, boot refuses naming DATABASE_URL; local `next build`/`next start` via sdlc:serve with no secrets still boots on safe defaults (guard is never keyed on NODE_ENV alone)",
-        "how_to_verify": "QA runs the production-shaped boot with each secret missing and reads the failure message, then boots normally via sdlc:serve",
-        "id": "AC-5",
-        "source": "IAC-3",
-        "verify": "browser"
-      },
-      {
-        "check": "The same SQL migration set applies automatically at boot on a fresh database, is re-runnable without error (version insert is conflict-safe, filenames immutable), and a failing transaction leaves no rows behind and no ledger entry",
-        "how_to_verify": "Vitest migrate/transaction cases on PGlite in CI; manual scripts/neon-smoke.ts against a real Neon URL",
-        "id": "AC-6",
-        "source": "TR-2",
-        "verify": "test"
-      },
-      {
-        "check": "The app ships as one Next.js App Router production build served by `next start` on port 3000 with no background process and no durable local disk use; the migration SQL ships inside the server bundle (trace include or generated index), proven from the build artefact rather than the source tree",
-        "how_to_verify": "QA drives the production build served by sdlc:serve; review rejects disk/process code and checks the trace/index",
-        "id": "AC-7",
-        "source": "TR-1",
-        "verify": "browser"
-      },
-      {
-        "check": "Missing secrets fall back to logged safe local defaults unless VERCEL_ENV=production, where they throw naming the variable; blank/whitespace DATABASE_URL counts as unset for backend selection",
-        "how_to_verify": "Vitest lib/env.test.ts and lib/db/client.test.ts cases run in CI",
-        "id": "AC-8",
-        "source": "TR-5",
-        "verify": "test"
-      },
-      {
-        "check": "`npm run sdlc:seed` exits 0 after running migrations and ships no fixture rows; the README states fixture rows belong to the seed ticket, so TR-12's seed proof stays open and this criterion cannot be misread as meeting it",
-        "how_to_verify": "CI runs scripts/seed.test.ts (seed entry applies migrations on PGlite and asserts zero fixture rows); QA additionally runs `npm run sdlc:seed` (exits 0) and reviewer reads README against a fresh clone",
-        "id": "AC-9",
-        "source": "TR-12",
-        "verify": "test"
-      },
-      {
-        "check": "No non-test source file outside lib/db/client.ts references DATABASE_URL, PGlite, neon-serverless or ws; drizzle.config.ts and scripts/neon-smoke.ts obtain the connection string only through the helper exported by client.ts; enforced by a failing-if-violated test scoped to app/**, lib/** and scripts/** (excluding *.test.ts and neon-smoke.ts) so docs, plan and build artefacts cannot trip it",
-        "how_to_verify": "Vitest lib/db/backend-invariant.test.ts scans the scoped set in CI",
-        "id": "AC-10",
-        "source": "TR-2",
-        "verify": "test"
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Run migrations with drizzle-kit CLI migrate commands configured per driver",
-        "rejected_because": "Needs a DATABASE_URL-aware CLI config per backend, which is itself a second branch on backend outside getDb(); a single custom SQL-file applier over the shared db.execute interface needs no branch at all."
-      },
-      {
-        "approach": "Use Drizzle's neon-http driver for the Neon side (simpler, no WebSocket, no ws dependency)",
-        "rejected_because": "Already rejected in ADR-0002 and the binding replan-project decision: one-shot HTTP requests hold no session, so expense create/edit/delete could not commit expense, payers, split lines and activity atomically in one interactive transaction (TR-8)."
-      },
-      {
-        "approach": "Apply migrations at build time (Vercel build command) instead of at runtime boot",
-        "rejected_because": "The build environment does not reliably carry the runtime pooled DATABASE_URL (previews especially); registering migrations on server boot via instrumentation.ts covers every instance with an idempotent runner."
-      },
-      {
-        "approach": "Leave sdlc:seed a stub for the seed ticket",
-        "rejected_because": "The admitted issue contract says this slice 'makes sdlc:verify, sdlc:serve, sdlc:seed and sdlc:ready real'; a stub would contradict the ticket, so the verb goes real but honestly minimal with fixtures deferred."
-      }
-    ],
-    "approach": "Greenfield skeleton: replace the four stub verbs with real scripts, add a minimal Next.js App Router shell (placeholder home styled from the ui.md tokens, GET /api/health using only Web-standard Request/Response so it is unit-testable and reading the migration ledger so it proves the serving instance migrated), and a lib/db layer that is the only place allowed to know which backend is active. getDb() returns a { db, close, backend } handle: when DATABASE_URL is unset or blank, a process-scoped PGlite singleton (with memoized migration state) shared across requests in dev/CI/QA; when set, a neon-serverless WebSocket Pool opened per call and closed per request including on error. Production is keyed on VERCEL_ENV=production, never on NODE_ENV alone (Next sets NODE_ENV=production for every build and start, which would otherwise make the safe-defaults boot and the production guard mutually exclusive), and in production a missing or blank DATABASE_URL throws naming it. Migrations are plain SQL files applied at boot by a backend-agnostic runner (db.execute only, CREATE TABLE IF NOT EXISTS ledger bootstrap, each file in its own transaction, version insert ON CONFLICT DO NOTHING, filenames immutable) invoked from an instrumentation.ts register() guarded on NEXT_RUNTIME=nodejs and from npm run db:migrate / db:seed; the SQL set ships in the server bundle via tracing include or a generated index. env handling lives in lib/env.ts (zod, SESSION_SECRET only, no DATABASE_URL and no backend references); the db layer reports the backend it selected and instrumentation logs it. The first migration creates only the ledger table; domain tables belong to later tickets. A scoped source-scanning test enforces the only-getDb-branches invariant, and scripts/neon-smoke.ts (manual, needs a real DATABASE_URL, reads it only via the client.ts helper) proves the Neon transaction-rollback behavior CI cannot reach on PGlite. v2 answers the single v1 rejection: AC-9 (seed verb) was the only verify:test criterion with no CI-run tests[] proof, so scripts/seed.ts exports a side-effect-free runSeed() for import, vitest covers scripts/**/*.test.ts, and scripts/seed.test.ts asserts the seed entry runs migrations and writes zero fixture rows on PGlite.",
-    "assumptions": [
-      "npm registry is reachable from CI so the first install can generate the lockfile that later `npm ci` runs consume",
-      "@neondatabase/serverless Pool construction is lazy (no connection until first query), so constructing-and-closing a Pool with an untrusted DATABASE_URL in tests does not touch the network",
-      "Setting neonConfig.webSocketConstructor = ws inside the getDb module is sufficient for the Node serverless runtime; the global WebSocket alone is not relied on",
-      "PGlite runs fully in-process with no native bindings or background process, satisfying the CI clean-runner (node/npm only) constraint",
-      "QA boots via `npm run sdlc:serve` against localhost:3000 per .sdlc/config.yml env.boot (the full build in serve is accepted per ADR-0006)",
-      "Next 16 needs no instrumentation flag (instrumentation is stable since 15) and honors the NEXT_RUNTIME guard; implementer verifies both keys against the installed Next version",
-      "scripts/seed.ts exports runSeed() with no side effects on import, so the Vitest seed case can import it without booting Next or touching the network"
-    ],
-    "confidence": 80,
-    "confidence_rationale": "Load-bearing repo facts verified first-hand in this round (stub verbs, no tracked lockfile, forbidden paths, QA seed step, no migrations guard); the stack is standard and the v2 delta answers the only recorded rejection with a concrete CI test. Docked from the 90s because Next 16 config keys and neon-serverless packaging must be re-verified against the installed packages at implement time, the Neon rollback proof stays manual-only, and the PGlite-singleton reading of 'nothing at module scope', while the best interpretation, is still an interpretation.",
-    "debate_summary": "The critique file is empty ({}): no findings to accept, dismiss, or fold in, so there was nothing to judge and no difference to split. I verified the proposal directly against the repo and the brief instead. package.json holds only the four stub verbs; no lockfile is tracked in git (and /package-lock.json is ignored via the runner-local .git/info/exclude, so the implementer must use git add -f -- folded into the package-lock.json change text, correcting the earlier claim that no force-add is needed); config.yml forbidden_paths contains no migrations entry and none of the 21 planned paths touch docs, memory, or framework paths; .github/workflows/sdlc-qa.yml runs sdlc:seed when the script exists, consistent with a minimal real seed; and every split IAC has a sourced criterion (IAC-1 to AC-1, IAC-2 to AC-2/AC-3, IAC-3 to AC-4/AC-5), which is exactly what the previous work order's validation failure was about -- this work order restores the source/verify/how_to_verify fields the failed one dropped. The v2 delta answers the only recorded rejection (AC-9 verify:test with no CI proof) with scripts/seed.test.ts run in CI and named in AC-9. One judgment call confirmed: the process-scoped PGlite singleton beside a strictly per-request Neon Pool. Read in isolation, 'nothing at module scope' could forbid it, but the binding decision scopes the per-request lifecycle to 'the Neon side' on serverless, PGlite never runs on Vercel, and per-request PGlite would wipe data on every request; the singleton honors the decision's intent. No route change: the route stands as admitted.",
-    "evidence": [
-      "git ls-files shows only .gitignore, README.md, package.json outside framework/docs -- no lockfile, so sdlc:verify's `npm ci` fails on fresh checkout",
-      ".gitignore ignores node_modules/.next/.env*/logs but not package-lock.json; the /package-lock.json ignore lives only in .git/info/exclude (runner-local), so committing the lock needs git add -f and no gitignore change",
-      "sdlc-qa.yml runs `npm run sdlc:seed` when the script exists and boots via sdlc:serve with no NODE_ENV/secret setup",
-      "docs/trd.md getDb() interface and the 2026-10-04T16:25 route note scope per-request open/close plus nothing-at-module-scope to the Neon Pool side; project.md Deploy confirms PGlite is dev/CI/QA-only",
-      "app/**, lib/** and scripts/** globs return nothing and README.md is 10 lines with no env docs -- greenfield, so there are no existing callers to preserve and the vitest include must explicitly cover scripts/** for the new seed test to run in CI"
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "Replace the four stub scripts with real targets: sdlc:verify=`npm ci && npm run typecheck && npm run test:ci && npm run build`, sdlc:serve=`npm run build && npm run start -- --port 3000`, sdlc:seed=`npm run db:seed`, sdlc:ready=`curl -fsS http://localhost:3000/api/health`; add scripts typecheck/test:ci/dev/build/start/db:migrate/db:seed/db:generate/neon:smoke; add deps next, react, react-dom, drizzle-orm, @electric-sql/pglite, @neondatabase/serverless, ws, zod and devDeps typescript, vitest, drizzle-kit, tsx, tailwindcss, @tailwindcss/postcss, postcss, @types/*",
-        "path": "package.json",
-        "why": "The verbs are the pipeline contract (ADR-0006); they stay stubs until this ticket, and ci-verify fails code-with-stub-verbs, so making them real is the core of the slice"
-      },
-      {
-        "action": "create",
-        "change": "Lockfile generated by the first npm install and committed with git add -f (the runner-local .git/info/exclude ignores /package-lock.json, so a plain git add skips it) so sdlc:verify's `npm ci` works on a fresh clone and CI; never hand-edited",
-        "path": "package-lock.json",
-        "why": "Without it `npm ci` fails on every fresh checkout and AC-4 is unmeetable; the repo gitignore does not exclude it"
-      },
-      {
-        "action": "create",
-        "change": "Strict tsconfig (strict, moduleResolution bundler, jsx preserve, Next plugin) covering app/, lib/, scripts/",
-        "path": "tsconfig.json",
-        "why": "typecheck step of sdlc:verify needs it; strict is a repo rule"
-      },
-      {
-        "action": "create",
-        "change": "Next config with NO instrumentationHook flag (not a Next 16 top-level option; instrumentation is stable since 15) and a server-bundle include for lib/db/migrations/** (outputFileTracingIncludes or equivalent -- implementer verifies the key against installed Next); no other behavior",
-        "path": "next.config.ts",
-        "why": "Omitting a nonexistent flag keeps the build honest, and the include keeps runtime-read migration SQL inside the Vercel server bundle"
-      },
-      {
-        "action": "create",
-        "change": "async register() opening with `if (process.env.NEXT_RUNTIME !== 'nodejs') return;`, then getEnv() (logs safe-defaults line or throws naming the missing secret in production) then runMigrations() inside withDb, logging the backend reported by the db layer; any failure is thrown so boot visibly refuses",
-        "path": "instrumentation.ts",
-        "why": "Automatic same-migrations-on-boot mechanism plus the loud-production-failure and safe-defaults boot log (IAC-1, IAC-3), kept out of the edge runtime"
-      },
-      {
-        "action": "create",
-        "change": "Root layout: html lang, Inter/system font stack, tabular-nums, single top-level structure importing globals.css",
-        "path": "app/layout.tsx",
-        "why": "Shell every later screen builds on; carries the font/typography rules from ui.md"
-      },
-      {
-        "action": "create",
-        "change": "Server-component placeholder: h1 Tabs, one-line what-it-does, link to /api/health; uses token classes only, no data fetching (keeps `next build` free of DB/env needs per ADR-0001)",
-        "path": "app/page.tsx",
-        "why": "Bootable home page for IAC-1; explicitly a placeholder, not a product screen"
-      },
-      {
-        "action": "create",
-        "change": "Tailwind import plus :root tokens and base styles from docs/ui.md; no dark mode",
-        "path": "app/globals.css",
-        "why": "Styling-from-the-token-set contract for this slice"
-      },
-      {
-        "action": "create",
-        "change": "postcss config wiring @tailwindcss/postcss",
-        "path": "postcss.config.mjs",
-        "why": "Required for Tailwind v4 under Next.js"
-      },
-      {
-        "action": "create",
-        "change": "GET handler using only global Request/Response (no next/server import, stays unit-testable): times a ledger read (SELECT against schema_migrations, proving the serving instance applied boot migrations), returns 200 {status:'ok',db:'ok',latencyMs} on success and 503 {status:'degraded',db:'down',latencyMs} on any error",
-        "path": "app/api/health/route.ts",
-        "why": "TR-12 health proof with latencyMs; ledger read (not SELECT 1) proves migration wiring, and the 503 body keeps curl -fsS (sdlc:ready) red exactly when the DB is down"
-      },
-      {
-        "action": "create",
-        "change": "zod-parsed env for app secrets (SESSION_SECRET with dev-only fallback); production means VERCEL_ENV=production, never NODE_ENV alone; logs safe defaults outside production and throws 'Missing required secret: <NAME>' in production. Must not reference DATABASE_URL, PGlite, neon-serverless or ws in any form.",
-        "path": "lib/env.ts",
-        "why": "TR-5 single choke point for app secrets without becoming a second backend brancher; Next sets NODE_ENV=production on every local build/start so it cannot signal production"
-      },
-      {
-        "action": "create",
-        "change": "getDb(): Promise<{db, close, backend}> -- the ONLY place that branches on backend. Trims DATABASE_URL (empty/whitespace counts as unset); in production (VERCEL_ENV=production) a missing/blank DATABASE_URL throws naming it. Unset: process-scoped PGlite singleton (plus memoized migration state) shared across requests, close is a no-op. Set: neon-serverless WebSocket Pool opened per call via withDb(fn) try/finally close, including on error; no Pool or client held at module scope. Exports the shared Db union type plus a helper exposing the selected backend/connection string for tests, smoke script and drizzle config.",
-        "path": "lib/db/client.ts",
-        "why": "The contract this slice DEFINES: per-request Neon Pool lifecycle including on error, durable PGlite across requests in dev/CI/QA, production refuses PGlite-by-misconfiguration"
-      },
-      {
-        "action": "create",
-        "change": "runMigrations(db): CREATE TABLE IF NOT EXISTS ledger bootstrap, read lib/db/migrations/*.sql in sorted order, apply each pending file with db.execute inside db.transaction and record its version with INSERT ... ON CONFLICT DO NOTHING; same code path for both backends; comment states an applied filename is immutable and drizzle-kit generate must be re-run clean after any schema edit",
-        "path": "lib/db/migrate.ts",
-        "why": "Automatic same-SQL-migrations mechanism (TR-2) with zero backend branching and race-safe re-application across concurrent cold starts"
-      },
-      {
-        "action": "create",
-        "change": "Drizzle pgTable definition of schema_migrations(version text PK, applied_at timestamptz default now) exported for drizzle-kit generate consistency with a comment that it is the operational ledger, not a domain table; domain tables land in later tickets",
-        "path": "lib/db/schema.ts",
-        "why": "Drizzle schema as single source of truth starts here; ledger is the only table this slice owns"
-      },
-      {
-        "action": "create",
-        "change": "SQL creating schema_migrations if not exists (matches schema.ts); the runner records itself here",
-        "path": "lib/db/migrations/0001_schema_ledger.sql",
-        "why": "First migration proving the generate-and-apply loop end to end"
-      },
-      {
-        "action": "create",
-        "change": "drizzle-kit config: schema ./lib/db/schema.ts, out ./lib/db/migrations, dialect postgresql (generate-only; applying is the custom runner); obtains any connection string only via the helper exported from lib/db/client.ts",
-        "path": "drizzle.config.ts",
-        "why": "Keeps future schema edits generating SQL into the same directory the runner applies, without becoming a second backend brancher"
-      },
-      {
-        "action": "create",
-        "change": "vitest config: node environment, include lib/**/*.test.ts, app/**/*.test.ts and scripts/**/*.test.ts, no browser/server",
-        "path": "vitest.config.ts",
-        "why": "test:ci runner for the colocated suite (repo rule: no test needs network or a real server); scripts/** must be included so the seed-entry test runs in CI"
-      },
-      {
-        "action": "create",
-        "change": "tsx entry calling runMigrations() inside withDb then exiting; used by db:migrate and at deploy time",
-        "path": "scripts/db-migrate.ts",
-        "why": "Manual/CI migration entry independent of booting the app"
-      },
-      {
-        "action": "create",
-        "change": "tsx entry exporting runSeed() (no side effects on import; direct execution calls it) that runs migrations inside withDb -- obtaining the db only through withDb from lib/db/client.ts, never by referencing DATABASE_URL/PGlite/neon directly -- then logs that the skeleton slice ships no fixture rows (full seed fixtures belong to the seed ticket) and exits 0",
-        "path": "scripts/seed.ts",
-        "why": "Makes sdlc:seed a real verb now without smuggling the out-of-scope seed data into this ticket; the exported runSeed keeps the entry importable by its CI test"
-      },
-      {
-        "action": "create",
-        "change": "Manual-only tsx script (requires real DATABASE_URL, never run in CI, obtains it only via the client.ts helper): opens a transaction inserting a ledger probe row, throws, then asserts the probe row is absent; logs clean rollback or fails",
-        "path": "scripts/neon-smoke.ts",
-        "why": "TR-2 proof for the Neon side that CI cannot reach on PGlite-only runners, per the binding decision"
-      },
-      {
-        "action": "edit",
-        "change": "Document required/optional env vars (DATABASE_URL, SESSION_SECRET, VERCEL_ENV production behavior -- never NODE_ENV), one-command local run (npm run sdlc:serve), the four verbs, from-scratch Vercel deploy (connect repo, add Neon pooled URL, set secrets, migrations run at boot), the manual neon:smoke step, and an explicit note that sdlc:seed currently runs migrations only with fixture rows deferred to the seed ticket; no .env.example (forbidden path **/*.env*)",
-        "path": "README.md",
-        "why": "TR-12 README contract and TR-5 secrets documentation; .env files are untouchable so the README carries it"
-      }
-    ],
-    "issue": 3,
-    "kind": "feature",
-    "mode": "committed",
-    "out_of_scope": [
-      "IAC scope kept: full seed fixtures (users, groups, every split type, multi-payer expense, payments, placeholder) belong to the seed ticket -- sdlc:seed runs migrations and exits 0, and TR-12's seed proof stays open",
-      "Accounts/sessions, groups, expenses, balances, activity product screens and tables",
-      "Vercel project connection, Neon provisioning, and setting production secrets -- a person does that per the README guide",
-      "Words in docs/spec, docs/prd.md, docs/trd.md, docs/ui.md and .sdlc/memory: already updated for the Neon Pool lifecycle, split-rule storage and edited-entry before/after via the project brief; tickets must not touch those paths",
-      "qa_auth mode decision (open question in project.md) -- no login exists in this slice"
-    ],
-    "qa_script": [
-      "npm run sdlc:verify passes on a clean checkout (proves the committed lockfile)",
-      "DATABASE_URL unset: npm run sdlc:serve boots; boot log notes safe local defaults; http://localhost:3000 shows the Tabs placeholder with no console errors",
-      "curl http://localhost:3000/api/health returns {status:'ok', db:'ok', latencyMs:<number>}",
-      "npm run sdlc:ready exits 0 against the booted app",
-      "npm run sdlc:seed exits 0 and ships no fixture rows",
-      "VERCEL_ENV=production without SESSION_SECRET refuses to boot naming SESSION_SECRET; VERCEL_ENV=production with blank DATABASE_URL refuses naming DATABASE_URL; with both set, boot succeeds",
-      "Stop the server, reboot, re-curl health: second boot re-applies migrations idempotently with no error"
-    ],
-    "residual_risks": [
-      "The Neon transaction-rollback proof cannot run in CI (no DATABASE_URL there); the shared db.transaction mechanism is proven on PGlite and scripts/neon-smoke.ts covers Neon manually",
-      "Concurrent cold starts racing the first migration now resolve via IF NOT EXISTS plus ON CONFLICT DO NOTHING, but a fleet-wide simultaneous first boot is still untested",
-      "A malformed DATABASE_URL or a direct (unpooled) Neon URL surfaces as a connection error at first query rather than a named missing secret; health maps it to 503 and the README should tell the deployer which URL shape to paste",
-      "No statement timeout on the health query and no --max-time on sdlc:ready's curl: a blackholed DB hangs the probe rather than failing fast",
-      "Migrations run inside register() before any request is served, so a future slow migration taxes every cold start's first request against TR-11's under-1s target -- later tickets keep migrations small and idempotent",
-      "drizzle-kit journal/numbering behavior after hand-written 0001 must be re-verified at implement time by running generate clean; if it emits ledger DDL, the ledger leaves the drizzle schema and lives only in SQL plus the runner bootstrap",
-      "PGlite data is per-process memory in dev/CI/QA; later tickets must never assume it survives restarts -- production durability comes from Neon only (TR-2)"
-    ],
-    "risks": [
-      "Adding next/react/drizzle/pglite/tailwind in one ticket is a big first install; mitigated by npm ci on the Node 22 CI image with no native bindings anywhere in the tree",
-      "sdlc:serve does a full production build before start (ADR-0006), so QA boot is minutes; accepted as the cost of testing what ships",
-      "No .env.example is possible (forbidden path **/*.env*), so secret documentation lives only in README and lib/env.ts error text"
-    ],
-    "tests": [
-      {
-        "action": "create",
-        "cases": [
-          "dev defaults: SESSION_SECRET falls back with a logged warning and no VERCEL_ENV set",
-          "VERCEL_ENV=production without SESSION_SECRET throws naming SESSION_SECRET",
-          "NODE_ENV=production alone (no VERCEL_ENV) still boots on safe defaults -- the sdlc:serve shape",
-          "production with all secrets set boots silently"
-        ],
-        "path": "lib/env.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "DATABASE_URL unset returns a working PGlite db and reports the pglite backend",
-          "blank/whitespace DATABASE_URL counts as unset and selects PGlite",
-          "production with blank DATABASE_URL throws naming DATABASE_URL",
-          "data written through one withDb call is visible to the next (singleton, no per-request wipe)",
-          "Neon path constructs the Pool and still closes on success and on handler throw (close spy, no network)",
-          "failed transaction leaves no rows (rollback proof on PGlite)"
-        ],
-        "path": "lib/db/client.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "0001 applies on a fresh database and records its version in schema_migrations",
-          "second run is a no-op success (idempotent, conflict-safe double record)"
-        ],
-        "path": "lib/db/migrate.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "scoped scan of app/**, lib/**, scripts/** (excluding *.test.ts and neon-smoke.ts): only lib/db/client.ts references DATABASE_URL/PGlite/neon-serverless/ws; lib/env.ts and all other source files fail the test if they do",
-          "a later migration failing mid-file leaves no partial rows and no ledger entry"
-        ],
-        "path": "lib/db/backend-invariant.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "GET returns 200 with {status:'ok', db:'ok', latencyMs>=0} against in-process PGlite with migrations applied",
-          "missing ledger table maps to 503 {status:'degraded', db:'down'}; DB throw maps to the same 503 shape"
-        ],
-        "path": "app/api/health/route.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "runSeed() on a fresh PGlite database applies migrations (schema_migrations records 0001) and writes zero fixture rows",
-          "second runSeed() is a no-op success (idempotent, still zero fixture rows)"
-        ],
-        "path": "scripts/seed.test.ts"
-      }
-    ],
-    "understanding": "Issue #3 is the bootable-foundation slice: a Next.js shell (home placeholder + GET /api/health {status,db,latencyMs}), the getDb() contract (PGlite when DATABASE_URL unset, neon-serverless WebSocket Pool when set, Neon Pool opened/closed per request including on error), the Drizzle schema plus automatic same-SQL-migrations mechanism, env secrets with safe local defaults and loud production failure, and real sdlc:verify/serve/seed/ready verbs -- under TR-1/TR-2/TR-5/TR-12, the backend invariant (only getDb() branches), and the two binding replan-project decisions (neon-serverless Pool with per-request lifecycle; split-rule storage and edited-entry before/after already recorded in the approved docs). The repo is greenfield (package.json holds only the four stub verbs; app/, lib/, scripts/ do not exist), so there are no existing callers to preserve. This v2 replan answers the single v1 rejection: AC-9 was the only verify:test criterion with no CI-run tests[] proof, so the seed entry is now importable (runSeed) and covered by scripts/seed.test.ts, named in AC-9's how_to_verify.",
-    "unknowns": [
-      "Whether @neondatabase/serverless on Node 22 strictly requires the ws package or works on the global WebSocket -- the plan includes ws regardless, so either outcome works",
-      "Exact Next 16 config key names for the server-bundle include and register() timing under `next start` -- verified against the installed packages at implement time; the db:migrate script is the fallback entry"
-    ],
-    "version": 2
-  },
-  "approved_work_order": {
-    "acceptance": [
-      {
-        "check": "With DATABASE_URL unset, `npm run sdlc:serve` boots, the boot log notes safe local defaults (PGlite, dev-only secret), and the home page at http://localhost:3000 renders the Tabs placeholder with no crash",
-        "how_to_verify": "QA runs sdlc:serve capturing output to a file, greps the safe-defaults line, opens / in a browser",
-        "id": "AC-1",
-        "source": "IAC-1",
-        "verify": "browser"
-      },
-      {
-        "check": "GET /api/health returns 200 `{status:'ok', db:'ok', latencyMs:<non-negative number>}` by reading the schema_migrations ledger on the serving instance (not SELECT 1), proving boot migrations applied to the instance that serves traffic",
-        "how_to_verify": "QA curls /api/health and asserts the JSON shape; stopping the server and deleting any local state then rebooting still returns ok",
-        "id": "AC-2",
-        "source": "IAC-2",
-        "verify": "api"
-      },
-      {
-        "check": "`npm run sdlc:ready` exits 0 against the booted app",
-        "how_to_verify": "QA boots via sdlc:serve then runs sdlc:ready",
-        "id": "AC-3",
-        "source": "IAC-2",
-        "verify": "api"
-      },
-      {
-        "check": "`npm run sdlc:verify` passes end to end on a fresh clone: npm ci (lockfile committed), tsc --noEmit, full Vitest suite, Next.js production build",
-        "how_to_verify": "CI runs sdlc:verify on a clean runner",
-        "id": "AC-4",
-        "source": "IAC-3",
-        "verify": "test"
-      },
-      {
-        "check": "With VERCEL_ENV=production and SESSION_SECRET unset, boot refuses with an error naming SESSION_SECRET; with VERCEL_ENV=production and DATABASE_URL blank or unset, boot refuses naming DATABASE_URL; local `next build`/`next start` via sdlc:serve with no secrets still boots on safe defaults (guard is never keyed on NODE_ENV alone)",
-        "how_to_verify": "QA runs the production-shaped boot with each secret missing and reads the failure message, then boots normally via sdlc:serve",
-        "id": "AC-5",
-        "source": "IAC-3",
-        "verify": "browser"
-      },
-      {
-        "check": "The same SQL migration set applies automatically at boot on a fresh database, is re-runnable without error (version insert is conflict-safe, filenames immutable), and a failing transaction leaves no rows behind and no ledger entry",
-        "how_to_verify": "Vitest migrate/transaction cases on PGlite in CI; manual scripts/neon-smoke.ts against a real Neon URL",
-        "id": "AC-6",
-        "source": "TR-2",
-        "verify": "test"
-      },
-      {
-        "check": "The app ships as one Next.js App Router production build served by `next start` on port 3000 with no background process and no durable local disk use; the migration SQL ships inside the server bundle (trace include or generated index), proven from the build artefact rather than the source tree",
-        "how_to_verify": "QA drives the production build served by sdlc:serve; review rejects disk/process code and checks the trace/index",
-        "id": "AC-7",
-        "source": "TR-1",
-        "verify": "browser"
-      },
-      {
-        "check": "Missing secrets fall back to logged safe local defaults unless VERCEL_ENV=production, where they throw naming the variable; blank/whitespace DATABASE_URL counts as unset for backend selection",
-        "how_to_verify": "Vitest lib/env.test.ts and lib/db/client.test.ts cases run in CI",
-        "id": "AC-8",
-        "source": "TR-5",
-        "verify": "test"
-      },
-      {
-        "check": "`npm run sdlc:seed` exits 0 after running migrations and ships no fixture rows; the README states fixture rows belong to the seed ticket, so TR-12's seed proof stays open and this criterion cannot be misread as meeting it",
-        "how_to_verify": "CI runs scripts/seed.test.ts (seed entry applies migrations on PGlite and asserts zero fixture rows); QA additionally runs `npm run sdlc:seed` (exits 0) and reviewer reads README against a fresh clone",
-        "id": "AC-9",
-        "source": "TR-12",
-        "verify": "test"
-      },
-      {
-        "check": "No non-test source file outside lib/db/client.ts references DATABASE_URL, PGlite, neon-serverless or ws; drizzle.config.ts and scripts/neon-smoke.ts obtain the connection string only through the helper exported by client.ts; enforced by a failing-if-violated test scoped to app/**, lib/** and scripts/** (excluding *.test.ts and neon-smoke.ts) so docs, plan and build artefacts cannot trip it",
-        "how_to_verify": "Vitest lib/db/backend-invariant.test.ts scans the scoped set in CI",
-        "id": "AC-10",
-        "source": "TR-2",
-        "verify": "test"
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Run migrations with drizzle-kit CLI migrate commands configured per driver",
-        "rejected_because": "Needs a DATABASE_URL-aware CLI config per backend, which is itself a second branch on backend outside getDb(); a single custom SQL-file applier over the shared db.execute interface needs no branch at all."
-      },
-      {
-        "approach": "Use Drizzle's neon-http driver for the Neon side (simpler, no WebSocket, no ws dependency)",
-        "rejected_because": "Already rejected in ADR-0002 and the binding replan-project decision: one-shot HTTP requests hold no session, so expense create/edit/delete could not commit expense, payers, split lines and activity atomically in one interactive transaction (TR-8)."
-      },
-      {
-        "approach": "Apply migrations at build time (Vercel build command) instead of at runtime boot",
-        "rejected_because": "The build environment does not reliably carry the runtime pooled DATABASE_URL (previews especially); registering migrations on server boot via instrumentation.ts covers every instance with an idempotent runner."
-      },
-      {
-        "approach": "Leave sdlc:seed a stub for the seed ticket",
-        "rejected_because": "The admitted issue contract says this slice 'makes sdlc:verify, sdlc:serve, sdlc:seed and sdlc:ready real'; a stub would contradict the ticket, so the verb goes real but honestly minimal with fixtures deferred."
-      }
-    ],
-    "approach": "Greenfield skeleton: replace the four stub verbs with real scripts, add a minimal Next.js App Router shell (placeholder home styled from the ui.md tokens, GET /api/health using only Web-standard Request/Response so it is unit-testable and reading the migration ledger so it proves the serving instance migrated), and a lib/db layer that is the only place allowed to know which backend is active. getDb() returns a { db, close, backend } handle: when DATABASE_URL is unset or blank, a process-scoped PGlite singleton (with memoized migration state) shared across requests in dev/CI/QA; when set, a neon-serverless WebSocket Pool opened per call and closed per request including on error. Production is keyed on VERCEL_ENV=production, never on NODE_ENV alone (Next sets NODE_ENV=production for every build and start, which would otherwise make the safe-defaults boot and the production guard mutually exclusive), and in production a missing or blank DATABASE_URL throws naming it. Migrations are plain SQL files applied at boot by a backend-agnostic runner (db.execute only, CREATE TABLE IF NOT EXISTS ledger bootstrap, each file in its own transaction, version insert ON CONFLICT DO NOTHING, filenames immutable) invoked from an instrumentation.ts register() guarded on NEXT_RUNTIME=nodejs and from npm run db:migrate / db:seed; the SQL set ships in the server bundle via tracing include or a generated index. env handling lives in lib/env.ts (zod, SESSION_SECRET only, no DATABASE_URL and no backend references); the db layer reports the backend it selected and instrumentation logs it. The first migration creates only the ledger table; domain tables belong to later tickets. A scoped source-scanning test enforces the only-getDb-branches invariant, and scripts/neon-smoke.ts (manual, needs a real DATABASE_URL, reads it only via the client.ts helper) proves the Neon transaction-rollback behavior CI cannot reach on PGlite. v2 answers the single v1 rejection: AC-9 (seed verb) was the only verify:test criterion with no CI-run tests[] proof, so scripts/seed.ts exports a side-effect-free runSeed() for import, vitest covers scripts/**/*.test.ts, and scripts/seed.test.ts asserts the seed entry runs migrations and writes zero fixture rows on PGlite.",
-    "assumptions": [
-      "npm registry is reachable from CI so the first install can generate the lockfile that later `npm ci` runs consume",
-      "@neondatabase/serverless Pool construction is lazy (no connection until first query), so constructing-and-closing a Pool with an untrusted DATABASE_URL in tests does not touch the network",
-      "Setting neonConfig.webSocketConstructor = ws inside the getDb module is sufficient for the Node serverless runtime; the global WebSocket alone is not relied on",
-      "PGlite runs fully in-process with no native bindings or background process, satisfying the CI clean-runner (node/npm only) constraint",
-      "QA boots via `npm run sdlc:serve` against localhost:3000 per .sdlc/config.yml env.boot (the full build in serve is accepted per ADR-0006)",
-      "Next 16 needs no instrumentation flag (instrumentation is stable since 15) and honors the NEXT_RUNTIME guard; implementer verifies both keys against the installed Next version",
-      "scripts/seed.ts exports runSeed() with no side effects on import, so the Vitest seed case can import it without booting Next or touching the network"
-    ],
-    "confidence": 80,
-    "confidence_rationale": "Load-bearing repo facts verified first-hand in this round (stub verbs, no tracked lockfile, forbidden paths, QA seed step, no migrations guard); the stack is standard and the v2 delta answers the only recorded rejection with a concrete CI test. Docked from the 90s because Next 16 config keys and neon-serverless packaging must be re-verified against the installed packages at implement time, the Neon rollback proof stays manual-only, and the PGlite-singleton reading of 'nothing at module scope', while the best interpretation, is still an interpretation.",
-    "debate_summary": "The critique file is empty ({}): no findings to accept, dismiss, or fold in, so there was nothing to judge and no difference to split. I verified the proposal directly against the repo and the brief instead. package.json holds only the four stub verbs; no lockfile is tracked in git (and /package-lock.json is ignored via the runner-local .git/info/exclude, so the implementer must use git add -f -- folded into the package-lock.json change text, correcting the earlier claim that no force-add is needed); config.yml forbidden_paths contains no migrations entry and none of the 21 planned paths touch docs, memory, or framework paths; .github/workflows/sdlc-qa.yml runs sdlc:seed when the script exists, consistent with a minimal real seed; and every split IAC has a sourced criterion (IAC-1 to AC-1, IAC-2 to AC-2/AC-3, IAC-3 to AC-4/AC-5), which is exactly what the previous work order's validation failure was about -- this work order restores the source/verify/how_to_verify fields the failed one dropped. The v2 delta answers the only recorded rejection (AC-9 verify:test with no CI proof) with scripts/seed.test.ts run in CI and named in AC-9. One judgment call confirmed: the process-scoped PGlite singleton beside a strictly per-request Neon Pool. Read in isolation, 'nothing at module scope' could forbid it, but the binding decision scopes the per-request lifecycle to 'the Neon side' on serverless, PGlite never runs on Vercel, and per-request PGlite would wipe data on every request; the singleton honors the decision's intent. No route change: the route stands as admitted.",
-    "evidence": [
-      "git ls-files shows only .gitignore, README.md, package.json outside framework/docs -- no lockfile, so sdlc:verify's `npm ci` fails on fresh checkout",
-      ".gitignore ignores node_modules/.next/.env*/logs but not package-lock.json; the /package-lock.json ignore lives only in .git/info/exclude (runner-local), so committing the lock needs git add -f and no gitignore change",
-      "sdlc-qa.yml runs `npm run sdlc:seed` when the script exists and boots via sdlc:serve with no NODE_ENV/secret setup",
-      "docs/trd.md getDb() interface and the 2026-10-04T16:25 route note scope per-request open/close plus nothing-at-module-scope to the Neon Pool side; project.md Deploy confirms PGlite is dev/CI/QA-only",
-      "app/**, lib/** and scripts/** globs return nothing and README.md is 10 lines with no env docs -- greenfield, so there are no existing callers to preserve and the vitest include must explicitly cover scripts/** for the new seed test to run in CI"
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "Replace the four stub scripts with real targets: sdlc:verify=`npm ci && npm run typecheck && npm run test:ci && npm run build`, sdlc:serve=`npm run build && npm run start -- --port 3000`, sdlc:seed=`npm run db:seed`, sdlc:ready=`curl -fsS http://localhost:3000/api/health`; add scripts typecheck/test:ci/dev/build/start/db:migrate/db:seed/db:generate/neon:smoke; add deps next, react, react-dom, drizzle-orm, @electric-sql/pglite, @neondatabase/serverless, ws, zod and devDeps typescript, vitest, drizzle-kit, tsx, tailwindcss, @tailwindcss/postcss, postcss, @types/*",
-        "path": "package.json",
-        "why": "The verbs are the pipeline contract (ADR-0006); they stay stubs until this ticket, and ci-verify fails code-with-stub-verbs, so making them real is the core of the slice"
-      },
-      {
-        "action": "create",
-        "change": "Lockfile generated by the first npm install and committed with git add -f (the runner-local .git/info/exclude ignores /package-lock.json, so a plain git add skips it) so sdlc:verify's `npm ci` works on a fresh clone and CI; never hand-edited",
-        "path": "package-lock.json",
-        "why": "Without it `npm ci` fails on every fresh checkout and AC-4 is unmeetable; the repo gitignore does not exclude it"
-      },
-      {
-        "action": "create",
-        "change": "Strict tsconfig (strict, moduleResolution bundler, jsx preserve, Next plugin) covering app/, lib/, scripts/",
-        "path": "tsconfig.json",
-        "why": "typecheck step of sdlc:verify needs it; strict is a repo rule"
-      },
-      {
-        "action": "create",
-        "change": "Next config with NO instrumentationHook flag (not a Next 16 top-level option; instrumentation is stable since 15) and a server-bundle include for lib/db/migrations/** (outputFileTracingIncludes or equivalent -- implementer verifies the key against installed Next); no other behavior",
-        "path": "next.config.ts",
-        "why": "Omitting a nonexistent flag keeps the build honest, and the include keeps runtime-read migration SQL inside the Vercel server bundle"
-      },
-      {
-        "action": "create",
-        "change": "async register() opening with `if (process.env.NEXT_RUNTIME !== 'nodejs') return;`, then getEnv() (logs safe-defaults line or throws naming the missing secret in production) then runMigrations() inside withDb, logging the backend reported by the db layer; any failure is thrown so boot visibly refuses",
-        "path": "instrumentation.ts",
-        "why": "Automatic same-migrations-on-boot mechanism plus the loud-production-failure and safe-defaults boot log (IAC-1, IAC-3), kept out of the edge runtime"
-      },
-      {
-        "action": "create",
-        "change": "Root layout: html lang, Inter/system font stack, tabular-nums, single top-level structure importing globals.css",
-        "path": "app/layout.tsx",
-        "why": "Shell every later screen builds on; carries the font/typography rules from ui.md"
-      },
-      {
-        "action": "create",
-        "change": "Server-component placeholder: h1 Tabs, one-line what-it-does, link to /api/health; uses token classes only, no data fetching (keeps `next build` free of DB/env needs per ADR-0001)",
-        "path": "app/page.tsx",
-        "why": "Bootable home page for IAC-1; explicitly a placeholder, not a product screen"
-      },
-      {
-        "action": "create",
-        "change": "Tailwind import plus :root tokens and base styles from docs/ui.md; no dark mode",
-        "path": "app/globals.css",
-        "why": "Styling-from-the-token-set contract for this slice"
-      },
-      {
-        "action": "create",
-        "change": "postcss config wiring @tailwindcss/postcss",
-        "path": "postcss.config.mjs",
-        "why": "Required for Tailwind v4 under Next.js"
-      },
-      {
-        "action": "create",
-        "change": "GET handler using only global Request/Response (no next/server import, stays unit-testable): times a ledger read (SELECT against schema_migrations, proving the serving instance applied boot migrations), returns 200 {status:'ok',db:'ok',latencyMs} on success and 503 {status:'degraded',db:'down',latencyMs} on any error",
-        "path": "app/api/health/route.ts",
-        "why": "TR-12 health proof with latencyMs; ledger read (not SELECT 1) proves migration wiring, and the 503 body keeps curl -fsS (sdlc:ready) red exactly when the DB is down"
-      },
-      {
-        "action": "create",
-        "change": "zod-parsed env for app secrets (SESSION_SECRET with dev-only fallback); production means VERCEL_ENV=production, never NODE_ENV alone; logs safe defaults outside production and throws 'Missing required secret: <NAME>' in production. Must not reference DATABASE_URL, PGlite, neon-serverless or ws in any form.",
-        "path": "lib/env.ts",
-        "why": "TR-5 single choke point for app secrets without becoming a second backend brancher; Next sets NODE_ENV=production on every local build/start so it cannot signal production"
-      },
-      {
-        "action": "create",
-        "change": "getDb(): Promise<{db, close, backend}> -- the ONLY place that branches on backend. Trims DATABASE_URL (empty/whitespace counts as unset); in production (VERCEL_ENV=production) a missing/blank DATABASE_URL throws naming it. Unset: process-scoped PGlite singleton (plus memoized migration state) shared across requests, close is a no-op. Set: neon-serverless WebSocket Pool opened per call via withDb(fn) try/finally close, including on error; no Pool or client held at module scope. Exports the shared Db union type plus a helper exposing the selected backend/connection string for tests, smoke script and drizzle config.",
-        "path": "lib/db/client.ts",
-        "why": "The contract this slice DEFINES: per-request Neon Pool lifecycle including on error, durable PGlite across requests in dev/CI/QA, production refuses PGlite-by-misconfiguration"
-      },
-      {
-        "action": "create",
-        "change": "runMigrations(db): CREATE TABLE IF NOT EXISTS ledger bootstrap, read lib/db/migrations/*.sql in sorted order, apply each pending file with db.execute inside db.transaction and record its version with INSERT ... ON CONFLICT DO NOTHING; same code path for both backends; comment states an applied filename is immutable and drizzle-kit generate must be re-run clean after any schema edit",
-        "path": "lib/db/migrate.ts",
-        "why": "Automatic same-SQL-migrations mechanism (TR-2) with zero backend branching and race-safe re-application across concurrent cold starts"
-      },
-      {
-        "action": "create",
-        "change": "Drizzle pgTable definition of schema_migrations(version text PK, applied_at timestamptz default now) exported for drizzle-kit generate consistency with a comment that it is the operational ledger, not a domain table; domain tables land in later tickets",
-        "path": "lib/db/schema.ts",
-        "why": "Drizzle schema as single source of truth starts here; ledger is the only table this slice owns"
-      },
-      {
-        "action": "create",
-        "change": "SQL creating schema_migrations if not exists (matches schema.ts); the runner records itself here",
-        "path": "lib/db/migrations/0001_schema_ledger.sql",
-        "why": "First migration proving the generate-and-apply loop end to end"
-      },
-      {
-        "action": "create",
-        "change": "drizzle-kit config: schema ./lib/db/schema.ts, out ./lib/db/migrations, dialect postgresql (generate-only; applying is the custom runner); obtains any connection string only via the helper exported from lib/db/client.ts",
-        "path": "drizzle.config.ts",
-        "why": "Keeps future schema edits generating SQL into the same directory the runner applies, without becoming a second backend brancher"
-      },
-      {
-        "action": "create",
-        "change": "vitest config: node environment, include lib/**/*.test.ts, app/**/*.test.ts and scripts/**/*.test.ts, no browser/server",
-        "path": "vitest.config.ts",
-        "why": "test:ci runner for the colocated suite (repo rule: no test needs network or a real server); scripts/** must be included so the seed-entry test runs in CI"
-      },
-      {
-        "action": "create",
-        "change": "tsx entry calling runMigrations() inside withDb then exiting; used by db:migrate and at deploy time",
-        "path": "scripts/db-migrate.ts",
-        "why": "Manual/CI migration entry independent of booting the app"
-      },
-      {
-        "action": "create",
-        "change": "tsx entry exporting runSeed() (no side effects on import; direct execution calls it) that runs migrations inside withDb -- obtaining the db only through withDb from lib/db/client.ts, never by referencing DATABASE_URL/PGlite/neon directly -- then logs that the skeleton slice ships no fixture rows (full seed fixtures belong to the seed ticket) and exits 0",
-        "path": "scripts/seed.ts",
-        "why": "Makes sdlc:seed a real verb now without smuggling the out-of-scope seed data into this ticket; the exported runSeed keeps the entry importable by its CI test"
-      },
-      {
-        "action": "create",
-        "change": "Manual-only tsx script (requires real DATABASE_URL, never run in CI, obtains it only via the client.ts helper): opens a transaction inserting a ledger probe row, throws, then asserts the probe row is absent; logs clean rollback or fails",
-        "path": "scripts/neon-smoke.ts",
-        "why": "TR-2 proof for the Neon side that CI cannot reach on PGlite-only runners, per the binding decision"
-      },
-      {
-        "action": "edit",
-        "change": "Document required/optional env vars (DATABASE_URL, SESSION_SECRET, VERCEL_ENV production behavior -- never NODE_ENV), one-command local run (npm run sdlc:serve), the four verbs, from-scratch Vercel deploy (connect repo, add Neon pooled URL, set secrets, migrations run at boot), the manual neon:smoke step, and an explicit note that sdlc:seed currently runs migrations only with fixture rows deferred to the seed ticket; no .env.example (forbidden path **/*.env*)",
-        "path": "README.md",
-        "why": "TR-12 README contract and TR-5 secrets documentation; .env files are untouchable so the README carries it"
-      }
-    ],
-    "issue": 3,
-    "kind": "feature",
-    "mode": "committed",
-    "out_of_scope": [
-      "IAC scope kept: full seed fixtures (users, groups, every split type, multi-payer expense, payments, placeholder) belong to the seed ticket -- sdlc:seed runs migrations and exits 0, and TR-12's seed proof stays open",
-      "Accounts/sessions, groups, expenses, balances, activity product screens and tables",
-      "Vercel project connection, Neon provisioning, and setting production secrets -- a person does that per the README guide",
-      "Words in docs/spec, docs/prd.md, docs/trd.md, docs/ui.md and .sdlc/memory: already updated for the Neon Pool lifecycle, split-rule storage and edited-entry before/after via the project brief; tickets must not touch those paths",
-      "qa_auth mode decision (open question in project.md) -- no login exists in this slice"
-    ],
-    "qa_script": [
-      "npm run sdlc:verify passes on a clean checkout (proves the committed lockfile)",
-      "DATABASE_URL unset: npm run sdlc:serve boots; boot log notes safe local defaults; http://localhost:3000 shows the Tabs placeholder with no console errors",
-      "curl http://localhost:3000/api/health returns {status:'ok', db:'ok', latencyMs:<number>}",
-      "npm run sdlc:ready exits 0 against the booted app",
-      "npm run sdlc:seed exits 0 and ships no fixture rows",
-      "VERCEL_ENV=production without SESSION_SECRET refuses to boot naming SESSION_SECRET; VERCEL_ENV=production with blank DATABASE_URL refuses naming DATABASE_URL; with both set, boot succeeds",
-      "Stop the server, reboot, re-curl health: second boot re-applies migrations idempotently with no error"
-    ],
-    "residual_risks": [
-      "The Neon transaction-rollback proof cannot run in CI (no DATABASE_URL there); the shared db.transaction mechanism is proven on PGlite and scripts/neon-smoke.ts covers Neon manually",
-      "Concurrent cold starts racing the first migration now resolve via IF NOT EXISTS plus ON CONFLICT DO NOTHING, but a fleet-wide simultaneous first boot is still untested",
-      "A malformed DATABASE_URL or a direct (unpooled) Neon URL surfaces as a connection error at first query rather than a named missing secret; health maps it to 503 and the README should tell the deployer which URL shape to paste",
-      "No statement timeout on the health query and no --max-time on sdlc:ready's curl: a blackholed DB hangs the probe rather than failing fast",
-      "Migrations run inside register() before any request is served, so a future slow migration taxes every cold start's first request against TR-11's under-1s target -- later tickets keep migrations small and idempotent",
-      "drizzle-kit journal/numbering behavior after hand-written 0001 must be re-verified at implement time by running generate clean; if it emits ledger DDL, the ledger leaves the drizzle schema and lives only in SQL plus the runner bootstrap",
-      "PGlite data is per-process memory in dev/CI/QA; later tickets must never assume it survives restarts -- production durability comes from Neon only (TR-2)"
-    ],
-    "risks": [
-      "Adding next/react/drizzle/pglite/tailwind in one ticket is a big first install; mitigated by npm ci on the Node 22 CI image with no native bindings anywhere in the tree",
-      "sdlc:serve does a full production build before start (ADR-0006), so QA boot is minutes; accepted as the cost of testing what ships",
-      "No .env.example is possible (forbidden path **/*.env*), so secret documentation lives only in README and lib/env.ts error text"
-    ],
-    "tests": [
-      {
-        "action": "create",
-        "cases": [
-          "dev defaults: SESSION_SECRET falls back with a logged warning and no VERCEL_ENV set",
-          "VERCEL_ENV=production without SESSION_SECRET throws naming SESSION_SECRET",
-          "NODE_ENV=production alone (no VERCEL_ENV) still boots on safe defaults -- the sdlc:serve shape",
-          "production with all secrets set boots silently"
-        ],
-        "path": "lib/env.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "DATABASE_URL unset returns a working PGlite db and reports the pglite backend",
-          "blank/whitespace DATABASE_URL counts as unset and selects PGlite",
-          "production with blank DATABASE_URL throws naming DATABASE_URL",
-          "data written through one withDb call is visible to the next (singleton, no per-request wipe)",
-          "Neon path constructs the Pool and still closes on success and on handler throw (close spy, no network)",
-          "failed transaction leaves no rows (rollback proof on PGlite)"
-        ],
-        "path": "lib/db/client.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "0001 applies on a fresh database and records its version in schema_migrations",
-          "second run is a no-op success (idempotent, conflict-safe double record)"
-        ],
-        "path": "lib/db/migrate.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "scoped scan of app/**, lib/**, scripts/** (excluding *.test.ts and neon-smoke.ts): only lib/db/client.ts references DATABASE_URL/PGlite/neon-serverless/ws; lib/env.ts and all other source files fail the test if they do",
-          "a later migration failing mid-file leaves no partial rows and no ledger entry"
-        ],
-        "path": "lib/db/backend-invariant.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "GET returns 200 with {status:'ok', db:'ok', latencyMs>=0} against in-process PGlite with migrations applied",
-          "missing ledger table maps to 503 {status:'degraded', db:'down'}; DB throw maps to the same 503 shape"
-        ],
-        "path": "app/api/health/route.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "runSeed() on a fresh PGlite database applies migrations (schema_migrations records 0001) and writes zero fixture rows",
-          "second runSeed() is a no-op success (idempotent, still zero fixture rows)"
-        ],
-        "path": "scripts/seed.test.ts"
-      }
-    ],
-    "understanding": "Issue #3 is the bootable-foundation slice: a Next.js shell (home placeholder + GET /api/health {status,db,latencyMs}), the getDb() contract (PGlite when DATABASE_URL unset, neon-serverless WebSocket Pool when set, Neon Pool opened/closed per request including on error), the Drizzle schema plus automatic same-SQL-migrations mechanism, env secrets with safe local defaults and loud production failure, and real sdlc:verify/serve/seed/ready verbs -- under TR-1/TR-2/TR-5/TR-12, the backend invariant (only getDb() branches), and the two binding replan-project decisions (neon-serverless Pool with per-request lifecycle; split-rule storage and edited-entry before/after already recorded in the approved docs). The repo is greenfield (package.json holds only the four stub verbs; app/, lib/, scripts/ do not exist), so there are no existing callers to preserve. This v2 replan answers the single v1 rejection: AC-9 was the only verify:test criterion with no CI-run tests[] proof, so the seed entry is now importable (runSeed) and covered by scripts/seed.test.ts, named in AC-9's how_to_verify.",
-    "unknowns": [
-      "Whether @neondatabase/serverless on Node 22 strictly requires the ws package or works on the global WebSocket -- the plan includes ws regardless, so either outcome works",
-      "Exact Next 16 config key names for the server-bundle include and register() timing under `next start` -- verified against the installed packages at implement time; the db:migrate script is the fallback entry"
-    ],
-    "version": 2
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-04T17:36:46.820Z",
+  "work_order_from": "plan",
+  "work_order_comment": "5982643598"
 }

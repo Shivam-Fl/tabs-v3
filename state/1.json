@@ -17,8 +17,11 @@
   "work_order": null,
   "touch_paths": [],
   "acceptance": [],
-  "planned_route": [],
-  "on_complete": null,
+  "planned_route": [
+    "project",
+    "maintainer"
+  ],
+  "on_complete": "comment-only",
   "artifacts": {},
   "failure_history": [],
   "review_history": [],
@@ -30,6 +33,11 @@
       "at": "2026-10-04T15:49:56.791Z",
       "agent": "intake",
       "action": "-> planning"
+    },
+    {
+      "at": "2026-10-04T15:50:12.628Z",
+      "agent": "router",
+      "action": "route project -> maintainer (label:epic, confidence 95)"
     }
   ],
   "issue_snapshot": {
@@ -38,5 +46,14 @@
     "sha256": "d6172b993dc0b5f9279a0156a91c06bd4cba249c6f0bd5af0f12aafe82b23997",
     "by": "Shivam-Fl",
     "at": "2026-10-04T15:49:52.525Z"
+  },
+  "resume_at": null,
+  "flow_plan": {
+    "kind": "epic",
+    "confidence": 95,
+    "matched_rule": "label:epic",
+    "gates": {},
+    "councils": {},
+    "decided_at": "2026-10-04T15:50:12.628Z"
   }
 }

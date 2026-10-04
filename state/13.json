@@ -18,7 +18,123 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "acceptance": [
+      {
+        "check": "Signup attempts carrying unparseable forwarding headers (clientIp() null) are throttled once the shared unknown-IP budget is spent, and create no user while throttled",
+        "how_to_verify": "npm run test:ci runs the new lib/auth/actions.test.ts null-IP signup case plus the lib/auth/rate-limit.test.ts unknown-bucket cases",
+        "id": "AC-1",
+        "verify": "test"
+      },
+      {
+        "check": "Signup from a normal parseable IP is throttled exactly as before after IP_FAILURE_LIMIT failures (no regression to the existing gate)",
+        "how_to_verify": "npm run test:ci runs the existing lib/auth/actions.test.ts 'throttles sign-up from one address once its budget is spent' case",
+        "id": "AC-2",
+        "verify": "test"
+      },
+      {
+        "check": "On /profile while signed in, clicking Save disables the button with a Saving… label until the save lands, and double-clicking Save produces a single save ending on the 'Profile saved.' notice with the new name persisted after reload",
+        "how_to_verify": "Boot with sdlc:serve, sign up and sign in, open http://localhost:3000/profile, change the display name, double-click Save, observe the disabled Saving… state and the single ?saved=1 landing",
+        "id": "AC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "A profile save that fails validation still returns to /profile?error=invalid with the danger notice (the button island changes nothing about the redirect-notice flow)",
+        "how_to_verify": "On /profile, submit an unsupported currency value and observe the /profile?error=invalid landing with the validation notice",
+        "id": "AC-4",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Fix only the signup caller (map null to 'unknown' in lib/auth/actions.ts before calling checkRateLimit/recordFailure)",
+        "rejected_because": "Leaves the signin null-IP path inconsistent and spreads limiter semantics across callers; one guard in the shared keySpecs covers every caller with a smaller diff"
+      },
+      {
+        "approach": "Convert the whole profile form to a client island with useActionState mirroring AuthForm",
+        "rejected_because": "updateProfile answers by redirect (?saved=1 / ?error=invalid / /signin), not by return state, so conversion would rework the notice flow for no extra protection; a useFormStatus button keeps the server form untouched"
+      },
+      {
+        "approach": "Key signup throttling on the normalized email as the fallback instead of a shared unknown-IP bucket",
+        "rejected_because": "The attacker chooses the address and rotates it freely, so an email key stops nothing; the existing comment at actions.ts:81-82 already records why email keying was avoided"
+      }
+    ],
+    "approach": "Two independent few-line fixes in one PR, both verified still broken on current main. Fix A (signup bypass): guard once in the shared limiter — keySpecs() in lib/auth/rate-limit.ts maps a missing/blank IP to a fixed 'unknown' value under the existing IP_FAILURE_LIMIT, so signup's IP-only gate always exists even when clientIp() returns null; signin inherits the same fallback consistently, and lib/auth/actions.ts needs no change. The existing rate-limit test that asserts null/blank hints are ignored encodes the bug and is updated to assert the fallback. Fix B (double-submit): add a tiny useFormStatus Save-button island (components/profile-save-button.tsx) showing disabled + Saving… while the update is in flight, and render it inside the otherwise untouched server form in app/profile/page.tsx, preserving the redirect-based ?saved=1/?error=invalid notice flow — deliberately not a full useActionState conversion.",
+    "assumptions": [
+      "In production (Vercel) x-forwarded-for is normally present, so null-IP clients are exceptional and sharing one 30-per-15min budget across them harms no legitimate flow"
+    ],
+    "confidence": 85,
+    "confidence_rationale": "Both findings reproduced line-exact against current main (actions.ts:83-94 + rate-limit.ts:53-60 + clientIp null paths; page.tsx:46-90 with no pending state vs auth-form.tsx:161-168), and both fixes reuse patterns already proven in this repo.",
+    "evidence": [
+      "lib/auth/actions.ts:83 gates signup on checkRateLimit({ ip }) alone",
+      "lib/auth/rate-limit.ts:53-60 keySpecs skips empty email and null/blank ip, so ip=null yields specs=[] and checkRateLimit returns {limited:false} while recordFailure writes nothing",
+      "lib/auth/rate-limit.ts:115-124 clientIp returns null for missing, non-IP, or over-60-char header values; the first x-forwarded-for entry is attacker-controlled",
+      "app/profile/page.tsx:46-90 plain server-action form with no disabled/isPending state on the Save button (84-89), unlike components/auth-form.tsx:161-168 which disables while pending and drops second submits",
+      "lib/auth/rate-limit.test.ts:86-89 asserts the buggy behavior (null/blank hint ignored) and must be updated with the fix"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "In keySpecs(), stop skipping a missing/blank IP: normalize and always push an ip spec, using the fixed value 'unknown' with IP_FAILURE_LIMIT when the hint is missing or blank. The literal 'unknown' can never collide with a real bucket because clientIp() only ever returns isIP-validated values. Update the module comment to document the fallback bucket. No change to checkRateLimit/recordFailure/clearRateLimit logic, to clientIp(), or to lib/auth/actions.ts.",
+        "path": "lib/auth/rate-limit.ts",
+        "why": "One shared guard so every caller (signup's IP-only gate and signin's secondary IP key) always has a bucket, closing the null-IP bypass with the smallest diff"
+      },
+      {
+        "action": "create",
+        "change": "New 'use client' island exporting ProfileSaveButton: reads pending from useFormStatus() from 'react-dom'; renders a submit button disabled while pending with aria-busy, showing 'Saving…' while pending and 'Save' otherwise, with the existing Save button classes plus disabled:opacity-60. It must render as a child of the profile form (useFormStatus only works inside a form).",
+        "path": "components/profile-save-button.tsx",
+        "why": "Gives the Save button a pending state matching the auth island without touching the server form or its redirect flow"
+      },
+      {
+        "action": "edit",
+        "change": "Import ProfileSaveButton from '../../components/profile-save-button' and replace the plain Save submit button (lines 84-89) with <ProfileSaveButton />. The form action={updateProfile}, fields, saved/error notices, and the sign-out form stay exactly as they are.",
+        "path": "app/profile/page.tsx",
+        "why": "Wires the pending-state button into the existing server-rendered form"
+      }
+    ],
+    "issue": 13,
+    "kind": "bug",
+    "mode": "committed",
+    "out_of_scope": [
+      "Valid signup attempts never call recordFailure, so mass creation with distinct valid emails never fills any IP bucket even with a parseable IP — a separate ticket, not this null-IP fix",
+      "A shared/distributed attempts table for the per-instance-memory limiter limitation already recorded in rate-limit.ts — deliberately not this slice"
+    ],
+    "qa_script": [
+      "npm run test:ci (rate-limit + actions suites prove the fallback bucket and the null-IP signup gate)",
+      "npm run typecheck && npm run build (new client island compiles under the Next.js build)",
+      "Boot via sdlc:serve, sign up, open /profile, change the display name, double-click Save: button shows disabled Saving…, lands once on ?saved=1 with 'Profile saved.', new name persists after reload"
+    ],
+    "reproduced": true,
+    "residual_risks": [
+      "All headerless clients share one 30-per-15min unknown budget per instance, so a burst of legitimate headerless traffic could throttle itself — accepted because headerless requests are exceptional behind a proxy"
+    ],
+    "risks": [
+      "Signin without a parseable IP now also counts toward the shared unknown-IP bucket (consistent with the fix, but a behavior change for headerless signin) and shares that one budget with all other headerless clients",
+      "The updated rate-limit test replaces assertions that encoded the old ignore-null behavior; review the diff to confirm nothing else depended on null being unthrottled"
+    ],
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "unknown-IP fallback: recordFailure({ip:null}) x IP_FAILURE_LIMIT then checkRateLimit({ip:null}).limited is true; same for blank/whitespace ip",
+          "unknown bucket is shared: failures recorded under null and under blank ip count toward the same budget",
+          "unknown bucket is separate from real IPs: burning the unknown budget does not limit a real IP, and vice versa",
+          "replace the existing 'ignores a missing or empty hint instead of bucketing everything together' case, which asserts the buggy behavior, with the fallback assertions above"
+        ],
+        "path": "lib/auth/rate-limit.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "signup over unparseable forwarding headers is throttled once the unknown budget is spent: x-forwarded-for 'not-an-address', pre-fill IP_FAILURE_LIMIT failures via recordFailure({ip:null}), signup returns THROTTLE_MESSAGE and creates no user",
+          "signup over unparseable headers succeeds when the unknown budget is fresh (garbage headers alone block no legitimate signup)"
+        ],
+        "path": "lib/auth/actions.test.ts"
+      }
+    ],
+    "understanding": "Issue #13 carries two review follow-ups from PR #12, both verified still broken on current main: (1) signup throttling is bypassed entirely by unparseable forwarding headers, because signup gates only on the IP hint and keySpecs drops null/blank IPs, leaving zero buckets; signin is unaffected via its per-email key. (2) The /profile Save button is a plain server-action submit with no pending/double-submit guard, so double-clicking fires two updateProfile requests, unlike the auth island which disables while pending. There are no binding decisions and no prior rejections in plan/brief.md.",
+    "version": 1
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -76,242 +192,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "plan",
-  "validated_work_order": {
-    "acceptance": [
-      {
-        "check": "Signup attempts carrying unparseable forwarding headers (clientIp() null) are throttled once the shared unknown-IP budget is spent, and create no user while throttled",
-        "how_to_verify": "npm run test:ci runs the new lib/auth/actions.test.ts null-IP signup case plus the lib/auth/rate-limit.test.ts unknown-bucket cases",
-        "id": "AC-1",
-        "verify": "test"
-      },
-      {
-        "check": "Signup from a normal parseable IP is throttled exactly as before after IP_FAILURE_LIMIT failures (no regression to the existing gate)",
-        "how_to_verify": "npm run test:ci runs the existing lib/auth/actions.test.ts 'throttles sign-up from one address once its budget is spent' case",
-        "id": "AC-2",
-        "verify": "test"
-      },
-      {
-        "check": "On /profile while signed in, clicking Save disables the button with a Saving… label until the save lands, and double-clicking Save produces a single save ending on the 'Profile saved.' notice with the new name persisted after reload",
-        "how_to_verify": "Boot with sdlc:serve, sign up and sign in, open http://localhost:3000/profile, change the display name, double-click Save, observe the disabled Saving… state and the single ?saved=1 landing",
-        "id": "AC-3",
-        "verify": "browser"
-      },
-      {
-        "check": "A profile save that fails validation still returns to /profile?error=invalid with the danger notice (the button island changes nothing about the redirect-notice flow)",
-        "how_to_verify": "On /profile, submit an unsupported currency value and observe the /profile?error=invalid landing with the validation notice",
-        "id": "AC-4",
-        "verify": "browser"
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Fix only the signup caller (map null to 'unknown' in lib/auth/actions.ts before calling checkRateLimit/recordFailure)",
-        "rejected_because": "Leaves the signin null-IP path inconsistent and spreads limiter semantics across callers; one guard in the shared keySpecs covers every caller with a smaller diff"
-      },
-      {
-        "approach": "Convert the whole profile form to a client island with useActionState mirroring AuthForm",
-        "rejected_because": "updateProfile answers by redirect (?saved=1 / ?error=invalid / /signin), not by return state, so conversion would rework the notice flow for no extra protection; a useFormStatus button keeps the server form untouched"
-      },
-      {
-        "approach": "Key signup throttling on the normalized email as the fallback instead of a shared unknown-IP bucket",
-        "rejected_because": "The attacker chooses the address and rotates it freely, so an email key stops nothing; the existing comment at actions.ts:81-82 already records why email keying was avoided"
-      }
-    ],
-    "approach": "Two independent few-line fixes in one PR, both verified still broken on current main. Fix A (signup bypass): guard once in the shared limiter — keySpecs() in lib/auth/rate-limit.ts maps a missing/blank IP to a fixed 'unknown' value under the existing IP_FAILURE_LIMIT, so signup's IP-only gate always exists even when clientIp() returns null; signin inherits the same fallback consistently, and lib/auth/actions.ts needs no change. The existing rate-limit test that asserts null/blank hints are ignored encodes the bug and is updated to assert the fallback. Fix B (double-submit): add a tiny useFormStatus Save-button island (components/profile-save-button.tsx) showing disabled + Saving… while the update is in flight, and render it inside the otherwise untouched server form in app/profile/page.tsx, preserving the redirect-based ?saved=1/?error=invalid notice flow — deliberately not a full useActionState conversion.",
-    "assumptions": [
-      "In production (Vercel) x-forwarded-for is normally present, so null-IP clients are exceptional and sharing one 30-per-15min budget across them harms no legitimate flow"
-    ],
-    "confidence": 85,
-    "confidence_rationale": "Both findings reproduced line-exact against current main (actions.ts:83-94 + rate-limit.ts:53-60 + clientIp null paths; page.tsx:46-90 with no pending state vs auth-form.tsx:161-168), and both fixes reuse patterns already proven in this repo.",
-    "evidence": [
-      "lib/auth/actions.ts:83 gates signup on checkRateLimit({ ip }) alone",
-      "lib/auth/rate-limit.ts:53-60 keySpecs skips empty email and null/blank ip, so ip=null yields specs=[] and checkRateLimit returns {limited:false} while recordFailure writes nothing",
-      "lib/auth/rate-limit.ts:115-124 clientIp returns null for missing, non-IP, or over-60-char header values; the first x-forwarded-for entry is attacker-controlled",
-      "app/profile/page.tsx:46-90 plain server-action form with no disabled/isPending state on the Save button (84-89), unlike components/auth-form.tsx:161-168 which disables while pending and drops second submits",
-      "lib/auth/rate-limit.test.ts:86-89 asserts the buggy behavior (null/blank hint ignored) and must be updated with the fix"
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "In keySpecs(), stop skipping a missing/blank IP: normalize and always push an ip spec, using the fixed value 'unknown' with IP_FAILURE_LIMIT when the hint is missing or blank. The literal 'unknown' can never collide with a real bucket because clientIp() only ever returns isIP-validated values. Update the module comment to document the fallback bucket. No change to checkRateLimit/recordFailure/clearRateLimit logic, to clientIp(), or to lib/auth/actions.ts.",
-        "path": "lib/auth/rate-limit.ts",
-        "why": "One shared guard so every caller (signup's IP-only gate and signin's secondary IP key) always has a bucket, closing the null-IP bypass with the smallest diff"
-      },
-      {
-        "action": "create",
-        "change": "New 'use client' island exporting ProfileSaveButton: reads pending from useFormStatus() from 'react-dom'; renders a submit button disabled while pending with aria-busy, showing 'Saving…' while pending and 'Save' otherwise, with the existing Save button classes plus disabled:opacity-60. It must render as a child of the profile form (useFormStatus only works inside a form).",
-        "path": "components/profile-save-button.tsx",
-        "why": "Gives the Save button a pending state matching the auth island without touching the server form or its redirect flow"
-      },
-      {
-        "action": "edit",
-        "change": "Import ProfileSaveButton from '../../components/profile-save-button' and replace the plain Save submit button (lines 84-89) with <ProfileSaveButton />. The form action={updateProfile}, fields, saved/error notices, and the sign-out form stay exactly as they are.",
-        "path": "app/profile/page.tsx",
-        "why": "Wires the pending-state button into the existing server-rendered form"
-      }
-    ],
-    "issue": 13,
-    "kind": "bug",
-    "mode": "committed",
-    "out_of_scope": [
-      "Valid signup attempts never call recordFailure, so mass creation with distinct valid emails never fills any IP bucket even with a parseable IP — a separate ticket, not this null-IP fix",
-      "A shared/distributed attempts table for the per-instance-memory limiter limitation already recorded in rate-limit.ts — deliberately not this slice"
-    ],
-    "qa_script": [
-      "npm run test:ci (rate-limit + actions suites prove the fallback bucket and the null-IP signup gate)",
-      "npm run typecheck && npm run build (new client island compiles under the Next.js build)",
-      "Boot via sdlc:serve, sign up, open /profile, change the display name, double-click Save: button shows disabled Saving…, lands once on ?saved=1 with 'Profile saved.', new name persists after reload"
-    ],
-    "reproduced": true,
-    "residual_risks": [
-      "All headerless clients share one 30-per-15min unknown budget per instance, so a burst of legitimate headerless traffic could throttle itself — accepted because headerless requests are exceptional behind a proxy"
-    ],
-    "risks": [
-      "Signin without a parseable IP now also counts toward the shared unknown-IP bucket (consistent with the fix, but a behavior change for headerless signin) and shares that one budget with all other headerless clients",
-      "The updated rate-limit test replaces assertions that encoded the old ignore-null behavior; review the diff to confirm nothing else depended on null being unthrottled"
-    ],
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "unknown-IP fallback: recordFailure({ip:null}) x IP_FAILURE_LIMIT then checkRateLimit({ip:null}).limited is true; same for blank/whitespace ip",
-          "unknown bucket is shared: failures recorded under null and under blank ip count toward the same budget",
-          "unknown bucket is separate from real IPs: burning the unknown budget does not limit a real IP, and vice versa",
-          "replace the existing 'ignores a missing or empty hint instead of bucketing everything together' case, which asserts the buggy behavior, with the fallback assertions above"
-        ],
-        "path": "lib/auth/rate-limit.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "signup over unparseable forwarding headers is throttled once the unknown budget is spent: x-forwarded-for 'not-an-address', pre-fill IP_FAILURE_LIMIT failures via recordFailure({ip:null}), signup returns THROTTLE_MESSAGE and creates no user",
-          "signup over unparseable headers succeeds when the unknown budget is fresh (garbage headers alone block no legitimate signup)"
-        ],
-        "path": "lib/auth/actions.test.ts"
-      }
-    ],
-    "understanding": "Issue #13 carries two review follow-ups from PR #12, both verified still broken on current main: (1) signup throttling is bypassed entirely by unparseable forwarding headers, because signup gates only on the IP hint and keySpecs drops null/blank IPs, leaving zero buckets; signin is unaffected via its per-email key. (2) The /profile Save button is a plain server-action submit with no pending/double-submit guard, so double-clicking fires two updateProfile requests, unlike the auth island which disables while pending. There are no binding decisions and no prior rejections in plan/brief.md.",
-    "version": 1
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-04T19:57:04.581Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "acceptance": [
-      {
-        "check": "Signup attempts carrying unparseable forwarding headers (clientIp() null) are throttled once the shared unknown-IP budget is spent, and create no user while throttled",
-        "how_to_verify": "npm run test:ci runs the new lib/auth/actions.test.ts null-IP signup case plus the lib/auth/rate-limit.test.ts unknown-bucket cases",
-        "id": "AC-1",
-        "verify": "test"
-      },
-      {
-        "check": "Signup from a normal parseable IP is throttled exactly as before after IP_FAILURE_LIMIT failures (no regression to the existing gate)",
-        "how_to_verify": "npm run test:ci runs the existing lib/auth/actions.test.ts 'throttles sign-up from one address once its budget is spent' case",
-        "id": "AC-2",
-        "verify": "test"
-      },
-      {
-        "check": "On /profile while signed in, clicking Save disables the button with a Saving… label until the save lands, and double-clicking Save produces a single save ending on the 'Profile saved.' notice with the new name persisted after reload",
-        "how_to_verify": "Boot with sdlc:serve, sign up and sign in, open http://localhost:3000/profile, change the display name, double-click Save, observe the disabled Saving… state and the single ?saved=1 landing",
-        "id": "AC-3",
-        "verify": "browser"
-      },
-      {
-        "check": "A profile save that fails validation still returns to /profile?error=invalid with the danger notice (the button island changes nothing about the redirect-notice flow)",
-        "how_to_verify": "On /profile, submit an unsupported currency value and observe the /profile?error=invalid landing with the validation notice",
-        "id": "AC-4",
-        "verify": "browser"
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Fix only the signup caller (map null to 'unknown' in lib/auth/actions.ts before calling checkRateLimit/recordFailure)",
-        "rejected_because": "Leaves the signin null-IP path inconsistent and spreads limiter semantics across callers; one guard in the shared keySpecs covers every caller with a smaller diff"
-      },
-      {
-        "approach": "Convert the whole profile form to a client island with useActionState mirroring AuthForm",
-        "rejected_because": "updateProfile answers by redirect (?saved=1 / ?error=invalid / /signin), not by return state, so conversion would rework the notice flow for no extra protection; a useFormStatus button keeps the server form untouched"
-      },
-      {
-        "approach": "Key signup throttling on the normalized email as the fallback instead of a shared unknown-IP bucket",
-        "rejected_because": "The attacker chooses the address and rotates it freely, so an email key stops nothing; the existing comment at actions.ts:81-82 already records why email keying was avoided"
-      }
-    ],
-    "approach": "Two independent few-line fixes in one PR, both verified still broken on current main. Fix A (signup bypass): guard once in the shared limiter — keySpecs() in lib/auth/rate-limit.ts maps a missing/blank IP to a fixed 'unknown' value under the existing IP_FAILURE_LIMIT, so signup's IP-only gate always exists even when clientIp() returns null; signin inherits the same fallback consistently, and lib/auth/actions.ts needs no change. The existing rate-limit test that asserts null/blank hints are ignored encodes the bug and is updated to assert the fallback. Fix B (double-submit): add a tiny useFormStatus Save-button island (components/profile-save-button.tsx) showing disabled + Saving… while the update is in flight, and render it inside the otherwise untouched server form in app/profile/page.tsx, preserving the redirect-based ?saved=1/?error=invalid notice flow — deliberately not a full useActionState conversion.",
-    "assumptions": [
-      "In production (Vercel) x-forwarded-for is normally present, so null-IP clients are exceptional and sharing one 30-per-15min budget across them harms no legitimate flow"
-    ],
-    "confidence": 85,
-    "confidence_rationale": "Both findings reproduced line-exact against current main (actions.ts:83-94 + rate-limit.ts:53-60 + clientIp null paths; page.tsx:46-90 with no pending state vs auth-form.tsx:161-168), and both fixes reuse patterns already proven in this repo.",
-    "evidence": [
-      "lib/auth/actions.ts:83 gates signup on checkRateLimit({ ip }) alone",
-      "lib/auth/rate-limit.ts:53-60 keySpecs skips empty email and null/blank ip, so ip=null yields specs=[] and checkRateLimit returns {limited:false} while recordFailure writes nothing",
-      "lib/auth/rate-limit.ts:115-124 clientIp returns null for missing, non-IP, or over-60-char header values; the first x-forwarded-for entry is attacker-controlled",
-      "app/profile/page.tsx:46-90 plain server-action form with no disabled/isPending state on the Save button (84-89), unlike components/auth-form.tsx:161-168 which disables while pending and drops second submits",
-      "lib/auth/rate-limit.test.ts:86-89 asserts the buggy behavior (null/blank hint ignored) and must be updated with the fix"
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "In keySpecs(), stop skipping a missing/blank IP: normalize and always push an ip spec, using the fixed value 'unknown' with IP_FAILURE_LIMIT when the hint is missing or blank. The literal 'unknown' can never collide with a real bucket because clientIp() only ever returns isIP-validated values. Update the module comment to document the fallback bucket. No change to checkRateLimit/recordFailure/clearRateLimit logic, to clientIp(), or to lib/auth/actions.ts.",
-        "path": "lib/auth/rate-limit.ts",
-        "why": "One shared guard so every caller (signup's IP-only gate and signin's secondary IP key) always has a bucket, closing the null-IP bypass with the smallest diff"
-      },
-      {
-        "action": "create",
-        "change": "New 'use client' island exporting ProfileSaveButton: reads pending from useFormStatus() from 'react-dom'; renders a submit button disabled while pending with aria-busy, showing 'Saving…' while pending and 'Save' otherwise, with the existing Save button classes plus disabled:opacity-60. It must render as a child of the profile form (useFormStatus only works inside a form).",
-        "path": "components/profile-save-button.tsx",
-        "why": "Gives the Save button a pending state matching the auth island without touching the server form or its redirect flow"
-      },
-      {
-        "action": "edit",
-        "change": "Import ProfileSaveButton from '../../components/profile-save-button' and replace the plain Save submit button (lines 84-89) with <ProfileSaveButton />. The form action={updateProfile}, fields, saved/error notices, and the sign-out form stay exactly as they are.",
-        "path": "app/profile/page.tsx",
-        "why": "Wires the pending-state button into the existing server-rendered form"
-      }
-    ],
-    "issue": 13,
-    "kind": "bug",
-    "mode": "committed",
-    "out_of_scope": [
-      "Valid signup attempts never call recordFailure, so mass creation with distinct valid emails never fills any IP bucket even with a parseable IP — a separate ticket, not this null-IP fix",
-      "A shared/distributed attempts table for the per-instance-memory limiter limitation already recorded in rate-limit.ts — deliberately not this slice"
-    ],
-    "qa_script": [
-      "npm run test:ci (rate-limit + actions suites prove the fallback bucket and the null-IP signup gate)",
-      "npm run typecheck && npm run build (new client island compiles under the Next.js build)",
-      "Boot via sdlc:serve, sign up, open /profile, change the display name, double-click Save: button shows disabled Saving…, lands once on ?saved=1 with 'Profile saved.', new name persists after reload"
-    ],
-    "reproduced": true,
-    "residual_risks": [
-      "All headerless clients share one 30-per-15min unknown budget per instance, so a burst of legitimate headerless traffic could throttle itself — accepted because headerless requests are exceptional behind a proxy"
-    ],
-    "risks": [
-      "Signin without a parseable IP now also counts toward the shared unknown-IP bucket (consistent with the fix, but a behavior change for headerless signin) and shares that one budget with all other headerless clients",
-      "The updated rate-limit test replaces assertions that encoded the old ignore-null behavior; review the diff to confirm nothing else depended on null being unthrottled"
-    ],
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "unknown-IP fallback: recordFailure({ip:null}) x IP_FAILURE_LIMIT then checkRateLimit({ip:null}).limited is true; same for blank/whitespace ip",
-          "unknown bucket is shared: failures recorded under null and under blank ip count toward the same budget",
-          "unknown bucket is separate from real IPs: burning the unknown budget does not limit a real IP, and vice versa",
-          "replace the existing 'ignores a missing or empty hint instead of bucketing everything together' case, which asserts the buggy behavior, with the fallback assertions above"
-        ],
-        "path": "lib/auth/rate-limit.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "signup over unparseable forwarding headers is throttled once the unknown budget is spent: x-forwarded-for 'not-an-address', pre-fill IP_FAILURE_LIMIT failures via recordFailure({ip:null}), signup returns THROTTLE_MESSAGE and creates no user",
-          "signup over unparseable headers succeeds when the unknown budget is fresh (garbage headers alone block no legitimate signup)"
-        ],
-        "path": "lib/auth/actions.test.ts"
-      }
-    ],
-    "understanding": "Issue #13 carries two review follow-ups from PR #12, both verified still broken on current main: (1) signup throttling is bypassed entirely by unparseable forwarding headers, because signup gates only on the IP hint and keySpecs drops null/blank IPs, leaving zero buckets; signin is unaffected via its per-email key. (2) The /profile Save button is a plain server-action submit with no pending/double-submit guard, so double-clicking fires two updateProfile requests, unlike the auth island which disables while pending. There are no binding decisions and no prior rejections in plan/brief.md.",
-    "version": 1
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-04T20:00:11.719Z",
+  "work_order_from": "plan",
+  "work_order_comment": "5983839459"
 }

@@ -27,7 +27,16 @@
   ],
   "on_complete": "comment-only",
   "artifacts": {},
-  "failure_history": [],
+  "failure_history": [
+    {
+      "stage": "project",
+      "error_signature": "79938829ec5e53f6",
+      "error_type": "unknown",
+      "attempt": 1,
+      "at": "2026-10-04T15:52:43.390Z",
+      "digest": "The project stage failed and no known error pattern matched. The raw output is below."
+    }
+  ],
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-04T15:49:50.692Z",

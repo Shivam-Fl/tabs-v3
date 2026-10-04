@@ -455,5 +455,23 @@
   "work_order_posted_at": "2026-10-04T20:14:42.464Z",
   "work_order_from": "plan",
   "work_order_comment": "5983963097",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "AC-4 and the PR QA script require the rename flow to sit behind an explicit confirm naming the object, but RenameGroupForm saves on one click with no confirm step.",
+        "detail": "AC-4 and the PR QA script require the rename flow to sit behind an explicit confirm naming the object, but RenameGroupForm saves on one click with no confirm step.\n\n`components/groups-panels.tsx:196`\n\nEvidence: git show origin/sdlc/issue-5:components/groups-panels.tsx | grep -n ConfirmStep shows confirm usages at lines 375, 388 (rotate/disable), 452 (remove), 485 (archive), 579 (leave) — none inside RenameGroupForm (lines 196-236), which renders only a Save name button. Work-order AC-4 check: 'Rename, remove-member, archive and leave flows each require an explicit confirm naming the object'. Counter-evidence: docs/ui.md destructive-actions pattern lists remove/rotate/disable/archive (not rename), so the code matches the spec while the AC text over-requires.\n\nFix: Either add a ConfirmStep naming the group to RenameGroupForm, or (more consistent with ui.md, where rename is not a destructive action) amend AC-4 and the QA script to require confirms only for remove/archive/leave/rotate/disable.",
+        "severity": "minor",
+        "category": "other",
+        "file": "components/groups-panels.tsx"
+      },
+      {
+        "title": "The diff adds three files the work order never lists — app/not-found.tsx, lib/groups/queries.ts, lib/money/format.ts — so strictly they are unreviewed changes, even though each is defensible.",
+        "detail": "The diff adds three files the work order never lists — app/not-found.tsx, lib/groups/queries.ts, lib/money/format.ts — so strictly they are unreviewed changes, even though each is defensible.\n\nEvidence: gh pr diff 16 --name-only lists 25 files; work-order.json files[] plus tests[] cover 22 of them. The three extras: app/not-found.tsx (the one shared 404 AC-1/AC-2 depend on, yet no work-order entry creates it), lib/groups/queries.ts (listGroupsForUser/listMembers/findGroupByInviteToken read helpers), lib/money/format.ts (formatMinorUnits, whose only call sites render literal 0 balances pending TR-9).\n\nFix: Amend the work order files[] to list all three — the shared 404 and the single listing-query module are the right call — and either keep format.ts as the render-time formatter seam or fold its one function away until TR-9 puts real amounts behind it.",
+        "severity": "minor",
+        "category": "design"
+      }
+    ],
+    "pr": "16"
+  }
 }

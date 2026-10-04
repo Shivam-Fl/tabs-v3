@@ -1,0 +1,770 @@
+{
+  "architecture": {
+    "modules": [
+      {
+        "holds": "Routes, pages, layouts, Server Actions and API routes (incl. /api/health); the only place HTTP is handled",
+        "path": "app/"
+      },
+      {
+        "holds": "Shared React components built only from the ui tokens; no data fetching inside",
+        "path": "components/"
+      },
+      {
+        "holds": "Drizzle schema (single source of truth), SQL migrations, getDb() that returns PGlite or a neon-serverless Pool",
+        "path": "lib/db/"
+      },
+      {
+        "holds": "Signup/signin, bcryptjs hashing, opaque DB sessions, sign-out revocation, sign-in rate limiting",
+        "path": "lib/auth/"
+      },
+      {
+        "holds": "Minor-unit money math, the four split calculators with validation, remainder rule, currency formatting",
+        "path": "lib/money/"
+      },
+      {
+        "holds": "Net balances, greedy min-cash-flow simplification, settle-up payments; balances always derived, never stored",
+        "path": "lib/settle/"
+      },
+      {
+        "holds": "Activity-feed writers and readers (expense/payment/member events with actor and timestamp)",
+        "path": "lib/activity/"
+      },
+      {
+        "holds": "Seed script (users, groups, every split type, multi-payer expense, payments, placeholder) and migrate runner",
+        "path": "scripts/"
+      }
+    ],
+    "shape": "One Next.js App Router application on Vercel serverless. Browser talks only to Next.js routes/Server Actions; all reads and writes go through a server-side authorization check against the session user, then through Drizzle to either embedded PGlite (DATABASE_URL unset: dev, CI, QA) or Neon Postgres (DATABASE_URL set: production). Pure domain logic (money splits, balances, debt simplification) lives in framework-free lib/ modules covered by unit tests; the database holds a ledger of expenses and payments from which balances are always derived."
+  },
+  "assumptions": [
+    {
+      "assumption": "Node 20 or newer is available wherever the pipeline builds and runs (Vercel, CI runner, QA box).",
+      "basis": "Next.js 16 requires Node 20.9+; the clean CI runner ships node/npm.",
+      "if_wrong": "Builds fail immediately on every ticket until the runner or engines field is fixed; cheap to detect, blocks everything.",
+      "validate_by": "First skeleton ticket runs next build on CI."
+    },
+    {
+      "assumption": "Neon's free tier and Vercel serverless limits comfortably hold a v1 Splitwise-class workload.",
+      "basis": "Spec targets friends/flatmates/trips, not high-throughput; pooled Neon URL for runtime, direct URL for migrations.",
+      "if_wrong": "Connection exhaustion or cost forces pooling config or a paid tier mid-project.",
+      "validate_by": "Skeleton ticket load-smokes the health endpoint and one group flow against Neon."
+    },
+    {
+      "assumption": "One currency per group with integer minor units covers all v1 money needs; no FX or multi-currency splits.",
+      "basis": "Spec explicitly defers multiple currencies and exchange rates to later.",
+      "if_wrong": "Split math and the schema need a currency-per-expense rework; contained but touches every money ticket.",
+      "validate_by": "Human gate confirms S-10 deferral stands."
+    },
+    {
+      "assumption": "PGlite (WASM Postgres) behaves as real Postgres for this schema: plain tables, no extensions, single connection.",
+      "basis": "Drizzle documents a PGlite driver and PGlite embeds PostgreSQL 18; the same migrations run on both.",
+      "if_wrong": "Migration or query incompatibilities force conditional SQL per backend; the dual-DB decision unravels.",
+      "validate_by": "Skeleton ticket runs the full migration set plus seed on both backends in CI."
+    },
+    {
+      "assumption": "The repo owner will connect the Vercel project and add Neon from the Storage tab by hand; the pipeline never provisions cloud resources.",
+      "basis": "Pipeline allowlists are localhost-only and agents hold no Vercel/Neon credentials.",
+      "if_wrong": "No production deploy or preview exists and deploy tickets stall waiting on a person.",
+      "validate_by": "README deploy guide names the manual steps; open question asks the owner to confirm."
+    }
+  ],
+  "commands": {
+    "ready": "curl -fsS http://localhost:3000/api/health",
+    "seed": "npm run db:seed",
+    "serve": "npm run build && npm run start -- --port 3000",
+    "stubbed": [
+      "sdlc:verify is a stub until the skeleton ticket adds typecheck, the Vitest suite and a Next.js build for it to run",
+      "sdlc:serve is a stub until the skeleton ticket adds the Next.js app for build/start to boot",
+      "sdlc:seed is a stub until the seed ticket adds scripts/seed for it to execute",
+      "sdlc:ready is a stub until the skeleton ticket adds the /api/health endpoint for it to poll"
+    ],
+    "verify": "npm ci && npm run typecheck && npm run test:ci && npm run build"
+  },
+  "confidence": 82,
+  "conventions": [
+    "TypeScript strict; Server Components and Server Actions by default, 'use client' only for interactive islands",
+    "Validate every server input with zod at the route/action boundary; user-safe errors name what is off and by how much",
+    "Drizzle schema in lib/db/schema is the single source of truth; migrations are SQL files applied automatically on boot, never hand-edits to prod",
+    "Money crosses module boundaries only as integer minor units; formatting happens at render time from the group's currency",
+    "Tests colocate as *.test.ts beside the lib/ module they prove and run under Vitest; no test needs network or a real server",
+    "No dependency that needs native bindings or a background process; anything added must work on Vercel serverless and a clean CI runner with node/npm only",
+    "PRs touch one concern, describe the manual QA path, and never touch the reserved framework paths"
+  ],
+  "coverage": [
+    {
+      "disposition": "scope",
+      "refs": [
+        "Tabs v1 web app for shared expenses"
+      ],
+      "section": "S-1"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-1",
+        "TR-2",
+        "TR-3",
+        "TR-4",
+        "TR-5"
+      ],
+      "section": "S-2"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-6"
+      ],
+      "section": "S-3"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-7"
+      ],
+      "section": "S-4"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-4",
+        "TR-8"
+      ],
+      "section": "S-5"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-9"
+      ],
+      "section": "S-6"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-10"
+      ],
+      "section": "S-7"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-11"
+      ],
+      "section": "S-8"
+    },
+    {
+      "disposition": "requirement",
+      "refs": [
+        "TR-12"
+      ],
+      "section": "S-9"
+    },
+    {
+      "disposition": "non_goal",
+      "refs": [],
+      "section": "S-10",
+      "why": "Password reset, native apps, in-app payments, receipts, recurring expenses, multi-currency, charts and email are explicitly deferred by the spec; the schema must not make them hard but no ticket builds them."
+    },
+    {
+      "disposition": "scope",
+      "refs": [
+        "Skeleton, database, accounts and health first",
+        "Groups and members second",
+        "Expenses third",
+        "Balances and settle-up fourth",
+        "Activity, seed and deploy guide last"
+      ],
+      "section": "S-11"
+    }
+  ],
+  "decisions": [
+    {
+      "because": "The spec mandates TypeScript, one Next.js App Router app on Vercel with serverless-only execution. Next.js 16 (React 19, Turbopack) is the current stable line and App Router is the only recommended router for new projects; pinning one concrete version stops twenty tickets each guessing.",
+      "consequences": "Easy: Vercel previews per PR, Server Components/Actions with no separate API server, one deploy target. Hard: everything must tolerate serverless (no local disk, short execution), and all DB access must be lazy so builds never need a live database.",
+      "decision": "Build one TypeScript Next.js 16 (App Router, React 19) application and deploy it on Vercel; no other runtime, no long-running process, no local disk that outlives a request.",
+      "title": "Next.js App Router on Vercel"
+    },
+    {
+      "because": "The spec requires Postgres with zero local setup: Neon when DATABASE_URL is set, an embedded in-process Postgres otherwise, same migrations on both. PGlite is a WASM build of real PostgreSQL with a first-class Drizzle driver, so dev, CI and browser QA need nothing installed; Drizzle is light, serverless-safe and speaks to both backends. Prisma was rejected for its heavier engine downloads on serverless/CI and a weaker PGlite story. The http driver was rejected for the Neon side: it cannot hold an interactive transaction, and creating, editing or deleting an expense must write the expense, its payers, its shares and its activity entry atomically (TR-8: never half-written).",
+      "consequences": "Easy: npm run dev works with nothing set; CI runs the real dialect with no containers; one migration set serves both backends; expense writes commit atomically via db.transaction. Hard: schema must stay within plain-Postgres SQL both backends accept; PGlite must never be used in production where disk is ephemeral; A WebSocket Pool must not outlive the request that uses it on serverless: getDb() on the Neon side opens the Pool for the request and closes it when the request's work is done, including after an error, and nothing holds a Pool or client at module scope, so every transaction must open, commit and close inside one request.",
+      "decision": "Use Drizzle ORM with a getDb() switch: @electric-sql/pglite when DATABASE_URL is unset, Neon via Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket) when DATABASE_URL is set; one SQL migration set applied automatically on boot.",
+      "title": "Drizzle with PGlite locally and Neon in production"
+    },
+    {
+      "because": "The product needs only email/password plus server-revocable sessions; there is no OAuth and no external identity provider. Auth.js v5 is in security-patch mode with its own team pointing new projects at Better Auth, and its JWT strategy cannot revoke on sign-out without a denylist — while the spec requires sign-out to end the session on the server. Hand-rolled opaque tokens in a sessions table give exactly that with two dozen lines.",
+      "consequences": "Easy: sign-out revocation is a row delete; no auth framework to track. Hard: the project owns session hygiene (expiry, rotation, cleanup) and must get cookie flags right once.",
+      "decision": "Hand-rolled auth: bcryptjs password hashes plus opaque random session tokens stored server-side in httpOnly cookies; no Auth.js, no third-party auth service.",
+      "title": "Hand-rolled sessions, no auth framework"
+    },
+    {
+      "because": "Native bcrypt and argon2 packages have documented native-binding load failures on Vercel serverless, while bcryptjs is pure JS with no node-gyp step. OWASP prefers argon2id for new systems, but a hash that fails to load in production is worse than a slightly older algorithm; bcrypt at cost 12 remains an accepted choice.",
+      "consequences": "Easy: hashing works identically on Vercel, CI and PGlite-backed dev with zero build tooling. Hard: migrating to argon2id later means re-hashing on next sign-in; the hash column must store the algorithm identifier to allow that.",
+      "decision": "Hash passwords with bcryptjs (cost factor 12); store the algorithm with the hash so a future upgrade path stays open.",
+      "title": "bcryptjs for password hashing"
+    },
+    {
+      "because": "The spec demands the simplification algorithm be stated with its guarantees. True minimum-transfer settlement is NP-complete (subset-sum), so the honest choice is the standard greedy min-cash-flow over net balances: settle max debtor against max creditor until empty. It guarantees at most N-1 transfers and no cycles, which is what Splitwise-class apps ship; claiming absolute minimality would be false.",
+      "consequences": "Easy: O(E + N log N), trivially testable, explainable in UI copy. Hard: rare cases exist where one fewer transfer is theoretically possible; support copy must say fewest-achieved-by-algorithm, never optimal.",
+      "decision": "Simplify debts with greedy min-cash-flow on net balances (max debtor vs max creditor), guaranteeing at most N-1 transfers; document the algorithm and this guarantee in code and UI.",
+      "title": "Greedy min-cash-flow debt simplification"
+    },
+    {
+      "because": ".sdlc/config.yml on a fresh repo calls npm run sdlc:verify and npm run sdlc:serve, so npm scripts are the contract regardless of stack. A clean CI runner has only node/npm and python3, so verify must install its own toolchain (npm ci) before typecheck, unit tests and build; QA boots compose locally and polls readiness, so serve must boot a production build and ready must hit the DB-checking health endpoint.",
+      "consequences": "Easy: no config edit needed for the pipeline to drive any ticket; verify fails loudly while code exists and the verb is still a stub. Hard: serve does a full build first, so QA boot is minutes not seconds — accepted for testing what ships.",
+      "decision": "The four verbs are npm scripts with production-shaped targets: verify installs then typechecks, unit-tests and builds; serve builds then starts on 3000; seed runs the seed script; ready curls /api/health. All four start as stubs until the code they run exists.",
+      "title": "npm sdlc verbs with production-shaped targets"
+    },
+    {
+      "because": "Reopening an edit form from computed shares alone cannot recover what the user typed: a 33.33% input and an exact-amount input can produce the same stored share, so round-tripping through computed values silently rewrites the user's rule. Storing the inputs makes editing idempotent from the user's perspective — the form reopens showing exactly what was entered — while keeping the money math on one derived path.",
+      "consequences": "Easy: the edit form is a pure function of stored inputs; the record shows the rule, not just its outcome. Hard: two representations of one split must be kept consistent on every write — always in the same transaction as the expense (TR-8) — and validators must check the inputs and the computed shares agree.",
+      "decision": "Store the split rule beside its result: the split type on Expense, and on each split line the member's input as entered (exact amount, percentage or share count, and whether they were included) beside the computed share. The edit form reopens showing exactly what was entered. Balances and debts read only the stored payer parts and computed shares, never the inputs.",
+      "title": "Store the split rule with the expense"
+    }
+  ],
+  "deploy": "Vercel, Git-connected: pushes to main deploy to production with Neon Postgres added from the project's Storage tab (pooled DATABASE_URL for runtime, direct URL for migrations); every pull request gets an automatic Vercel preview deployment. The pipeline's own QA does not drive those previews — env.mode is compose with a localhost-only allowlist — it boots the PR branch locally via npm run sdlc:serve and drives http://localhost:3000. First production deploy needs a person to connect Vercel, add Neon, and set the required secrets per the README guide.",
+  "invariants": [
+    "Money is integer minor units end to end; floats never cross a module boundary and are never stored.",
+    "Every read and write of group data is authorized on the server against the session user; there are no anonymous mutations and the client is never trusted.",
+    "Expense parts always sum to the expense total; the rounding remainder of equal, percentage and share splits goes to the first payer, deterministically.",
+    "Balances are derived from the expense/payment ledger by one recompute path and are never stored; settle-up payments are ledger entries, not balance edits.",
+    "Session tokens are opaque random values stored server-side; sign-out deletes the session row and a signed-out token authorizes nothing.",
+    "Timestamps are stored in UTC and rendered in the viewer's time zone; amounts are rendered in the group's currency.",
+    "A member with a non-zero balance can be neither removed nor leave; every membership change is recorded in the activity feed.",
+    "No code except getDb() itself may branch on which database backend is active; CI and QA run on PGlite only, so a Neon-only code path would hide from every test."
+  ],
+  "issue": 1,
+  "open_questions": [
+    "qa_auth.mode is currently none, but every group flow requires a signed-in user. Change it to derived (QA signs itself up via /signup, passwords derived from QA_FIXTURE_SEED) or fixture (QA logs in as seeded users)? Derived exercises signup on every run; fixture is simpler. Which do you want?",
+    "The first production deploy and every Vercel preview need a person to connect the repo to Vercel, add Neon from the Storage tab, and set the required secrets. Who does that, and is it done before or after the skeleton ticket lands?",
+    "What is the default currency for new profiles and groups (spec mentions paisa, suggesting INR)? Confirm INR as the default so seed data, formatting tests and QA share one expectation."
+  ],
+  "prd": {
+    "constraints": [
+      "TypeScript, one Next.js App Router app, Vercel serverless only (spec hard constraint)",
+      "Postgres with zero local setup: Neon in production, embedded PGlite otherwise, same migrations (spec hard constraint)",
+      "Server-side authorization on every group data access; secrets from environment only (spec hard constraints)"
+    ],
+    "jobs": [
+      "Record what was spent, by whom, and how it splits, without spreadsheet math",
+      "See who owes whom right now, in one group and across all groups",
+      "Settle up with the fewest payments and have everyone trust the numbers",
+      "Onboard latecomers: add people by name now, let them claim their share when they join",
+      "Keep a trustworthy history of who changed what and when"
+    ],
+    "non_goals": [
+      "Password reset and account deletion — deferred; support load is accepted for v1",
+      "Native mobile apps — mobile web must be good enough for v1",
+      "Paying through the app (UPI, cards) — settle-up records payments, money never moves here",
+      "Receipt photos/scanning, recurring expenses, multi-currency groups with exchange rates, charts/reports, email notifications — all deferred, but the schema must not make them hard"
+    ],
+    "problem": "Splitting shared costs among friends, flatmates and trip groups still runs on memory, chat scrollback and spreadsheets, so someone always overpays and nobody can prove who owes whom. Tabs records who paid, how each expense splits, and the fewest payments that settle everyone up — trustworthy enough to end the argument.",
+    "scope": [
+      "Tabs v1 web app for shared expenses",
+      "Skeleton, database, accounts and health first",
+      "Groups and members second",
+      "Expenses third",
+      "Balances and settle-up fourth",
+      "Activity, seed and deploy guide last"
+    ],
+    "success": [
+      {
+        "how_measured": "Automated check in CI plus a timed QA pass over the main screens on an ordinary connection",
+        "metric": "Main screens load fast",
+        "target": "Home, group and expense screens interactive in under 1 second"
+      },
+      {
+        "how_measured": "Property/unit tests over generated splits plus QA spot-checks",
+        "metric": "Money is exact on every split",
+        "target": "Zero lost or invented minor units across the whole suite; parts always sum to the whole"
+      },
+      {
+        "how_measured": "QA sign-up-to-settled flow on a phone-viewport browser",
+        "metric": "A real group can settle end to end",
+        "target": "Create group, invite, add expenses of all four split types, simplify, settle up and read the feed with no errors"
+      }
+    ],
+    "users": [
+      {
+        "context": "Weekend trips and flatshares where costs land on whoever has their card out",
+        "pain": "Reconstructing who paid for what from chat history, and doing split math by hand",
+        "who": "Friends splitting trip and everyday costs"
+      },
+      {
+        "context": "One roof, recurring shared bills, roommates joining or leaving mid-lease",
+        "pain": "Latecomers and leavers break informal tallies; nobody trusts the running total",
+        "who": "Flatmates sharing rent, utilities and groceries"
+      }
+    ]
+  },
+  "product": "Tabs is a Splitwise-class shared-expenses web app: groups of friends, flatmates or trip companions record who paid for what, split each expense (equally, by exact amounts, percentages or shares, with multiple payers allowed), see live balances with simplified who-pays-whom debts, settle up with recorded payments, and follow everything in an activity feed. One TypeScript Next.js application on Vercel with Postgres (Neon in production, embedded PGlite locally), real email/password accounts, exact integer-minor-unit money math, and a mobile-first UI ready for real users.",
+  "research": {
+    "findings": [
+      {
+        "affects": "Next.js App Router on Vercel",
+        "claim": "Next.js 16.x (React 19, App Router, Turbopack default) is the current stable line; App Router is the recommended router for all new projects.",
+        "confidence": 85,
+        "evidence": "Next.js 16 shipped Oct 2025; reports of 16.1/16.2.x/16.3.x as latest stable in 2026 with React 19.2.x; App Router described as replacing the pages router as the recommended approach for all new projects; minimum Node 20.9+.",
+        "source": "web search: Next.js latest stable version 2026 App Router React version"
+      },
+      {
+        "affects": "Drizzle with PGlite locally and Neon in production",
+        "claim": "PGlite is a WASM build of real PostgreSQL with a first-class Drizzle driver, usable in Node with no install; the standard CI pattern is drizzle-orm/pglite for the real dialect without containers.",
+        "confidence": 90,
+        "evidence": "PGlite described as PostgreSQL compiled to WASM via Emscripten in a TypeScript client library for Node/Bun/Deno with no other dependencies; Drizzle docs pattern: wrap a PGlite instance with drizzle() from drizzle-orm/pglite; drizzle-orm stable exports ./pglite and ./pglite/migrator.",
+        "source": "web search: PGlite embedded Postgres current version Drizzle ORM integration"
+      },
+      {
+        "affects": "Drizzle with PGlite locally and Neon in production",
+        "claim": "Neon via Vercel Storage auto-injects a pooled DATABASE_URL for runtime plus an unpooled URL for migrations; the Drizzle Neon-HTTP pattern is the documented serverless usage.",
+        "confidence": 85,
+        "evidence": "Vercel Storage -> Create Database -> Neon auto-injects DATABASE_URL (pooled) into all environments with DATABASE_URL_UNPOOLED for migrations; code pattern const sql = neon(process.env.DATABASE_URL!) and drizzle-orm/neon-http cited.",
+        "source": "web search: Neon Postgres Vercel Storage integration DATABASE_URL pooled connection serverless"
+      },
+      {
+        "affects": "bcryptjs for password hashing",
+        "claim": "On Vercel serverless, bcryptjs (pure JS) is recommended over native bcrypt/argon2 packages, which have documented native-binding load failures.",
+        "confidence": 80,
+        "evidence": "Vercel serverless has documented native binding issues with both native bcrypt and argon2; bcryptjs avoids node-gyp entirely and is sufficient at cost factor 12; @node-rs/argon2 reported loading failures on Vercel.",
+        "source": "web search: password hashing Vercel serverless bcrypt argon2 recommendation 2025"
+      },
+      {
+        "affects": "Hand-rolled sessions, no auth framework",
+        "claim": "For simple email/password with server-side session control, hand-rolled sessions are simpler than Auth.js v5, which is in security-patch mode with its team pointing new projects elsewhere.",
+        "confidence": 75,
+        "evidence": "Auth.js v5 described as stable since late 2024 but as of Sept 2025 in security-patch mode with the Better Auth team taking over maintenance and guidance pointing new projects to Better Auth; iron-session/Auth.js comparisons note rolling your own is simpler for simple email/password with custom sessions.",
+        "source": "web search: Auth.js v5 Next.js custom session cookies iron-session versus Auth.js simple email password app"
+      },
+      {
+        "affects": "Greedy min-cash-flow debt simplification",
+        "claim": "The standard Splitwise-class simplification is greedy min-cash-flow over net balances, guaranteeing at most N-1 transfers; true minimum-transfer settlement is NP-complete so absolute minimality cannot be promised.",
+        "confidence": 80,
+        "evidence": "Tutorials describe: compute net Paid-minus-Share per member, repeatedly settle max debtor against max creditor with min(abs(debt),credit), guaranteeing at most (N-1) transactions and no cycles; separate analysis reduces exact minimization to subset-sum and calls it NP-complete.",
+        "source": "web search: Splitwise simplify debts greedy min cash flow algorithm guarantee fewest transfers"
+      },
+      {
+        "affects": "Drizzle with PGlite locally and Neon in production",
+        "claim": "Drizzle's neon-http driver cannot hold an interactive multi-statement transaction because its one-shot HTTP requests have no persistent session for BEGIN/COMMIT across awaited statements; interactive db.transaction requires the WebSocket-based neon-serverless driver (a Pool from @neondatabase/serverless).",
+        "confidence": 85,
+        "evidence": "Neon's plain HTTP neon() driver does not support interactive multi-statement transactions — use the WebSocket Pool; Drizzle's own connect-to-Neon guide: if you need session or interactive transaction support, use the WebSocket-based neon-serverless driver; neon-http throws client-side where interactive db.transaction callbacks are used.",
+        "source": "web search: Drizzle ORM Neon serverless driver vs neon-http interactive transactions WebSocket Pool"
+      }
+    ],
+    "questions": [
+      "What Next.js/React/Node versions are current and supported, so the stack pins a live line?",
+      "Can Postgres run embedded with zero setup and share migrations with hosted Neon via Drizzle?",
+      "How does the Vercel Neon integration wire DATABASE_URL (pooled vs direct) for serverless use?",
+      "Which password hash works reliably on Vercel serverless without native bindings?",
+      "Is an auth framework needed for email/password plus server-revocable sessions?",
+      "Which debt-simplification algorithm is standard, and what can it honestly guarantee?",
+      "Which Drizzle Neon driver holds interactive transactions, and what does the http driver not support?"
+    ],
+    "rejected_sources": [
+      "Stale npm registry snippets quoting old PGlite/Postgres versions — version claims taken from 2026-dated sources and the projects' own docs instead of aggregator copies."
+    ]
+  },
+  "stack": {
+    "choice": "TypeScript 5, Next.js 16 (App Router) + React 19 on Node 20+, Tailwind CSS v4, Drizzle ORM, PGlite (embedded WASM Postgres) when DATABASE_URL is unset and Neon Postgres via Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket) when DATABASE_URL is set, bcryptjs password hashing, hand-rolled DB sessions, Vitest + TypeScript typecheck",
+    "rejected": [
+      {
+        "because": "Heavier engine downloads on serverless and CI, and a weaker embedded-Postgres story than Drizzle's first-class PGlite driver.",
+        "option": "Prisma in place of Drizzle"
+      },
+      {
+        "because": "In security-patch mode with its own team pointing new projects elsewhere, and its JWT strategy cannot revoke on server-side sign-out without extra machinery the spec forbids us to skip.",
+        "option": "Auth.js v5 / NextAuth for sessions"
+      },
+      {
+        "because": "Documented native-binding load failures on Vercel serverless for both native bcrypt and argon2 Rust builds; pure-JS bcryptjs has no build step and works identically everywhere.",
+        "option": "argon2 or native bcrypt for password hashing"
+      },
+      {
+        "because": "Would need a container or installed server on the clean CI runner and the QA box, breaking the zero-setup constraint and the localhost-only compose boot.",
+        "option": "Dockerized or system Postgres for dev/CI"
+      },
+      {
+        "because": "Its one-shot HTTP requests hold no persistent session, so it cannot run interactive multi-statement transactions; creating, editing or deleting an expense must commit the expense, its payers, its shares and its activity entry atomically (TR-8).",
+        "option": "Drizzle's neon-http driver for the Neon side"
+      }
+    ],
+    "why": "The spec already fixes the big choices (TypeScript, Next.js App Router, Vercel, Postgres with PGlite-local/Neon-production), and research confirms each is on a live, documented path: Next.js 16 + React 19 is the current stable line, PGlite has a first-class Drizzle driver for zero-setup real-Postgres semantics, and Neon auto-wires pooled DATABASE_URL from Vercel Storage. Where the spec is silent, boring wins: Drizzle over Prisma for weight, hand-rolled DB sessions over Auth.js because server-side sign-out revocation is required, bcryptjs over argon2 because native bindings fail on serverless. The Neon side uses Drizzle's neon-serverless driver (WebSocket Pool), not the http driver, because expense writes must commit expense, payers, shares and activity rows in one interactive transaction and the http driver cannot hold one. Everything runs on node/npm alone, which is all the clean CI runner and the compose QA boot provide."
+  },
+  "trd": {
+    "data_model": [
+      {
+        "entity": "User",
+        "holds": "Email, bcrypt hash + algorithm, display name, default currency; owns sessions and memberships",
+        "keys": "id (uuid), email (unique)"
+      },
+      {
+        "entity": "Session",
+        "holds": "Opaque token hash, owning user, expiry; deleted on sign-out",
+        "keys": "token_hash (unique), user_id"
+      },
+      {
+        "entity": "Group",
+        "holds": "Name, currency, type (trip/home/couple/other), invite token + enabled flag, archived flag",
+        "keys": "id (uuid), invite_token (unique, nullable)"
+      },
+      {
+        "entity": "Membership",
+        "holds": "Links user (or placeholder name) to group with role owner/member and claimed state",
+        "keys": "(group_id, user_id) unique; placeholder rows carry display_name with null user_id until claimed"
+      },
+      {
+        "entity": "Expense",
+        "holds": "Group, description, total minor units, date, category, note, split type (equal/exact/percentage/shares); has payers and split lines",
+        "keys": "id (uuid), (group_id, date, id) for newest-first listing"
+      },
+      {
+        "entity": "ExpensePayer",
+        "holds": "Each member's part of what was paid; parts sum to the expense total",
+        "keys": "(expense_id, member)"
+      },
+      {
+        "entity": "SplitLine",
+        "holds": "Each member's share owed: the input as entered (exact amount, percentage or share count, and whether they were included) beside the computed share in minor units; computed shares sum to the total and balances read only the stored payer parts and computed shares",
+        "keys": "(expense_id, member)"
+      },
+      {
+        "entity": "Payment",
+        "holds": "Settle-up transfer from one member to another, full or partial; deletable by involved members",
+        "keys": "id (uuid), (group_id, id)"
+      },
+      {
+        "entity": "ActivityEvent",
+        "holds": "Immutable feed rows: expense/payment/member events with actor and timestamp; expense-edited events carry a structured before/after of the fields that changed (description, amount, date, payers, participants, split type and inputs, category, note)",
+        "keys": "id (uuid), (group_id, created_at)"
+      }
+    ],
+    "interfaces": [
+      {
+        "errors": "401 unauthenticated; 404 when group missing OR not a member (no existence leak); 422 with shortfall named and sized",
+        "idempotency": "Invite-claim and expense-create are not idempotent; clients disable resubmit and the server rejects double-claim of a placeholder.",
+        "name": "Server Actions / Route Handlers per resource",
+        "shape": "(sessionUser, groupScope, zod-validated input) -> { data } or { error: user-safe message }; every group-scoped call checks membership first"
+      },
+      {
+        "errors": "500 surfaces as a generic failure card with retry; expenses never half-write (transactional)",
+        "idempotency": "Migrations are versioned and re-runnable; seed is wipe-and-reload in dev only, never in production.",
+        "name": "Database layer getDb()",
+        "shape": "getDb(): Drizzle instance over PGlite (no DATABASE_URL) or over a neon-serverless Pool from @neondatabase/serverless over WebSocket (DATABASE_URL set); same schema and migrations either way, and expense create/edit/delete run as interactive transactions. On the Neon side getDb() opens the Pool for the request and closes it when the request's work is done, including after an error, and nothing holds a Pool or client at module scope."
+      },
+      {
+        "errors": "Health returns degraded status naming the failing check",
+        "idempotency": "N/A (read-only)",
+        "name": "GET /api/health",
+        "shape": "{ status: ok|degraded, db: ok|down, latencyMs } — checks database reachability with a live query"
+      }
+    ],
+    "nfrs": [
+      "Main screens interactive in under 1s on an ordinary connection (server-rendered, minimal client JS)",
+      "p95 expense-create under 400ms at single-user dev load; balances recompute in-request for groups up to 200 members",
+      "Passwords: bcrypt cost 12; sign-in rate-limited; error messages never reveal email registration",
+      "Sessions: httpOnly, Secure in production, SameSite=Lax cookies; server-side revocation on sign-out"
+    ],
+    "requirements": [
+      {
+        "id": "TR-1",
+        "priority": "must",
+        "rationale": "Spec hard constraint: everything runs on Vercel serverless with no durable local disk.",
+        "requirement": "Ship one TypeScript Next.js App Router application deployed on Vercel; no long-running process and no local disk that outlives a request.",
+        "sources": [
+          "S-2"
+        ],
+        "verified_by": "CI builds the app and QA drives it via sdlc:serve; review rejects any disk-persisting or background-process code."
+      },
+      {
+        "id": "TR-2",
+        "priority": "must",
+        "rationale": "Spec hard constraint: zero-setup local Postgres with production Neon, same migrations, no data loss.",
+        "requirement": "With DATABASE_URL set use Neon Postgres through Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket, pooled URL at runtime); with it unset run embedded PGlite; the same migrations apply automatically on start/deploy and user data survives redeploys and cold starts.",
+        "sources": [
+          "S-2"
+        ],
+        "verified_by": "CI runs migrations plus seed against PGlite; the Neon smoke test runs one transaction that rolls back on error and leaves nothing behind; QA boots with DATABASE_URL unset."
+      },
+      {
+        "id": "TR-3",
+        "priority": "must",
+        "rationale": "Spec hard constraint: real accounts — group data is never public or client-trusted.",
+        "requirement": "Every read and write of group data is authorized on the server against the session user; users see only groups they belong to and missing-or-forbidden reads are indistinguishable.",
+        "sources": [
+          "S-2"
+        ],
+        "verified_by": "QA probes cross-user and signed-out access to every group route; negative tests assert 404/401 with no data leak."
+      },
+      {
+        "id": "TR-4",
+        "priority": "must",
+        "rationale": "Spec hard constraint: money is exact and the remainder rule is stated and tested.",
+        "requirement": "All money is integer minor units end to end, never floats; every split's parts sum to the whole with the rounding remainder assigned to the first payer, covered by unit tests.",
+        "sources": [
+          "S-2",
+          "S-5"
+        ],
+        "verified_by": "Vitest property tests over generated splits assert sum preservation and remainder placement."
+      },
+      {
+        "id": "TR-5",
+        "priority": "must",
+        "rationale": "Spec hard constraint: twelve-factor secrets with safe local boot and loud production failure.",
+        "requirement": "All secrets come from environment variables documented in the README; with nothing set the app boots on safe local defaults and logs it, while production refuses to start with a message naming the missing variable.",
+        "sources": [
+          "S-2"
+        ],
+        "verified_by": "CI boots with a clean env and asserts the boot log; review checks every secret has a README entry and a prod guard."
+      },
+      {
+        "id": "TR-6",
+        "priority": "must",
+        "rationale": "Accounts are the trust root for every authorization check in TR-3.",
+        "requirement": "Email/password signup and signin with slow salted hashing, secure httpOnly session cookies, server-side session end on sign-out, rate-limited failed sign-ins, no email-enumeration in errors, and a profile with display name and default currency.",
+        "sources": [
+          "S-3"
+        ],
+        "verified_by": "Unit tests for hashing/session lifecycle plus QA signup/signin/signout and rate-limit probes."
+      },
+      {
+        "id": "TR-7",
+        "priority": "must",
+        "rationale": "Groups and membership are the authorization boundary and the onboarding path for late joiners.",
+        "requirement": "Group create (name, currency, type), owner-shared join links that can be disabled/rotated, placeholder members claimable on join, owner rename/remove/archive, no removal or leave with a non-zero balance, and membership-scoped visibility.",
+        "sources": [
+          "S-4"
+        ],
+        "verified_by": "QA drives create, invite, claim, rotate, remove-blocked-by-balance and leave flows with two test users."
+      },
+      {
+        "id": "TR-8",
+        "priority": "must",
+        "rationale": "Expenses are the core write path and the ledger everything else derives from.",
+        "requirement": "Expenses with description, amount, date, one or many payers (parts sum to total), all four split types with validation errors naming the shortfall and its size, remainder to first payer, member/category filter, description search, newest-first list, and member-editable with changes recorded; create, edit and delete each commit the expense, its payers, its split lines and its activity entry atomically in a single interactive transaction, never half-written.",
+        "sources": [
+          "S-5"
+        ],
+        "verified_by": "Unit tests for each split type and validation math; transaction tests assert a failing write leaves no expense, payer, share or activity rows; QA adds, edits, deletes and filters expenses of every type."
+      },
+      {
+        "id": "TR-9",
+        "priority": "must",
+        "rationale": "Balances and settle-up are the payoff: the numbers everyone must trust.",
+        "requirement": "Per-group net balances plus simplified who-pays-whom via stated greedy min-cash-flow (at most N-1 transfers), cross-group you-owe/you-are-owed totals per person on home, full/partial settle-up payments recorded in the feed and deletable by involved members, and an explicit all-zero state.",
+        "sources": [
+          "S-6"
+        ],
+        "verified_by": "Unit tests fix balances and simplification outputs on fixtures; QA settles a group to zero and checks both screens."
+      },
+      {
+        "id": "TR-10",
+        "priority": "must",
+        "rationale": "The feed is the audit trail that makes shared money trustworthy.",
+        "requirement": "Per-group and cross-group activity feeds recording expense added/edited/deleted, payments, and member join/leave/remove, each with actor and timestamp; an expense-edited entry stores a structured before/after of the fields that changed (description, amount, date, payers, participants, split type and inputs, category, note), written in the same transaction as the edit.",
+        "sources": [
+          "S-7"
+        ],
+        "verified_by": "QA performs each event kind and asserts it appears in both the group and global feeds; QA edits an expense and asserts the feed entry carries the before/after of exactly the changed fields."
+      },
+      {
+        "id": "TR-11",
+        "priority": "must",
+        "rationale": "A product people choose needs mobile-first, accessible, fast screens — not a prototype.",
+        "requirement": "Mobile-first responsive UI from the token set; one h1 and heading hierarchy, labelled controls, keyboard access and visible focus; designed empty/loading/error states; group-currency formatting; main screens interactive under 1s.",
+        "sources": [
+          "S-8"
+        ],
+        "verified_by": "QA drives phone and laptop viewports with keyboard only, checks all five states per screen, and times main-screen loads."
+      },
+      {
+        "id": "TR-12",
+        "priority": "must",
+        "rationale": "Operability: health proof, reproducible QA data, and a deploy path a person can follow from scratch.",
+        "requirement": "Health endpoint proving database reachability, a seed with known-password users plus every split type, a multi-payer expense, payments and a placeholder, and a README covering one-command local run and from-scratch Vercel deploy (database, env vars, migrations).",
+        "sources": [
+          "S-9"
+        ],
+        "verified_by": "sdlc:ready polls /api/health; QA runs the seed then logs in as a seeded user; review reads the README against a fresh clone."
+      }
+    ]
+  },
+  "ui": {
+    "accessibility": [
+      "Text contrast at least 4.5:1 for body and 3:1 for large text against surfaces",
+      "Every control has a programmatic label; icon-only buttons get aria-labels",
+      "Full keyboard path: tab order matches visual order, visible focus ring on all tokens, dialogs trap and return focus",
+      "One h1 per page, hierarchical headings, and aria-live announcements for balance/feed updates after mutations"
+    ],
+    "layouts": [
+      {
+        "purpose": "Am I owed or owing, and which group needs attention?",
+        "regions": "Header (app name, user menu) / totals cards (you-are-owed, you-owe) / per-person rows / group list with per-group balance / primary Create group action",
+        "responsive": "Cards stack vertically; per-person rows collapse to two-line entries; create action becomes a floating button.",
+        "screen": "Home",
+        "states": {
+          "empty": "No groups yet: illustration, what Tabs does in one line, Create-your-first-group button.",
+          "error": "Failed to load with retry; cached balances are never shown as current.",
+          "ideal": "Totals plus per-person and per-group balances all loaded.",
+          "loading": "Skeleton cards and rows, no layout shift when data arrives.",
+          "partial": "Groups that loaded render with balances; failed ones show inline retry rows, never a full-page error."
+        }
+      },
+      {
+        "purpose": "Who owes whom here, and what happened recently?",
+        "regions": "Group header (name, currency, settings) / balance banner (settled or owes-summary) / simplified-debts card with Settle-up buttons / expenses list with filter+search / recent activity excerpt",
+        "responsive": "Debts card moves above expenses on narrow screens; filters collapse into a disclosure.",
+        "screen": "Group detail",
+        "states": {
+          "empty": "No expenses yet: what to do first with an Add-expense button; settled banner when all balances are zero.",
+          "error": "Full-page error with retry; never a half-rendered ledger.",
+          "ideal": "Balances, debts, expenses and activity all present.",
+          "loading": "Skeleton header, debts card and three expense rows.",
+          "partial": "Cached header with stale badge plus inline retry for the failed section."
+        }
+      },
+      {
+        "purpose": "Record an expense correctly the first time.",
+        "regions": "Amount + currency display / description + date / payer picker (single or multi with parts) / split-type tabs with per-member inputs (exact amount, percentage or share count, included or left out) / live remainder/sum validation line / category + note / Save; reopening an existing expense shows the stored split type and each member's input exactly as entered",
+        "responsive": "Single column; split-type tabs become a select; member rows stay full-width.",
+        "screen": "Expense editor",
+        "states": {
+          "empty": "New expense: blank with payer defaulting to me and split defaulting to equal.",
+          "error": "Failed save keeps all input, names the problem, offers retry.",
+          "ideal": "Valid split with the sum line confirming parts equal the total.",
+          "loading": "Saving state disables Save and shows progress; form never unmounts mid-save.",
+          "partial": "Not applicable: the form is local state, so it cannot partially load; member list failure blocks open with an error."
+        }
+      },
+      {
+        "purpose": "Who is in this group and how do new people join?",
+        "regions": "Member list with balances and owner badges / invite-link panel with copy, disable and rotate / placeholder add-by-name / claim prompts for matching placeholders",
+        "responsive": "Invite panel stacks above the member list on narrow screens.",
+        "screen": "Members and invite",
+        "states": {
+          "empty": "Only the owner: prompt to share the invite link with copy button.",
+          "error": "Invite rotation failure keeps the old link active and says so.",
+          "ideal": "Members, balances and a working invite link.",
+          "loading": "Skeleton member rows; invite panel shows a loading button state.",
+          "partial": "Member list renders while invite-link fetch retries inline."
+        }
+      },
+      {
+        "purpose": "What changed, who changed it, and when?",
+        "regions": "Filter (all/expenses/payments/members) / chronological event rows with actor, action and timestamp / link-through to the expense or group",
+        "responsive": "Filters become a horizontal scroll chip row; rows collapse to two lines.",
+        "screen": "Activity",
+        "states": {
+          "empty": "No activity yet: explains the feed fills as the group acts.",
+          "error": "Feed error with retry; filter selection is preserved.",
+          "ideal": "Chronological events with actor and time.",
+          "loading": "Skeleton event rows.",
+          "partial": "Loaded days render; failed pages show a load-more retry."
+        }
+      },
+      {
+        "purpose": "Let a legitimate user in and keep everyone else out.",
+        "regions": "Single centered card: email + password, show/hide toggle, submit; links between sign-in, sign-up and (later) reset placeholder",
+        "responsive": "Card goes full-width with comfortable touch targets; no other change.",
+        "screen": "Auth (sign in / sign up)",
+        "states": {
+          "empty": "Not applicable: the form is always actionable, never data-driven.",
+          "error": "One neutral message that never reveals whether an email is registered; input preserved.",
+          "ideal": "Clean form, no errors.",
+          "loading": "Submit becomes a pending spinner; double-submit is impossible.",
+          "partial": "Not applicable: no data fetching on this screen."
+        }
+      }
+    ],
+    "patterns": [
+      {
+        "pattern": "Forms and validation",
+        "rule": "Validate on submit and on blur; inline errors sit under the field and the summary line names the shortfall and its size (e.g. parts sum to 450, 50 short of 500). Failed saves never clear input."
+      },
+      {
+        "pattern": "Empty states",
+        "rule": "Every empty screen shows what it is for, what to do next, and the button that does it — never a blank page."
+      },
+      {
+        "pattern": "Loading states",
+        "rule": "Skeleton blocks matching the final layout; no spinners replacing whole pages and no layout shift when data arrives."
+      },
+      {
+        "pattern": "Errors",
+        "rule": "User-safe message plus one recovery action (retry or back); technical detail goes to server logs, and 404 never distinguishes missing from forbidden."
+      },
+      {
+        "pattern": "Destructive actions",
+        "rule": "Delete expense, delete payment, remove member, rotate/disable invite and archive group all require an explicit confirm naming the object; removal blocked by non-zero balance says so and points at settle-up."
+      },
+      {
+        "pattern": "Money display",
+        "rule": "All amounts render in the group's currency with correct symbol and separators from one formatter; minor units are never shown raw and floats never appear."
+      },
+      {
+        "pattern": "Toasts and feedback",
+        "rule": "Mutations confirm with a toast bottom-center on mobile / bottom-right on desktop; the affected number updates in place with an aria-live announcement."
+      }
+    ],
+    "theme": {
+      "dark_mode": "No dedicated dark mode in v1; tokens are chosen to pass contrast on light surfaces, and a dark inversion is explicitly deferred so no ticket invents one ad hoc.",
+      "density": "Comfortable touch targets (min 44px) for mobile-first use; desktop caps content at 72ch/1024px with the same spacing scale.",
+      "motion": "Subtle only: 150ms ease on toasts and disclosures; honor prefers-reduced-motion by disabling all animation.",
+      "tokens": [
+        {
+          "name": "--color-bg",
+          "use": "Page background",
+          "value": "#FAFAF8"
+        },
+        {
+          "name": "--color-surface",
+          "use": "Cards, sheets, dialogs",
+          "value": "#FFFFFF"
+        },
+        {
+          "name": "--color-ink",
+          "use": "Primary text",
+          "value": "#1A1D21"
+        },
+        {
+          "name": "--color-muted",
+          "use": "Secondary text, placeholders",
+          "value": "#5F6570"
+        },
+        {
+          "name": "--color-accent",
+          "use": "Primary actions, links, focus ring",
+          "value": "#0E6B4F"
+        },
+        {
+          "name": "--color-danger",
+          "use": "Destructive actions and errors",
+          "value": "#B3261E"
+        },
+        {
+          "name": "--color-owed",
+          "use": "Amounts you owe (debt) indicators",
+          "value": "#B3261E"
+        },
+        {
+          "name": "--color-lent",
+          "use": "Amounts owed to you (credit) indicators",
+          "value": "#0E6B4F"
+        },
+        {
+          "name": "--space-1..6",
+          "use": "4/8/12/16/24/32 spacing scale; nothing else",
+          "value": "4px 8px 12px 16px 24px 32px"
+        },
+        {
+          "name": "--radius",
+          "use": "Cards, inputs, buttons",
+          "value": "10px"
+        },
+        {
+          "name": "--font-body",
+          "use": "All UI text; tabular numerals for amounts",
+          "value": "Inter, system-ui, sans-serif"
+        }
+      ],
+      "typography": "Inter (system fallback) with tabular-nums for every amount; one h1 per page, section headings hierarchical; amounts semibold, body regular."
+    }
+  }
+}

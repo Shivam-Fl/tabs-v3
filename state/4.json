@@ -237,7 +237,25 @@
     ],
     "version": 1
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "package.json",
+    "lib/db/schema.ts",
+    "lib/db/migrations/0002_auth_users_sessions.sql",
+    "lib/auth/password.ts",
+    "lib/auth/session.ts",
+    "lib/auth/rate-limit.ts",
+    "lib/auth/validation.ts",
+    "lib/auth/actions.ts",
+    "app/signup/page.tsx",
+    "app/signin/page.tsx",
+    "app/profile/page.tsx",
+    "components/auth-form.tsx",
+    "app/page.tsx",
+    "lib/auth/password.test.ts",
+    "lib/auth/session.test.ts",
+    "lib/auth/rate-limit.test.ts",
+    "lib/auth/validation.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

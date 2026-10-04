@@ -1,16 +1,19 @@
-import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withDb } from '../lib/db/client';
-import { schemaMigrations } from '../lib/db/schema';
+import { schemaMigrations, sessions, users } from '../lib/db/schema';
 import { runSeed } from './seed';
 
-async function publicTables(): Promise<string[]> {
-  return withDb(async ({ db }) => {
-    const result = await db.execute<{ table_name: string }>(
-      sql.raw("select table_name from information_schema.tables where table_schema = 'public' order by table_name"),
-    );
-    return (result as unknown as { rows: { table_name: string }[] }).rows.map((row) => row.table_name);
-  });
+/**
+ * The seed writes no fixture *rows* — fixtures belong to the seed ticket, and this is what
+ * keeps the two honest. It asserts emptiness of the tables rather than a list of them: the
+ * migration set grows with every ticket that adds one, and a hard-coded table list fails on
+ * each of those without saying whether the seed ever wrote a row.
+ */
+async function seededRows(): Promise<{ users: number; sessions: number }> {
+  return withDb(async ({ db }) => ({
+    users: (await db.select().from(users)).length,
+    sessions: (await db.select().from(sessions)).length,
+  }));
 }
 
 describe('runSeed', () => {
@@ -19,9 +22,8 @@ describe('runSeed', () => {
 
     const ledger = await withDb(({ db }) => db.select().from(schemaMigrations));
     expect(ledger.map((row) => row.version)).toContain('0001_schema_ledger.sql');
-    // The whole point of this slice's seed verb: it is real, and it writes nothing but the
-    // ledger. Fixtures belong to the seed ticket, and this is what keeps the two honest.
-    expect(await publicTables()).toEqual(['schema_migrations']);
+    expect(ledger.map((row) => row.version)).toContain('0002_auth_users_sessions.sql');
+    expect(await seededRows()).toEqual({ users: 0, sessions: 0 });
   });
 
   it('is a no-op on a second run', async () => {
@@ -30,6 +32,6 @@ describe('runSeed', () => {
 
     const ledger = await withDb(({ db }) => db.select().from(schemaMigrations));
     expect(ledger.filter((row) => row.version === '0001_schema_ledger.sql')).toHaveLength(1);
-    expect(await publicTables()).toEqual(['schema_migrations']);
+    expect(await seededRows()).toEqual({ users: 0, sessions: 0 });
   });
 });

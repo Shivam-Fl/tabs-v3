@@ -575,5 +575,17 @@
   "work_order_posted_at": "2026-10-04T17:36:46.820Z",
   "work_order_from": "plan",
   "work_order_comment": "5982643598",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "README verbs table says `npm run sdlc:seed` 'Applies the migrations, then writes the seed data', but runSeed() writes zero fixture rows today.",
+        "detail": "README verbs table says `npm run sdlc:seed` 'Applies the migrations, then writes the seed data', but runSeed() writes zero fixture rows today.\n\n`README.md:41`\n\nEvidence: README.md line 41 ('then writes the seed data') vs lines 107-111 ('It currently writes no fixture rows'); scripts/seed.ts runSeed() only calls runMigrations and logs '0 fixture rows written'; scripts/seed.test.ts asserts publicTables() equals ['schema_migrations']\n\nFix: Change the table cell to 'Applies the migrations and exits 0 (no fixture rows yet — fixtures belong to the seed ticket)'.",
+        "severity": "minor",
+        "category": "other",
+        "file": "README.md"
+      }
+    ],
+    "pr": "9"
+  }
 }

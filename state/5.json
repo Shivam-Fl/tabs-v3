@@ -487,6 +487,20 @@
         "detail": "The diff adds three files the work order never lists — app/not-found.tsx, lib/groups/queries.ts, lib/money/format.ts — so strictly they are unreviewed changes, even though each is defensible.\n\nEvidence: gh pr diff 16 --name-only lists 25 files; work-order.json files[] plus tests[] cover 22 of them. The three extras: app/not-found.tsx (the one shared 404 AC-1/AC-2 depend on, yet no work-order entry creates it), lib/groups/queries.ts (listGroupsForUser/listMembers/findGroupByInviteToken read helpers), lib/money/format.ts (formatMinorUnits, whose only call sites render literal 0 balances pending TR-9).\n\nFix: Amend the work order files[] to list all three — the shared 404 and the single listing-query module are the right call — and either keep format.ts as the render-time formatter seam or fold its one function away until TR-9 puts real amounts behind it.",
         "severity": "minor",
         "category": "design"
+      },
+      {
+        "title": "isUniqueViolation is copy-pasted between lib/auth/actions.ts and lib/groups/actions.ts instead of shared: both define UNIQUE_VIOLATION, DUPLICATE_KEY_MESSAGE, MAX_ERROR_CAUSES and the same .cause-walk, and the groups copy's own comment admits it ('The same walk as lib/auth/actions.ts'). The v2 debate unified the duplicate CSPRNG generator behind lib/random.ts but left this twin in place, so the next driver error-shape fix has two places to land and the double-claim race mapping AC-9 relies on can silently diverge from the signup one.",
+        "detail": "isUniqueViolation is copy-pasted between lib/auth/actions.ts and lib/groups/actions.ts instead of shared: both define UNIQUE_VIOLATION, DUPLICATE_KEY_MESSAGE, MAX_ERROR_CAUSES and the same .cause-walk, and the groups copy's own comment admits it ('The same walk as lib/auth/actions.ts'). The v2 debate unified the duplicate CSPRNG generator behind lib/random.ts but left this twin in place, so the next driver error-shape fix has two places to land and the double-claim race mapping AC-9 relies on can silently diverge from the signup one.\n\n`lib/groups/actions.ts:62`\n\nEvidence: git show origin/sdlc/issue-5:lib/groups/actions.ts lines 53-77 and lib/auth/actions.ts lines 37-60 define the identical walker; git grep shows the only two definitions in the repo.\n\nFix: Move the walker to a shared module (e.g. lib/db/errors.ts) and import it from both action modules.",
+        "severity": "minor",
+        "category": "design",
+        "file": "lib/groups/actions.ts"
+      },
+      {
+        "title": "AuthForm renders a hidden `next` input that nothing reads: the auth actions never reference `next` (no occurrence in lib/auth/actions.ts), and the invite-link-survives-auth landing actually works through the page's own searchParams plus router.refresh() re-render. The prop, the input and its comment are dead weight on the sign-in/sign-up forms.",
+        "detail": "AuthForm renders a hidden `next` input that nothing reads: the auth actions never reference `next` (no occurrence in lib/auth/actions.ts), and the invite-link-survives-auth landing actually works through the page's own searchParams plus router.refresh() re-render. The prop, the input and its comment are dead weight on the sign-in/sign-up forms.\n\n`components/auth-form.tsx:75`\n\nEvidence: git grep for next consumers over origin/sdlc/issue-5 returns zero readers; components/auth-form.tsx:75 renders the input while lib/auth/actions.ts contains no 'next' reference outside next/* imports.\n\nFix: Delete the hidden input and the `next` prop (the page already redirects from its own validated query string), or thread it through the action if a future flow needs it server-side.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/auth-form.tsx"
       }
     ],
     "pr": "16",

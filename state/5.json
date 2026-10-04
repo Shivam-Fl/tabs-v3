@@ -643,7 +643,7 @@
   },
   "qa": {
     "verdict": "fail",
-    "introduced_bugs": 2,
+    "introduced_bugs": 1,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -654,21 +654,19 @@
       "AC-7",
       "AC-8",
       "AC-9",
-      "AC-10"
+      "AC-10",
+      "AC-11",
+      "AC-12"
     ],
-    "sha": "03b329478f4ddae8c2e29c917e2bf5305bb401a9",
-    "run_id": "37238552797",
-    "work_order_version": 2,
-    "at": "2026-10-04T22:26:23.213Z"
+    "sha": "5adc0f5e00785f677858103ceaa113ebe7f2755b",
+    "run_id": "37242042123",
+    "work_order_version": 3,
+    "at": "2026-10-04T23:27:45.952Z"
   },
   "qa_open_bugs": [
     {
-      "id": "BUG-3",
-      "title": "Remove and archive success notes never render; the confirming forms unmount with their rows"
-    },
-    {
-      "id": "BUG-4",
-      "title": "No skeleton loading state on the members screen though ui.md designs one"
+      "id": "BUG-5",
+      "title": "Disabling the invite link leaves the earlier rotate success note on screen"
     }
   ],
   "rejected_artifacts": {

@@ -69,7 +69,9 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/auth/actions.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

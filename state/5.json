@@ -487,7 +487,26 @@
         "category": "design"
       }
     ],
-    "pr": "16"
+    "pr": "16",
+    "qa": [
+      {
+        "actual": "Every page load logs 'Failed to load resource: 404' for /favicon.ico (server returns HTTP 404, confirmed by direct GET). Cosmetic console noise only; no UI impact.",
+        "evidence": [
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/favicon-response.txt",
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/probe.har"
+        ],
+        "expected": "No console errors on a clean page load; a valid icon or no request at all.",
+        "id": "BUG-1",
+        "introduced_by_pr": false,
+        "repro": [
+          "Open any page of the preview (e.g. /) with devtools console open",
+          "Observe two 404 resource errors for /favicon.ico on every navigation"
+        ],
+        "reproducible": "always",
+        "severity": "trivial",
+        "title": "Missing favicon logs 404 console noise on every page"
+      }
+    ]
   },
   "qa": {
     "verdict": "pass",

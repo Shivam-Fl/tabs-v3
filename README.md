@@ -38,7 +38,7 @@ traffic.
 | --- | --- |
 | `npm run sdlc:serve` | `next build`, then `next start --port 3000` |
 | `npm run sdlc:ready` | Curls `/api/health`; exits non-zero until the app answers |
-| `npm run sdlc:seed` | Applies the migrations, then writes the seed data |
+| `npm run sdlc:seed` | Applies the migrations and exits 0 (no fixture rows yet — fixtures belong to the seed ticket) |
 | `npm run sdlc:verify` | `npm ci && npm run typecheck && npm run test:ci && npm run build` — the whole gate, on a fresh clone |
 
 The gate is `sdlc:verify`. It starts from `npm ci`, so the committed `package-lock.json` is what CI

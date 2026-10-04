@@ -273,7 +273,7 @@
         "risk": "Auth and security risk: bcryptjs cost 12, opaque server-side sessions with sign-out revocation, httpOnly Secure SameSite cookies, rate-limited sign-in, enumeration-safe errors.",
         "title": "Email and password accounts with sessions and profile",
         "why": "A real person can sign up, sign in, sign out and keep a profile, giving every later group flow a trusted identity.",
-        "issue": null
+        "issue": 4
       },
       {
         "acceptance": [
@@ -389,6 +389,7 @@
     "deferred": []
   },
   "children": [
-    3
+    3,
+    4
   ]
 }

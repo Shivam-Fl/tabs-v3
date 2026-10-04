@@ -132,6 +132,21 @@
     "context": {
       "run_url": "https://github.com/Shivam-Fl/tabs-v3/actions/runs/37219063883",
       "prior_signatures": []
+    },
+    "triage": {
+      "verdict": "resume",
+      "diagnosis": "The plan stage's last step refused the plan it had just made; nothing crashed and nothing is transient. The work order the council returned carries no `acceptance[].source` on any of its ten criteria and has no `out_of_scope`, so the issue's IAC-1, IAC-2 and IAC-3 are neither answered nor deferred, and check-split-criteria.mjs refused it at the gate — the same refusal post-work-order.mjs:50-76 makes for every producer. Reproduced against the kept artifact and the live issue body: unansweredSplitCriteria() returns [\"IAC-1\",\"IAC-2\",\"IAC-3\"], and setting three `source` fields clears it to []. The requirement is the planner's own — planner.md:162 and plan-council/3-arbiter.md:44 state it, and .sdlc/schemas/work-order.json allows `source` (pattern ^(IAC|TR)-[0-9]+$) — so this is a defect in the artifact the arbiter RETURNED, not in the code, the environment, the plan's direction or the pipeline. Note the shape of it: the proposer's own result, plan/proposal.json in this run's artifact, DID carry the links (AC-1<-IAC-1, AC-2/AC-3<-IAC-2, AC-4/AC-5<-IAC-3) and the arbiter's debate_summary claims exactly that mapping, but the object the arbiter returned through StructuredOutput — the one the 'as its file' step writes to work-order.json — dropped all ten. Its final reply ('Verification is done - writing the final work order to the repo root') and its 13928-char Write to that path were both superseded by that 9391-char structured result, which is what the gate read.",
+      "evidence": "failed-run.log, job gate, step \"The split's criteria are answered\" (line 2318): `sdlc: the work order neither answers nor defers IAC-1, IAC-2, IAC-3 from the issue's \"## Acceptance (from the split)\": give each a criterion with `source` set to its id, or put \"IAC-n: why it is not in this change\" in out_of_scope` -> `##[error]Process completed with exit code 1`, immediately after `Validate the work order` printed `valid`. Reproduction: state/3.json rejected_artifacts['work-order'].text and plan-output artifact 11309736560/work-order.json (9391 bytes) both have zero `source` values and no out_of_scope; unansweredSplitCriteria(that object, gh issue view 3 body) -> ['IAC-1','IAC-2','IAC-3']; plan/proposal.json has sources [IAC-1,IAC-2,IAC-2,IAC-3,IAC-3,TR-2,TR-1,TR-5,TR-12,TR-2]; plan/critique.json is `{}` (the critique pass contributed nothing)."
     }
-  }
+  },
+  "triage_history": [
+    {
+      "at": "2026-10-04T17:20:53.909Z",
+      "stage": "plan",
+      "verdict": "resume",
+      "confidence": 80,
+      "diagnosis": "The plan stage's last step refused the plan it had just made; nothing crashed and nothing is transient. The work order the council returned carries no `acceptance[].source` on any of its ten criteria and has no `out_of_scope`, so the issue's IAC-1, IAC-2 and IAC-3 are neither answered nor deferred, and check-split-criteria.mjs refused it at the gate — the same refusal post-work-order.mjs:50-76 makes for every producer. Reproduced against the kept artifact and the live issue body: unansweredSplit",
+      "run": "37219063883"
+    }
+  ]
 }

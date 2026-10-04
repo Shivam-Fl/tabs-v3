@@ -82,5 +82,227 @@
     "decided_at": "2026-10-04T18:34:26.222Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "New user signs up and lands signed in with profile holding display name and default currency; signing up again with the same email returns the identical success response with no session created and no distinguishing error, input preserved",
+        "how_to_verify": "Drive signup twice with same email; assert byte-identical success path and only one user row",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Sign-out deletes the server session so the old cookie authorizes nothing; sign in again works; repeated failed sign-ins return neutral throttled responses",
+        "how_to_verify": "Sign out, replay old cookie against /profile (redirect/401), sign in again, then 6+ rapid bad sign-ins observe neutral throttle",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Auth pages are mobile-first from the token set with labelled controls, visible focus, preserved input on error, pending submit state and no double-submit",
+        "how_to_verify": "Phone-viewport keyboard-only pass over signup/signin; submit with error, confirm input retained and focus ring visible; double-click issues one request",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "bcryptjs cost 12 with stored algorithm; opaque 32-byte tokens stored as hash with SESSION_SECRET pepper, 30-day expiry; httpOnly Secure-in-production SameSite=Lax cookies; server-side revocation; per-email plus per-IP throttling; unknown-email vs wrong-password vs existing-email-signup responses indistinguishable",
+        "how_to_verify": "Run lib/auth unit suites; assert cost factor, token lifecycle, cookie flags, neutral-message identity",
+        "id": "AC-4",
+        "source": "TR-6",
+        "verify": "test"
+      },
+      {
+        "check": "Sign-in and sign-up screens follow the docs/ui.md Auth pattern ideal/loading/error states; profile reuses the same tokens and accessibility rules without claiming a ui.md profile contract",
+        "how_to_verify": "Compare auth screens against ui.md Auth section states; profile checked for labels, focus, touch targets only",
+        "id": "AC-5",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "Fresh PGlite boot applies 0001 then 0002 with no relation-exists failure and second boot is a no-op",
+        "how_to_verify": "Run migration suite on empty PGlite twice; assert both runs clean and ledger holds both files",
+        "id": "AC-6",
+        "source": "TR-2",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Auth.js v5 / Better Auth",
+        "rejected_because": "ADR-0003 decided hand-rolled opaque DB sessions; JWT sessions cannot revoke on server-side sign-out without extra machinery."
+      },
+      {
+        "approach": "argon2id hashing",
+        "rejected_because": "Native bindings fail on Vercel serverless; bcryptjs cost 12 is pure JS with stored algorithm for upgrade."
+      },
+      {
+        "approach": "DB-backed login-attempts table for rate limiting",
+        "rejected_because": "Per-instance in-memory window suffices for the v1 online-guessing threat; table plus cleanup job deferred, limitation recorded as residual risk."
+      }
+    ],
+    "approach": "Greenfield auth on the existing skeleton, rewritten around the critique's verified blocking defect. Extend lib/db/schema.ts with users and sessions (app UUIDs, unique email, token_hash unique, FK cascade) and ship 0002 as reviewed SQL with IF NOT EXISTS guards and no schema_migrations DDL, never bare db:generate from the journal-less baseline, verified by double boot on fresh PGlite. Add lib/auth/password.ts (bcryptjs cost 12, dummy compare), session.ts (32-byte token stored as SHA-256 hash peppered with SESSION_SECRET so the prod-required secret is live, 30-day expiry, tabs_session cookie httpOnly/SameSite-Lax/Secure-in-production, getSessionUser contract), rate-limit.ts (sliding window per normalized email as the primary key plus per-IP hint, success clears), validation.ts (zod schemas plus single normalizeEmail used by every path), and actions.ts (one withDb handle per server action so each request opens exactly one Neon Pool per ADR-0002, neutral identical-success signup including unique-violation race mapped to the same response, IP read defensively). Signup collects email/password/display name with INR default editable on /profile. Add app/signup, app/signin, session-gated app/profile plus one client island components/auth-form.tsx using controlled inputs so failed submits keep values with pending disable. All DB via the single per-request handle; no backend branching outside getDb.",
+    "assumptions": [
+      "Default currency INR editable on /profile",
+      "Password min 8 chars max 72 bytes",
+      "30-day fixed sessions with lazy expiry delete"
+    ],
+    "confidence": 78,
+    "confidence_rationale": "Greenfield feature on proven skeleton patterns; blocking migration defect has a concrete fix (hand-reviewed 0002 plus double-boot proof), enumeration and Pool-lifecycle gaps are specified as code rules with unit and browser checks. Number stays below 90 because the migration fix and the identical-success signup shape are reasoned from code inspection, not executed here.",
+    "debate_summary": "Accepted blocking B1: journal-less baseline means db:generate re-emits the ledger table without IF NOT EXISTS and breaks every boot against migrate.ts:53; work order requires hand-reviewed 0002 with no ledger DDL plus fresh double-boot proof. Accepted M1 signup oracle: duplicate-email error is enumerable, so signup must return identical success whether or not the address exists (race mapped the same way). Accepted M2 IP spoofing in part: x-forwarded-for first-entry is client-controlled, so per-normalized-email is the primary key and IP is a hint with defensive parsing. Downgraded M3: per-instance throttling is a documented v1 limitation, not a TR-6 failure; kept in-memory, recorded as residual risk. Accepted M4: one withDb per server action enforces the decided one-Pool-per-request lifecycle. Accepted M5: SESSION_SECRET must pepper the token hash rather than sit dead behind the prod boot guard. Softened M6: no ui.md profile contract exists, so AC-5 claims Auth-pattern conformance only for sign-in/up and tokens/a11y reuse for profile. Accepted M7: preserved input needs controlled inputs in the client island. Accepted minors m1 (add validation.ts module), m2 (drop deprecated @types/bcryptjs), m4 (normalize at the validation boundary, not just the limiter), m5 (map unique-violation race to neutral response). Dismissed m3: package-lock.json exists in the repo root, so the npm-ci claim is factually wrong.",
+    "evidence": [
+      "lib/db/migrations holds only 0001_schema_ledger.sql; no meta journal present",
+      "lib/db/migrate.ts:53 bootstraps schema_migrations IF NOT EXISTS before applying files",
+      "lib/db/schema.ts holds only the ledger table; auth tables are greenfield",
+      "package.json lacks bcryptjs; lockfile present at repo root",
+      "lib/env.ts requires SESSION_SECRET while proposal wired no consumer"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add bcryptjs dependency only (bundled types, no deprecated @types stub)",
+        "path": "package.json",
+        "why": "Hashing library decided but not installed"
+      },
+      {
+        "action": "edit",
+        "change": "Add users and sessions tables: uuid ids, unique email, token_hash unique, FK cascade, expiry",
+        "path": "lib/db/schema.ts",
+        "why": "Schema is single source of truth for TR-6 models"
+      },
+      {
+        "action": "create",
+        "change": "0002 auth migration as reviewed SQL with IF NOT EXISTS guards and no schema_migrations DDL; verified by fresh double boot, never bare db:generate off the journal-less baseline",
+        "path": "lib/db/migrations/0002_auth_users_sessions.sql",
+        "why": "Boot auto-applies on both backends without the ledger clash"
+      },
+      {
+        "action": "create",
+        "change": "bcryptjs cost-12 hash/verify plus dummy compare for unknown emails",
+        "path": "lib/auth/password.ts",
+        "why": "Slow salted hashing with enumeration-safe code path"
+      },
+      {
+        "action": "create",
+        "change": "Token mint/resolve/revoke with SESSION_SECRET-peppered hash, 30-day expiry, cookie flags, getSessionUser contract",
+        "path": "lib/auth/session.ts",
+        "why": "Defines the session contract later scopes consume; keeps prod secret live"
+      },
+      {
+        "action": "create",
+        "change": "Sliding window per normalized email (primary) plus per-IP hint with defensive header parsing; success clears",
+        "path": "lib/auth/rate-limit.ts",
+        "why": "Throttling without a spoofable single key"
+      },
+      {
+        "action": "create",
+        "change": "Zod schemas plus normalizeEmail (trim+lowercase) used by every auth path including DB lookup and limiter",
+        "path": "lib/auth/validation.ts",
+        "why": "Single normalization boundary; backs validation.test.ts"
+      },
+      {
+        "action": "create",
+        "change": "use-server signup/signin/signout/update-profile with one withDb per action, neutral identical-success signup including unique-race mapping, defensive IP",
+        "path": "lib/auth/actions.ts",
+        "why": "Only HTTP handlers; one Pool per request per decided lifecycle"
+      },
+      {
+        "action": "create",
+        "change": "Signup Server Component page: centered card, one h1, three fields, neutral slot",
+        "path": "app/signup/page.tsx",
+        "why": "IAC-1 entry per ui.md Auth screen"
+      },
+      {
+        "action": "create",
+        "change": "Sign-in Server Component page mirroring signup with message parity",
+        "path": "app/signin/page.tsx",
+        "why": "IAC-2 entry; parity makes errors safe"
+      },
+      {
+        "action": "create",
+        "change": "Session-gated profile page: display name plus currency form, sign-out button",
+        "path": "app/profile/page.tsx",
+        "why": "Profile from IAC-1; sign-out control"
+      },
+      {
+        "action": "create",
+        "change": "use-client island with controlled inputs: show/hide toggle, pending disable, values retained on error",
+        "path": "components/auth-form.tsx",
+        "why": "Only client JS; explicit preserved-input mechanism"
+      },
+      {
+        "action": "edit",
+        "change": "Replace no-auth placeholder with session-aware links; keep health link",
+        "path": "app/page.tsx",
+        "why": "Placeholder says accounts replace it"
+      }
+    ],
+    "issue": 4,
+    "kind": "feature",
+    "mode": "committed",
+    "out_of_scope": [
+      "Password reset and account deletion (S-10 deferral)",
+      "Groups, invites, membership",
+      "Expenses, balances, activity",
+      "OAuth, email verification, 2FA",
+      "Dark mode"
+    ],
+    "qa_script": [
+      "Phone-viewport keyboard-only signup: h1, labels, focus ring; lands signed in, /profile shows name plus currency",
+      "Same-email signup again: identical success, input preserved, no second session",
+      "Unknown-email vs wrong-password signin: byte-identical neutral messages",
+      "Sign out: /profile redirects, old cookie replays to nothing, sign in again works",
+      "6+ rapid failed sign-ins: neutral throttled response",
+      "Profile edit persists; double-click Save issues one update",
+      "Fresh-boot migration check plus laptop/phone layout, interactive under 1s"
+    ],
+    "residual_risks": [
+      "Per-instance memory gives distributed guessers N times the budget on multi-instance prod; DB-backed limiter deferred",
+      "No reset flow until its ticket: lockouts need human support",
+      "Cost-12 bcrypt adds ~100-250ms to auth actions, inside the 1s budget"
+    ],
+    "risks": [
+      "Migration 0002 ordering assumes no parallel ticket renumbers first"
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "cost-12 verifies, wrong rejects, algorithm stored, dummy compare parity"
+        ],
+        "path": "lib/auth/password.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "create-resolve-revoke lifecycle, re-signin works, expiry lazy-deleted, pepper required"
+        ],
+        "path": "lib/auth/session.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "throttle at threshold, success clears, per-email primary with spoofed header, signup gated"
+        ],
+        "path": "lib/auth/rate-limit.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "zod rejections, neutral message identity, email normalization, currency normalization"
+        ],
+        "path": "lib/auth/validation.test.ts"
+      }
+    ],
+    "understanding": "Issue #4 gives later group flows a trusted identity: email/password signup, signin, sign-out and profile, DEFINING the lib/auth session contract (bcryptjs cost 12, opaque hashed server-side tokens, httpOnly Secure-in-production SameSite=Lax cookies, server-side revocation, rate-limited sign-in) consumed later as sessionUser, under TR-6 with no enumeration; hand-rolled sessions stand. Covers TR-6/TR-11, depends on #3. Epic route notes bind as invariants: per-request Neon Pool via withDb, nothing held at module scope, no backend branching outside getDb.",
+    "unknowns": [
+      "Password minimum length unspecified, chose 8",
+      "qa_auth.mode still none; QA steps assume manual browser driving"
+    ],
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-04T18:45:00.805Z",
+  "validated_ac_changes": []
 }

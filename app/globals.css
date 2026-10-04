@@ -1,0 +1,72 @@
+/*
+ * Sources are declared rather than auto-detected. Tailwind's detection walks the whole
+ * project directory, which means the CSS build reads every stray file that happens to be
+ * sitting there — and one it cannot read fails the build. Naming the directories that can
+ * contain markup keeps the build deterministic.
+ */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+
+/*
+ * The token set from docs/ui.md, and the only colours, spacing and radii any screen uses.
+ * Tailwind publishes every @theme entry as a :root custom property, so these are readable
+ * from plain CSS as well as through utilities (bg-bg, text-ink, gap-4, rounded-token).
+ */
+@theme {
+  --color-bg: #fafaf8;
+  --color-surface: #ffffff;
+  --color-ink: #1a1d21;
+  --color-muted: #5f6570;
+  --color-accent: #0e6b4f;
+  --color-danger: #b3261e;
+  --color-owed: #b3261e;
+  --color-lent: #0e6b4f;
+
+  --font-body: "Inter", system-ui, sans-serif;
+
+  --radius-token: 10px;
+
+  /* The 4/8/12/16/24/32 scale, replacing Tailwind's default steps so no screen can pick a
+     spacing that is not on it. */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 24px;
+  --spacing-6: 32px;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+  }
+
+  /* Amounts are tabular so columns of them line up; ui.md requires it of every money value. */
+  .tabular-nums,
+  [data-amount] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* ui.md: motion is subtle and never fought. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

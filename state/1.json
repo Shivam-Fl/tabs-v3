@@ -129,7 +129,7 @@
     "by": "Shivam-Fl",
     "at": "2026-10-04T15:49:52.525Z"
   },
-  "resume_at": null,
+  "resume_at": "maintainer",
   "flow_plan": {
     "kind": "epic",
     "confidence": 95,
@@ -138,7 +138,7 @@
     "councils": {},
     "decided_at": "2026-10-04T15:50:12.628Z"
   },
-  "stopped_at": null,
+  "stopped_at": "project",
   "dispatched_stage": "project",
   "failure_packet": {
     "issue": 1,

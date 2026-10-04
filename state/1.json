@@ -327,7 +327,7 @@
         "risk": "Money and correctness risk: integer minor units end to end, four split calculators with remainder to first payer, stored inputs versus computed shares kept consistent, one interactive transaction per write that never half-writes.",
         "title": "Expenses with all four split types, multi-payer and search",
         "why": "Members can record who paid and how it splits with exact minor-unit math, the core ledger everything else derives from.",
-        "issue": null
+        "issue": 6
       },
       {
         "acceptance": [
@@ -391,6 +391,7 @@
   "children": [
     3,
     4,
-    5
+    5,
+    6
   ]
 }

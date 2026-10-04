@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 /**
  * The migration ledger — operational bookkeeping, not a domain table. The migration runner
@@ -48,3 +48,85 @@ export const sessions = pgTable('sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Groups (TR-7). `type` is the closed set from the spec (trip/home/couple/other) and stays a
+ * text column so widening it is data, not a migration; `currency` is what every amount in the
+ * group is formatted and grouped by, and is *not* the same column as the member's default —
+ * a group keeps the currency it was created with even if the owner later changes their profile.
+ *
+ * `invite_token` is nullable-unique on purpose: a group with the link disabled still holds its
+ * token (rotating is what replaces it), and Postgres treats every NULL as distinct, so a group
+ * can be left without one. The enabled flag, not the constraint, is what a joiner is checked
+ * against. `archived` hides the group from the home list and turns its writes off; there is no
+ * unarchive in this ticket.
+ */
+export const groups = pgTable('groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  currency: text('currency').notNull().default('INR'),
+  type: text('type').notNull().default('other'),
+  inviteToken: text('invite_token').unique(),
+  inviteEnabled: boolean('invite_enabled').notNull().default(true),
+  archived: boolean('archived').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Membership (TRD "Membership"): the row that links a person to a group, and the only thing the
+ * authorization guard reads. A placeholder — somebody recorded by name before they have an
+ * account — is the same row with `user_id` null, which is what makes claiming it the join
+ * rather than a step before one: the claim sets `user_id` on the row that already exists.
+ *
+ * `(group_id, user_id)` is unique so one account holds exactly one row per group; it is also
+ * what rejects a member claiming a second seat. Because Postgres treats NULLs as distinct, that
+ * constraint does not stop a group holding many unclaimed placeholders.
+ */
+export const memberships = pgTable(
+  'memberships',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    displayName: text('display_name').notNull(),
+    role: text('role').notNull().default('member'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('memberships_group_id_user_id_unique').on(table.groupId, table.userId),
+    index('memberships_group_id_idx').on(table.groupId),
+  ],
+);
+
+/**
+ * The member rows of the activity feed (TR-10). Only membership events are written here by this
+ * ticket — expense and payment events belong to theirs — and a row is written in the same
+ * transaction as the change it records, so the feed can never disagree with the membership table.
+ *
+ * `actor_user_id` is who did it, `subject_*` is who it happened to: for a join, a claim and a
+ * leave they are the same person, but a removal is the owner acting on somebody else, and a
+ * feed that stored only the actor could not say who was removed. The subject name is copied
+ * rather than joined because the membership row it came from is deleted by the event that
+ * records it, and a placeholder being removed has no user id to join to at all.
+ */
+export const activityEvents = pgTable(
+  'activity_event',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    subjectUserId: uuid('subject_user_id').references(() => users.id, { onDelete: 'set null' }),
+    subjectName: text('subject_name').notNull(),
+    kind: text('kind').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('activity_event_group_id_created_at_idx').on(table.groupId, table.createdAt)],
+);

@@ -181,8 +181,9 @@ export async function signOut(): Promise<void> {
 /**
  * Profile edit. The session user comes from the request's own cookie, never from the form, so
  * a form cannot address a row it does not own. A failed save reports by redirect rather than
- * by state: the profile form is a plain form with no client island, and ui.md makes no profile
- * contract that would demand otherwise.
+ * by state: the profile form stays server-rendered, with redirect-based saved/invalid notices,
+ * and its only client code is the Save button island (components/profile-save-button.tsx),
+ * which holds the in-flight pending state a server render cannot.
  */
 export async function updateProfile(formData: FormData): Promise<void> {
   const parsed = profileSchema.safeParse({

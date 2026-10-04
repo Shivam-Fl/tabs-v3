@@ -299,7 +299,7 @@
         "risk": "Authorization and boundary risk: server-side membership checks on every group read and write, indistinguishable 404s, unguessable invite tokens with disable and rotate, balance-blocked removal.",
         "title": "Groups and members with invite links and placeholders",
         "why": "Friends can create a group, invite by link, claim placeholder seats and manage membership, establishing the authorization boundary.",
-        "issue": null
+        "issue": 5
       },
       {
         "acceptance": [
@@ -390,6 +390,7 @@
   },
   "children": [
     3,
-    4
+    4,
+    5
   ]
 }

@@ -519,8 +519,8 @@
     ]
   },
   "qa": {
-    "verdict": "pass",
-    "introduced_bugs": 0,
+    "verdict": "fail",
+    "introduced_bugs": 2,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -531,10 +531,19 @@
       "AC-7",
       "AC-8"
     ],
-    "sha": "61ddbf1199bed79ab139573629c3ec1f5ae5838a",
-    "run_id": "37233130573",
+    "sha": "3f7150c7f9d33f7196b08200cee9b04dd99198d4",
+    "run_id": "37234362254",
     "work_order_version": 1,
-    "at": "2026-10-04T21:00:51.510Z"
+    "at": "2026-10-04T21:24:15.329Z"
   },
-  "qa_open_bugs": []
+  "qa_open_bugs": [
+    {
+      "id": "BUG-1",
+      "title": "Stale double-claim of a placeholder is rejected silently, never showing the rejection message"
+    },
+    {
+      "id": "BUG-2",
+      "title": "Rename applies immediately with no confirm step, though AC-4 requires one naming the group"
+    }
+  ]
 }

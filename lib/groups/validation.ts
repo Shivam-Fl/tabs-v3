@@ -76,6 +76,46 @@ export const CLAIM_NOTICE_PARAM = 'claim';
 export const CLAIM_TAKEN = 'taken';
 
 /**
+ * The three success notices with the same problem as the lost claim (AC-11).
+ *
+ * A remove succeeds by deleting the row that carried its form, an archive by turning the
+ * settings section that held its form read-only, and a leave by navigating away — so in all
+ * three the message is written by an action whose form is about to unmount, and it would die
+ * with it. Each rides home as a query on the page that can still show it, and the parameter,
+ * its value and the sentence are shared between the redirect that writes them and the page
+ * that reads them, so neither half can drift into a second spelling of the same notice.
+ */
+export const REMOVED_NOTICE_PARAM = 'removed';
+export const ARCHIVED_NOTICE_PARAM = 'archived';
+export const LEFT_NOTICE_PARAM = 'left';
+
+/** What the archived flag carries: the page already knows which group it is showing. */
+export const ARCHIVED_NOTICE = '1';
+
+export function removedNoticeText(memberName: string, groupName: string): string {
+  return `Removed ${memberName} from ${groupName}.`;
+}
+
+export function archivedNoticeText(groupName: string): string {
+  return `${groupName} is archived.`;
+}
+
+export function leftNoticeText(groupName: string): string {
+  return `You left ${groupName}.`;
+}
+
+/**
+ * The name a notice query carried, or null when it carried none. A note names the object it is
+ * about, so a blank one has nothing to say and renders nothing rather than a sentence with a
+ * hole in it — and the value is reflected, never trusted for anything but that sentence.
+ */
+export function parseNoticeName(raw: string | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  const name = raw.trim();
+  return name === '' ? null : name;
+}
+
+/**
  * A trim that cannot be walked around by a caller that skips the form: every name the product
  * stores is trimmed, because ` Ada` and `Ada ` render identically and would sort apart.
  */

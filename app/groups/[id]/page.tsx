@@ -4,7 +4,13 @@ import { notFound, redirect } from 'next/navigation';
 import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
 import { guardGroup, type GroupAccess } from '../../../lib/groups/authz';
 import { getMemberBalance } from '../../../lib/groups/members';
-import { GROUP_TYPE_LABELS, type GroupType } from '../../../lib/groups/validation';
+import {
+  ARCHIVED_NOTICE,
+  ARCHIVED_NOTICE_PARAM,
+  GROUP_TYPE_LABELS,
+  archivedNoticeText,
+  type GroupType,
+} from '../../../lib/groups/validation';
 import { formatMinorUnits } from '../../../lib/money/format';
 import { withDb } from '../../../lib/db/client';
 
@@ -19,9 +25,19 @@ export const metadata: Metadata = { title: 'Group · Tabs' };
  * The guard decides everything else. A signed-out visitor is sent to sign in with the way back;
  * a stranger, a malformed id and a group that does not exist all render the same 404, because
  * the guard cannot tell them apart any more than the reader can.
+ *
+ * An archive lands here carrying the notice flag, because archiving is what unmounts the
+ * settings form that would have shown the confirmation (AC-11). The note renders directly above
+ * the read-only banner it belongs beside, and only for a group that really is archived.
  */
-export default async function GroupPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function GroupPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ archived?: string }>;
+}) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const access = await withDb((handle) => guardGroup(handle.db, id));
 
   if (access.status === 'unauthenticated') {
@@ -29,10 +45,18 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
   }
   if (access.status === 'not-found') notFound();
 
-  return <GroupDetail access={access} />;
+  const justArchived = query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE;
+
+  return <GroupDetail access={access} justArchived={justArchived} />;
 }
 
-function GroupDetail({ access }: { access: Extract<GroupAccess, { status: 'ok' }> }) {
+function GroupDetail({
+  access,
+  justArchived,
+}: {
+  access: Extract<GroupAccess, { status: 'ok' }>;
+  justArchived: boolean;
+}) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
   const balance = getMemberBalance(group.id, membership.id);
@@ -53,13 +77,24 @@ function GroupDetail({ access }: { access: Extract<GroupAccess, { status: 'ok' }
       </header>
 
       {group.archived ? (
-        <p
-          role="status"
-          className="rounded-token border border-muted/40 bg-surface p-3 text-sm"
-        >
-          This group is archived. You can read it, but nothing in it can change — and you can
-          still leave it.
-        </p>
+        <>
+          {justArchived ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+            >
+              {archivedNoticeText(group.name)}
+            </p>
+          ) : null}
+          <p
+            role="status"
+            className="rounded-token border border-muted/40 bg-surface p-3 text-sm"
+          >
+            This group is archived. You can read it, but nothing in it can change — and you can
+            still leave it.
+          </p>
+        </>
       ) : null}
 
       <section

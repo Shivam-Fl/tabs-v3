@@ -79,7 +79,7 @@ const { hashPassword } = await import('../auth/password');
 const { withDb } = await import('../db/client');
 const { listMigrationFiles, runMigrations } = await import('../db/migrate');
 const { activityEvents, groups, memberships, sessions, users } = await import('../db/schema');
-const { ARCHIVED_GROUP_MESSAGE, GROUP_NOT_FOUND_MESSAGE, IDLE_GROUP_STATE, INVITE_INVALID_MESSAGE, INVITE_ROTATE_FAILED_MESSAGE, UNAUTHENTICATED_MESSAGE } = await import('./validation');
+const { ARCHIVED_GROUP_MESSAGE, GROUP_NOT_FOUND_MESSAGE, IDLE_GROUP_STATE, INVITE_INVALID_MESSAGE, INVITE_ROTATE_FAILED_MESSAGE, UNAUTHENTICATED_MESSAGE, parseNoticeName } = await import('./validation');
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -375,14 +375,23 @@ describe('owner-only writes', () => {
     expect(group.name).toBe('Goa trip');
   });
 
-  it('archives for the owner, which takes the group off the home list', async () => {
+  it('archives for the owner and sends them back to the group with the notice', async () => {
     await signInAs(ownerId);
 
-    const state = await archiveGroup(IDLE_GROUP_STATE, form({ groupId }));
+    const url = await redirectUrl(archiveGroup(IDLE_GROUP_STATE, form({ groupId })));
 
-    expect(state.status).toBe('success');
+    // Archiving unmounts the settings section the confirming form lived in, so the success
+    // confirmation travels to the page that can still show it (AC-11). The query is spelled out
+    // because it is the contract between this action and the group page that reads it.
+    expect(url).toBe(`/groups/${groupId}?archived=1`);
+
+    const [group] = await withDb((handle) =>
+      handle.db.select().from(groups).where(eq(groups.id, groupId)),
+    );
+    expect(group.archived).toBe(true);
     expect(await withDb((handle) => listGroupsForUser(handle.db, ownerId))).toEqual([]);
   });
+
 });
 
 describe('invite links', () => {
@@ -666,9 +675,14 @@ describe('removing and leaving', () => {
   it('removes a member for the owner and records it in the same breath', async () => {
     await signInAs(ownerId);
 
-    const state = await removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: seatId }));
+    const url = await redirectUrl(
+      removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: seatId })),
+    );
 
-    expect(state.status).toBe('success');
+    // The removed member's row held the form that would have shown this, so the note lands on
+    // the member list the row was part of (AC-11) — asserted as the URL, the contract between
+    // this action and the members page that reads it.
+    expect(url).toBe(`/groups/${groupId}/members?removed=Bo`);
     expect(await membersOf(groupId)).toHaveLength(1);
 
     const events = await eventsOf(groupId);
@@ -681,12 +695,45 @@ describe('removing and leaving', () => {
     });
   });
 
+  it('carries a name with spaces through the redirect and back out of the query', async () => {
+    await withDb((handle) =>
+      handle.db
+        .insert(memberships)
+        .values({ groupId, userId: thirdId, displayName: 'Dee Ann', role: 'member' }),
+    );
+    const dee = (await membersOf(groupId)).find((member) => member.userId === thirdId)?.id as string;
+
+    await signInAs(ownerId);
+    const url = await redirectUrl(
+      removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: dee })),
+    );
+
+    // The two halves of one round trip: the action percent-encodes the name into the query and
+    // the page's reader gets it back whole, with blank and absent values reading as no note.
+    const carried = new URL(url, 'http://localhost').searchParams.get('removed');
+    expect(carried).toBe('Dee Ann');
+    expect(parseNoticeName(carried ?? undefined)).toBe('Dee Ann');
+    expect(parseNoticeName(undefined)).toBeNull();
+    expect(parseNoticeName('   ')).toBeNull();
+  });
+
   it('asks the balance seam about the membership it is about to remove', async () => {
     await signInAs(ownerId);
 
-    await removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: seatId }));
+    await redirectUrl(removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: seatId })));
 
     expect(getMemberBalance).toHaveBeenCalledWith(groupId, seatId);
+  });
+
+  it('sends a leaver home with the left group in the notice', async () => {
+    await signInAs(joinerId);
+
+    const url = await redirectUrl(leaveGroup(IDLE_GROUP_STATE, form({ groupId })));
+
+    // Home is where leaving already landed; the note names the group that is now off the list.
+    expect(url).toBe('/?left=Goa%20trip');
+    expect(await membersOf(groupId)).toHaveLength(1);
+    expect(await eventsOf(groupId)).toHaveLength(1);
   });
 
   it('blocks a removal whose balance is not zero, and says to settle up', async () => {
@@ -701,15 +748,18 @@ describe('removing and leaving', () => {
     expect(await eventsOf(groupId)).toHaveLength(0);
   });
 
-  it('blocks a leave whose balance is not zero', async () => {
+  it('blocks a leave whose balance is not zero, inline and with nothing changed', async () => {
     await signInAs(joinerId);
     vi.mocked(getMemberBalance).mockReturnValue(-500);
 
+    // Awaited directly: a refusal that redirected would throw instead of returning, so this
+    // also pins that refusals stay on the form, which is still mounted to show them.
     const state = await leaveGroup(IDLE_GROUP_STATE, form({ groupId }));
 
     expect(state.status).toBe('error');
     expect(state.message).toMatch(/settle up/i);
     expect(await membersOf(groupId)).toHaveLength(2);
+    expect(await eventsOf(groupId)).toHaveLength(0);
   });
 
   it('sends the owner who removes themselves to the leave flow instead', async () => {

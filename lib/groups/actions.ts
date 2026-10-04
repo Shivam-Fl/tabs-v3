@@ -14,20 +14,27 @@ import { generateInviteToken } from './tokens';
 import {
   ALREADY_MEMBER_MESSAGE,
   ARCHIVED_GROUP_MESSAGE,
+  ARCHIVED_NOTICE,
+  ARCHIVED_NOTICE_PARAM,
   CHECK_FIELDS_MESSAGE,
   CLAIM_NOTICE_PARAM,
   CLAIM_TAKEN,
   GROUP_NOT_FOUND_MESSAGE,
   INVITE_INVALID_MESSAGE,
   INVITE_ROTATE_FAILED_MESSAGE,
+  LEFT_NOTICE_PARAM,
+  REMOVED_NOTICE_PARAM,
   SEAT_TAKEN_MESSAGE,
   SELF_REMOVE_MESSAGE,
   UNAUTHENTICATED_MESSAGE,
   addPlaceholderSchema,
+  archivedNoticeText,
   claimPlaceholderSchema,
   createGroupSchema,
   joinByTokenSchema,
+  leftNoticeText,
   membershipScope,
+  removedNoticeText,
   renameGroupSchema,
   type GroupActionState,
 } from './validation';
@@ -45,9 +52,11 @@ import {
  * that records it commit in one transaction: a membership cannot move without the feed saying
  * so, and the feed cannot claim something the membership table disagrees with.
  *
- * Actions that change a screen's data return a `GroupActionState` for their island to render;
- * the two that land the caller somewhere new — create, join, claim, leave — redirect instead,
- * because the object they were acting on no longer belongs on the page they were on.
+ * Actions that change a screen's data return a `GroupActionState` for their island to render.
+ * The ones whose success takes the page they were on with it — create, join, claim, leave,
+ * remove and archive — redirect instead, and the success notice travels as a query on the page
+ * they land on, because the form that would have held the message is unmounted by the change
+ * itself (AC-9, AC-11).
  */
 
 const UNIQUE_VIOLATION = '23505';
@@ -111,6 +120,21 @@ function groupPath(groupId: string): string {
 /** Where a lost claim sends the loser: back to the join page, which renders the notice (AC-9). */
 function claimTakenPath(token: string): string {
   return `/join/${encodeURIComponent(token)}?${CLAIM_NOTICE_PARAM}=${CLAIM_TAKEN}`;
+}
+
+/** Where a successful remove sends the owner: the members page, which renders the note (AC-11). */
+function removedNoticePath(groupId: string, memberName: string): string {
+  return `${groupPath(groupId)}/members?${REMOVED_NOTICE_PARAM}=${encodeURIComponent(memberName)}`;
+}
+
+/** Where a successful archive sends the owner: the group, whose banner the note sits beside. */
+function archivedNoticePath(groupId: string): string {
+  return `${groupPath(groupId)}?${ARCHIVED_NOTICE_PARAM}=${ARCHIVED_NOTICE}`;
+}
+
+/** Where leaving lands: home, carrying the name of the group that was left. */
+function leftNoticePath(groupName: string): string {
+  return `/?${LEFT_NOTICE_PARAM}=${encodeURIComponent(groupName)}`;
 }
 
 /** The group list and the group's own pages, refreshed after anything that changes them. */
@@ -213,10 +237,10 @@ export async function archiveGroup(
   _previous: GroupActionState,
   formData: FormData,
 ): Promise<GroupActionState> {
-  const state = await withDb(async (handle) => {
+  const outcome = await withDb(async (handle): Promise<Outcome> => {
     const access = await requireOwner(handle.db, field(formData, 'groupId'));
-    if (access.status !== 'ok') return refusal(access);
-    if (access.group.archived) return ARCHIVED_STATE;
+    if (access.status !== 'ok') return { state: refusal(access) };
+    if (access.group.archived) return { state: ARCHIVED_STATE };
 
     // One-way in this ticket: archiving hides the group from the home list and turns its writes
     // off. Members keep read access at the group's own URL.
@@ -226,13 +250,16 @@ export async function archiveGroup(
       .where(eq(groups.id, access.group.id));
 
     return {
-      status: 'success',
-      message: `${access.group.name} is archived. It is read-only from now on.`,
-    } as GroupActionState;
+      state: { status: 'success', message: archivedNoticeText(access.group.name) },
+      // Archiving is what removes the settings section this form lives in, so the confirmation
+      // cannot stay here. It goes to the group page, where the read-only banner it belongs
+      // beside is about to appear.
+      redirectTo: archivedNoticePath(access.group.id),
+    };
   });
 
   revalidateGroup(field(formData, 'groupId'));
-  return state;
+  return finish(outcome);
 }
 
 // --- Members ---
@@ -282,10 +309,10 @@ export async function removeMember(
   const membershipId = membershipScope.safeParse(field(formData, 'membershipId'));
   if (!membershipId.success) return NOT_FOUND_STATE;
 
-  const state = await withDb(async (handle) => {
+  const outcome = await withDb(async (handle): Promise<Outcome> => {
     const access = await requireOwner(handle.db, field(formData, 'groupId'));
-    if (access.status !== 'ok') return refusal(access);
-    if (access.group.archived) return ARCHIVED_STATE;
+    if (access.status !== 'ok') return { state: refusal(access) };
+    if (access.group.archived) return { state: ARCHIVED_STATE };
 
     const [target] = await handle.db
       .select()
@@ -295,16 +322,17 @@ export async function removeMember(
 
     // A member id that is not in *this* group is not a member of it, and says so the same way
     // a group the caller cannot see does.
-    if (!target) return NOT_FOUND_STATE;
+    if (!target) return { state: NOT_FOUND_STATE };
     if (target.userId === access.user.id) {
-      return { status: 'error', message: SELF_REMOVE_MESSAGE } as GroupActionState;
+      return { state: { status: 'error', message: SELF_REMOVE_MESSAGE } };
     }
 
     try {
       assertZeroBalance(getMemberBalance(access.group.id, target.id), target.displayName);
     } catch (error) {
       if (error instanceof NonZeroBalanceError) {
-        return { status: 'error', message: error.message } as GroupActionState;
+        // Refusals stay on the form, which is still mounted — only success unmounts it.
+        return { state: { status: 'error', message: error.message } };
       }
       throw error;
     }
@@ -321,13 +349,18 @@ export async function removeMember(
     });
 
     return {
-      status: 'success',
-      message: `Removed ${target.displayName} from ${access.group.name}.`,
-    } as GroupActionState;
+      state: {
+        status: 'success',
+        message: removedNoticeText(target.displayName, access.group.name),
+      },
+      // The removed member's row *was* the form that would have shown this: it is gone by the
+      // time the message exists, so the note goes to the member list the row was part of.
+      redirectTo: removedNoticePath(access.group.id, target.displayName),
+    };
   });
 
   revalidateGroup(field(formData, 'groupId'));
-  return state;
+  return finish(outcome);
 }
 
 export async function leaveGroup(
@@ -390,9 +423,11 @@ export async function leaveGroup(
       });
     });
 
+    // Home is where leaving already landed; the notice rides along, because the members page
+    // the form lived on is not a page the caller is a member of any more.
     return {
-      state: { status: 'success', message: `You left ${group.name}.` },
-      redirectTo: '/',
+      state: { status: 'success', message: leftNoticeText(group.name) },
+      redirectTo: leftNoticePath(group.name),
     };
   });
 

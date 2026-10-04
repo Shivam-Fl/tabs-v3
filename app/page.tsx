@@ -5,7 +5,13 @@ import type { SessionUser } from '../lib/auth/session';
 import { getSessionUser } from '../lib/auth/session';
 import { withDb } from '../lib/db/client';
 import { listGroupsForUser, type GroupSummary } from '../lib/groups/queries';
-import { GROUP_TYPE_LABELS, type GroupType } from '../lib/groups/validation';
+import {
+  GROUP_TYPE_LABELS,
+  LEFT_NOTICE_PARAM,
+  leftNoticeText,
+  parseNoticeName,
+  type GroupType,
+} from '../lib/groups/validation';
 import { formatMinorUnits } from '../lib/money/format';
 
 export const metadata: Metadata = { title: 'Tabs' };
@@ -25,8 +31,19 @@ interface HomeData {
  * The balances are zero because the ledger that moves them (TR-8, TR-9) is not built yet, and
  * zero is the true answer rather than a placeholder: with no expenses recorded, nobody owes
  * anybody. The slot each group renders is the one TR-9 starts filling.
+ *
+ * Leaving a group already landed here; it now carries the group's name in the query, because
+ * the members page the confirming form lived on is not a page the leaver can still see (AC-11).
+ * The note is additive: a signed-out or failed home renders exactly as it did before.
  */
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ left?: string }>;
+}) {
+  const query = await searchParams;
+  const leftName = parseNoticeName(query[LEFT_NOTICE_PARAM]);
+
   let data: HomeData;
   let failed = false;
 
@@ -92,7 +109,7 @@ export default async function HomePage() {
           </p>
         </>
       ) : (
-        <SignedInHome user={data.user} groups={data.groups} />
+        <SignedInHome user={data.user} groups={data.groups} leftName={leftName} />
       )}
 
       <p>
@@ -104,9 +121,29 @@ export default async function HomePage() {
   );
 }
 
-function SignedInHome({ user, groups }: { user: SessionUser; groups: GroupSummary[] }) {
+function SignedInHome({
+  user,
+  groups,
+  leftName,
+}: {
+  user: SessionUser;
+  groups: GroupSummary[];
+  leftName: string | null;
+}) {
   return (
     <>
+      {/* Page level, above the list the group just left: the row that used to name it is the
+          thing that is gone, so nothing inside the list can carry this. */}
+      {leftName === null ? null : (
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+        >
+          {leftNoticeText(leftName)}
+        </p>
+      )}
+
       <section className="flex flex-col gap-3" aria-labelledby="balances-heading">
         <h2 id="balances-heading" className="text-lg font-semibold">
           Your balances

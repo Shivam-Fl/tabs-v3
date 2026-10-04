@@ -440,6 +440,9 @@ function RemoveMemberForm({
   const [state, formAction, isPending] = useActionState(removeMember, IDLE_GROUP_STATE);
   const [confirming, setConfirming] = useState(false);
 
+  // Success never arrives here: it deletes this row and redirects to the members page with the
+  // note (AC-11). What is left for the form to render is the refusals, which stay inline
+  // because the form is still on screen to show them.
   useEffect(() => {
     if (state.status === 'success') setConfirming(false);
   }, [state]);
@@ -474,6 +477,8 @@ export function ArchiveGroupForm({ groupId, groupName }: { groupId: string; grou
   const [state, formAction, isPending] = useActionState(archiveGroup, IDLE_GROUP_STATE);
   const [confirming, setConfirming] = useState(false);
 
+  // As with remove: success redirects to the group page, where the note renders beside the
+  // read-only banner, and leaves this form to show refusals only (AC-11).
   useEffect(() => {
     if (state.status === 'success') setConfirming(false);
   }, [state]);
@@ -507,6 +512,7 @@ export function MembersPanel({
   isOwner,
   archived,
   currency,
+  removedNotice = null,
 }: {
   groupId: string;
   groupName: string;
@@ -515,6 +521,8 @@ export function MembersPanel({
   isOwner: boolean;
   archived: boolean;
   currency: string;
+  /** The note a successful remove came back with, built from the page's query (AC-11). */
+  removedNotice?: string | null;
 }) {
   const [leaveState, leaveAction, leavePending] = useActionState(leaveGroup, IDLE_GROUP_STATE);
   const [confirming, setConfirming] = useState(false);
@@ -524,6 +532,19 @@ export function MembersPanel({
       <h2 id="members-heading" className="text-lg font-semibold">
         Members
       </h2>
+
+      {/* Panel level, like the join page's lost-seat notice and for the same reason: the row
+          whose form carried the message is the row the remove deleted, so the note has to live
+          somewhere the removal cannot unmount. */}
+      {removedNotice ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+        >
+          {removedNotice}
+        </p>
+      ) : null}
 
       <ul className="flex flex-col gap-2">
         {members.map((member) => (

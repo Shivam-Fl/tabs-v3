@@ -836,5 +836,175 @@
       "Should placeholder add suggest matching by display-name similarity at claim time? Chosen: UI hint only, no server matching rule."
     ],
     "version": 2
+  },
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Signed-in user creates a group (name, currency, type) and sees it in the home group list with its per-group balance slot; opening a group they do not belong to (or that does not exist) returns an indistinguishable 404 with no data leak, and signed-out access redirects to sign-in.",
+        "how_to_verify": "QA signs up as user A, creates a group, sees it listed; pastes the group URL signed-out and is redirected to sign-in, then pastes it as signed-in user B and gets a 404 indistinguishable from the missing-group 404, with no group data leaked on either path.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Missing-or-forbidden group reads are indistinguishable at the data layer: the membership guard returns 404 whether the group is absent, the caller is a non-member, or the id is malformed, and unit tests assert all paths carry no group fields.",
+        "how_to_verify": "Run lib/groups/authz.test.ts — cases for unknown group id vs valid group as non-member vs malformed id assert identical 404 shape.",
+        "id": "AC-2",
+        "source": "IAC-1",
+        "verify": "test"
+      },
+      {
+        "check": "Owner copies an invite link; signed-in non-member B opens /join/<token> and claims placeholder 'Bo' as the join itself (the claim adopts the placeholder row, no separate member row first); owner rotates (old link dead) then disables (join rejected), each behind an explicit confirm naming the link; double-claim of 'Bo' is rejected.",
+        "how_to_verify": "QA with two browsers: A creates group, adds placeholder 'Bo', copies link; signed-out open redirects to sign-in preserving the token, B signs in and claims 'Bo' as the join; member list shows B and the placeholder gone; B attempts to claim 'Bo' again and is rejected; A rotates (old link 404s) then disables (join rejected).",
+        "id": "AC-3",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Remove-member, archive and leave flows each require an explicit confirm naming the object and succeed for zero-balance members; rename is not confirm-gated — it applies directly on Save with a success note.",
+        "how_to_verify": "QA removes a zero-balance member, archives a group, and leaves a group as the sole member, each behind a confirm naming the object; QA renames a group via fill plus Save name and sees the success note with no confirm step.",
+        "id": "AC-4",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Every group read and write is authorized on the server against the session user via the (sessionUser, groupScope, zod-validated input) pattern: unauthenticated calls get 401/redirect, non-members get 404, invalid input gets a user-safe validation error; negative matrix covered by tests.",
+        "how_to_verify": "Run lib/groups/actions.test.ts negative cases (signed-out create rejected, non-member rename/remove/rotate rejected, invalid input rejected with field errors) plus QA cross-user probe of each group route.",
+        "id": "AC-5",
+        "source": "TR-3",
+        "verify": "test"
+      },
+      {
+        "check": "New screens (home list, group detail header + settings shell, members-and-invite) use only ui.md tokens, keep one h1 with hierarchical headings, labelled controls with visible focus, and designed empty/loading/error states.",
+        "how_to_verify": "QA drives phone and laptop viewports keyboard-only through empty (owner-only group), loading (skeleton members), and error (unknown group URL shows the shared 404 with a back action) states.",
+        "id": "AC-6",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "Removal or leave with a non-zero balance is blocked with a message pointing at settle-up, and removal/leave paths call the zero-balance guard seam.",
+        "how_to_verify": "Run lib/groups/members.test.ts assertZeroBalance non-zero case (forces non-zero through the seam, asserts the settle-up message) and lib/groups/actions.test.ts remove/leave guard-call case.",
+        "id": "AC-7",
+        "source": "IAC-3",
+        "verify": "test"
+      },
+      {
+        "check": "Every membership change (join, claim-as-join, leave, remove) writes an ActivityEvent row with actor and timestamp in the same transaction as the change.",
+        "how_to_verify": "Run lib/groups/actions.test.ts membership-activity case — join, claim, leave and remove each leave exactly one member-event row with the acting user and a timestamp.",
+        "id": "AC-8",
+        "source": "TR-10",
+        "verify": "test"
+      },
+      {
+        "check": "A stale second claim of an already-claimed placeholder seat shows the 'That seat has already been claimed.' rejection on the join page instead of silently refreshing; the seat stays with the first claimant and the loser is still offered a plain join.",
+        "how_to_verify": "Two-browser race: B and C load the join page, B claims 'Bo' and joins; C clicks the stale claim button and sees the seat-taken rejection on /join/<token> with a plain join still offered, never becoming a member.",
+        "id": "AC-9",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Renaming a group applies on save with a 'Renamed to …' note and no confirm step; remove, archive, leave, rotate and disable keep their naming confirms.",
+        "how_to_verify": "QA renames a group and asserts save-then-note with no confirm; remove, archive, leave, rotate and disable each show their naming confirms.",
+        "id": "AC-10",
+        "source": "IAC-3",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Separate invite_tokens table (one row per link, many active links per group)",
+        "rejected_because": "TR-7 and ui.md describe a single link panel with copy/disable/rotate; one token+enabled flag on the group is the smallest shape that satisfies it."
+      },
+      {
+        "approach": "Claim-by-email-match only (a placeholder is claimable solely by the user whose email or display name matches it)",
+        "rejected_because": "The repo has no verified identity beyond email and strict matching strands seats on typos; open seat-pick with server-side atomic double-claim rejection is testable now, matching hints stay UI-only."
+      }
+    ],
+    "approach": "Amend the criterion where the criterion was wrong, and change the mechanism where the code was wrong — two different fixes, not one patch. AC-4 is corrected to what docs/ui.md already says: remove/archive/leave (plus rotate/disable) keep their naming confirms, while rename keeps its direct save plus success note (T-5's flow); no rename component is touched. The silent double-claim is fixed by moving failure feedback out of the component the action's own revalidation unmounts: claimPlaceholder stops returning inline error state for the two shapes a stale join page can actually produce and redirects instead — seat-taken goes to /join/<token>?claim=taken, rendered as a panel-level alert above the (now empty) seat list with the plain join still offered, and already-a-member goes to the group page, consistent with the page-load member bounce. Malformed-input and invalid-token errors stay inline because they never re-render the list. Unit tests assert the redirects; the atomic UPDATE … WHERE user_id IS NULL plus 23505 coverage is untouched.",
+    "assumptions": [
+      "Any signed-in member may add a placeholder by name; only the owner may rename, remove members, archive, rotate or disable the invite link.",
+      "Placeholder claim is open seat-pick stated once: a non-member claiming an unclaimed placeholder adopts that row (UPDATE ... WHERE user_id IS NULL) and that adoption IS the join; joining without claiming inserts a fresh member row; a user who already holds a membership row cannot claim another placeholder (rejected under unique (group_id, user_id)); double-claim is rejected atomically with the existing unique-violation pattern mapping 23505 to a user-safe error.",
+      "Group type is the closed TRD set trip/home/couple/other, NOT NULL defaulting to 'other' with the form pre-selected; currency reuses SUPPORTED_CURRENCIES (INR default from profile).",
+      "Archive hides the group from the home list but members can still open it with a read-only banner; archived groups reject join/claim/mutation writes (leave still permitted); there is no unarchive in this ticket. Removal here means member-row delete, not group delete.",
+      "Owner leave or self-remove transfers ownership to the earliest-joined remaining member; the last member leaving archives the group.",
+      "Invite token is 32 bytes CSPRNG base64url stored unique; disable flips invite_enabled, rotate issues a fresh token and the old one stops working; token and enabled flag are re-checked at submit time, not just on page load."
+    ],
+    "confidence": 82,
+    "confidence_rationale": "BUG-2 resolves by evidence rather than judgment: ui.md destructive-actions list, T-5's passing flow, and the implementation all agree rename has no confirm, so amending AC-4 cannot break a passing test. BUG-1's mechanism is confirmed in code and matches QA's observed empty-seat silent refresh; redirect-with-message is the standard Next pattern for exactly this unmount hazard and is unit-assertable. Held below 90 because no live preview was available in this checkout (groups code lives on the PR branch) and the already-member-to-group-page redirect is a small behavior change beyond the reported bug.",
+    "debate_summary": "The round-2 critique filed ten findings (2 blocking, 5 major, 3 minor) plus edge cases and regression risks, and after re-checking the evidence I adopted all ten rather than splitting the difference: (1) the join-then-claim contradiction is real — unique (group_id, user_id) makes a post-join claim a duplicate — so AC-3 is rewritten as claim-as-join with the policy stated once; (2) the round-1 rejection item 2 truly was not fixed and the v2 understanding sentence claiming it was is removed, with the negative matrix now actually listed in actions.test.ts; (3) groupScope validation is added; (4) sign-in/sign-up/auth-form join files[] with a validated same-origin next; (5) member ActivityEvent writers ship in 0003 with this slice per the issue parenthetical and the project invariant rather than being parked; (6) AC-4 keeps only the browser-observable half with the guard-seam proof moved to AC-7, and the 'leaves as sole flow' fragment is fixed; (7) rotation-failure retention is test-proven with the browser criterion kept to drivable states; (8) DB-backed claim cases move from members.test.ts to actions.test.ts; (9) the duplicate CSPRNG generator is unified behind one shared helper; (10) missing group type defaults to 'other'. Load-bearing edge cases folded in: owner-leave transfer, archived-group write guards, atomic claim with 23505 mapping, stale-token re-check, malformed-id 404. The remainder (placeholder-name duplicates policy, 200-member rendering, double-submit idempotency, token hygiene in logs) stays in residual risks. No finding was dismissed; the only correction to the critique is that its regression-risk evidence line rightly notes the v2 evidence omitted the scripts/neon-smoke.ts scan exemption, which this plan records.",
+    "evidence": [
+      "docs/ui.md:51 destructive-actions list gates only delete-expense, delete-payment, remove-member, rotate/disable-invite and archive-group behind confirms — rename absent",
+      "docs/trd.md TR-7 lists owner rename as a plain action with no confirm language",
+      "qa-evidence T-5 passes driving rename as fill plus Save name plus 'Renamed to …' note, and its own header comment says rename has no confirm step — while T-10 fails waiting 5s for a `Rename …?` confirm the error-context DOM proves is never rendered (textbox plus Save name only)",
+      "qa-evidence T-4 header comment documents BUG-1 itself: 'The loser's rejection is state-enforced but renders no message' — T-4 passes on state alone, so the missing message never fails QA until it is a criterion (new AC-9)",
+      "previous-output.json was refused on formal grounds only: the validator's sole objection was the dropped IAC sources, which this revision restores on every criterion; no diagnosis was challenged",
+      "No failure-packet.json or stop.json present — plain QA-fail root-cause revision, no mechanical-failure or refusal path"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "claimPlaceholder: the seat-taken outcome redirects to /join/<token>?claim=taken and the already-member outcome redirects to the group page instead of returning inline error state that the revalidation unmounts; malformed-input and invalid-token errors stay inline.",
+        "path": "lib/groups/actions.ts"
+      },
+      {
+        "action": "edit",
+        "change": "Read the claim=taken search param and pass it to JoinPanel as a notice prop; the signed-out redirect, member bounce to the group page, and invalid-token 404 are unchanged.",
+        "path": "app/join/[token]/page.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "JoinPanel renders a panel-level alert (role=alert, aria-live polite) for the claim notice above the seat list with the plain join still offered; ClaimSeatForm keeps inline StateMessage for validation errors only.",
+        "path": "components/groups-panels.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "Export a shared CLAIM_TAKEN query constant ('taken') used by the claim redirect and the join page, so the two sides cannot drift.",
+        "path": "lib/groups/validation.ts"
+      }
+    ],
+    "issue": 5,
+    "kind": "feature",
+    "mode": "committed",
+    "qa_script": [
+      "Sign up as A, create group 'Goa trip' (INR, trip), assert it lists with a balance slot.",
+      "As A: Members screen shows owner badge; add placeholder 'Bo' by name; copy invite link.",
+      "Open the link signed-out and assert redirect to sign-in (not a 404); sign in as B with the token preserved, claim 'Bo' as the join; assert member list shows B and the placeholder gone.",
+      "Two-browser race: B and C load the join page, B claims 'Bo' and joins; C clicks the stale claim button and assert C sees the 'That seat has already been claimed.' rejection on /join with a plain join still offered, never becoming a member.",
+      "As A rotate the link with the confirm naming the link; open the old link as C and assert expired; disable the link and assert join is rejected.",
+      "Rename applies on Save name with a 'Renamed to …' note and no confirm; remove, archive and leave-as-sole-member each show a confirm naming the object (zero-balance flows only; the non-zero block is unit-proven)."
+    ],
+    "reproduced": false,
+    "residual_risks": [
+      "True concurrent double-claim is covered by the atomic UPDATE ... WHERE user_id IS NULL shape plus 23505 mapping, not by a unit-test race; review the statement shape in actions.ts.",
+      "Activity readers and feed UI land with the later activity ticket (TR-10); this ticket writes member-event rows only, and that ticket must not require backfill.",
+      "Placeholder-name policy beyond blank/overlong (duplicates, case-only differences, emoji/RTL) is implementer judgment; duplicates are currently permitted and claim disambiguation is UI-only.",
+      "A 200-member group (TRD NFR) rendering on the members screen and home list is untested here.",
+      "Invite tokens passing through the sign-in redirect must never be logged or echoed in error strings; only the validated same-origin path form is preserved."
+    ],
+    "risks": [
+      "T-10 as currently written asserts the old AC-4 letter (a rename confirm); the next QA run must be re-derived from the amended AC-4/AC-10 rather than re-running T-10 verbatim, or it fails against a criterion that no longer exists.",
+      "The already-member claim path now redirects to the group page instead of showing an inline note; a claimant mid-race lands somewhere sensible, but it is a behavior change beyond the reported bug.",
+      "End-to-end non-zero-balance blocking cannot exist until the expense/payment ledger does: the guard and message are enforced and unit-proven, but QA cannot drive a real non-zero balance on this ticket alone."
+    ],
+    "root_cause": "(1) Criterion defect behind T-10/BUG-2: the v1 AC-4 demanded an explicit naming confirm for rename, but docs/ui.md lists only delete-expense, delete-payment, remove-member, rotate/disable-invite and archive-group as confirm-gated, the suite's own passing T-5 drives rename as direct save plus success note, and RenameGroupForm has no ConfirmStep by design — the code was right and the criterion contradicted its own rule source, so no code change on rename can green the loop. (2) Code defect behind BUG-1: claim-failure feedback is stored as per-seat useActionState inside the ClaimSeatForm, while the action's blanket revalidatePath('/') refreshes the join page to zero seats and unmounts that exact form — the SEAT_TAKEN message the code sets is discarded with the component holding it, so the stale claimant sees a silent refresh. The v1 diagnosis proved state correctness (atomic UPDATE, 23505 mapping) but never message survivability.",
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "second sequential claim of the same seat redirects to /join/<token>?claim=taken instead of returning inline state (repro of BUG-1: the rejection must survive as a navigable message, not per-form state)",
+          "claim by somebody who is already a member redirects to the group page",
+          "claim against a seat in another group redirects to ?claim=taken",
+          "failed claim writes no membership row and no duplicate member row; first-claim success redirect and ActivityEvent coverage unchanged"
+        ],
+        "path": "lib/groups/actions.test.ts"
+      }
+    ],
+    "understanding": "The v1 work order was wrong about AC-4 and silent about the real BUG-1 mechanism. First, v1's AC-4 required an explicit naming confirm for rename alongside remove/archive/leave — but docs/ui.md gates only delete-expense, delete-payment, remove-member, rotate/disable-invite and archive-group behind confirms, the QA suite's own passing T-5 drives rename as fill plus Save name plus success note with no confirm step, and RenameGroupForm has no ConfirmStep by design. T-10 (fail) and T-5 (pass) cannot both be satisfied: adding a rename confirm to fix T-10 breaks T-5's save-then-note flow. So BUG-2/T-10 fails against the criterion's letter, not the code — the code was right, and AC-4 is amended here to exclude rename (kept at id AC-4, same position, per the root-cause agent's criterion-is-wrong rule) with the corrected expectation locked in as new AC-10. Second, BUG-1 is a genuine defect v1 never diagnosed: the losing double-claim IS rejected server-side (atomic UPDATE ... WHERE user_id IS NULL, correct), but the SEAT_TAKEN message is set on the per-seat ClaimSeatForm's useActionState while the action's blanket revalidatePath('/') refreshes the join page to zero seats, unmounting that very form — the intended rejection is never visible. The fix is therefore a different mechanism, not a re-roll: redirect-with-message (seat-taken to /join/<token>?claim=taken rendered at panel level, already-member to the group page) instead of in-place form state, covered by new AC-9. Third, the refused v2 draft in previous-output.json was right on both diagnoses and wrong only formally: it dropped source/verify from every acceptance criterion, so it neither answered nor deferred IAC-1, IAC-2, IAC-3. This revision keeps that substance unchanged and restores full sourcing — AC-1..AC-8 keep their v1 sources with AC-4's check amended in place, and new AC-9/AC-10 carry IAC-2/IAC-3 — with no criterion renumbered or dropped.",
+    "unknowns": [
+      "Exact group-name length cap: TRD is silent; chosen 1–80 chars mirroring the auth display-name rule.",
+      "Should archive make the group read-only or merely hide it? Chosen: hidden from list, openable with a read-only banner, writes rejected except leave, no unarchive this ticket.",
+      "Should placeholder add suggest matching by display-name similarity at claim time? Chosen: UI hint only, no server matching rule."
+    ],
+    "version": 2
   }
 }

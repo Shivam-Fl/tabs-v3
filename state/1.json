@@ -222,5 +222,171 @@
       "kind": "replan-project",
       "note": "All three changes are in; thank you. One addition, then I approve: the Pool's lifecycle on Vercel. A WebSocket Pool must not outlive the request that uses it on serverless (Neon's guidance for @neondatabase/serverless): getDb() on the Neon side opens the Pool for the request and closes it when the request's work is done, including after an error, and nothing holds a Pool or client at module scope. Say this in the getDb() interface in docs/trd.md and in ADR-0002. And since CI and QA run on PGlite only, add an invariant that no code may branch on which backend it is running against except getDb() itself, so a Neon-only code path cannot hide from the tests. Keep everything else as it is."
     }
-  ]
+  ],
+  "breakdown": {
+    "epic": 1,
+    "pieces": [
+      {
+        "acceptance": [
+          "Boot with DATABASE_URL unset via sdlc:serve and open the home page with no crash; the boot log notes safe local defaults",
+          "GET /api/health returns status ok with db ok plus latencyMs, and sdlc:ready passes against the booted app",
+          "sdlc:verify passes (npm ci, typecheck, Vitest suite, Next.js build) and production refuses to boot with a message naming any missing required secret"
+        ],
+        "context": "Person sees: a bootable app shell (home placeholder) plus /api/health proving database reachability, styled from the token set. Contract: this slice DEFINES getDb() (PGlite when DATABASE_URL unset, neon-serverless WebSocket Pool when set, opened and closed per request including on error with nothing at module scope), the Drizzle schema and automatic SQL migration mechanism, GET /api/health {status, db, latencyMs}, env-var secrets with safe local defaults and loud production failure, and makes sdlc:verify, sdlc:serve, sdlc:seed and sdlc:ready real. Constraints: TR-1 serverless-only, TR-2 same migrations on both backends, invariant that only getDb() branches on backend.",
+        "covers": [
+          "TR-1",
+          "TR-2",
+          "TR-5",
+          "TR-12"
+        ],
+        "kind": "chore",
+        "out_of_scope": [
+          "Accounts and sessions",
+          "Groups, expenses, balances and activity product screens",
+          "Seed data and Vercel deploy beyond the health and boot path"
+        ],
+        "risk": "Infra/migration risk: Drizzle schema as single source of truth, same SQL migrations on PGlite and Neon, per-request neon-serverless Pool open and close with nothing at module scope; no code outside getDb() may branch on backend.",
+        "title": "Bootable Next.js shell with database, health and pipeline verbs",
+        "why": "Anyone can boot the app locally and CI can verify it, proving the Vercel and Postgres foundation before any product code lands.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Sign up with email and password, see neutral errors that never reveal whether an email is registered, and land signed in with a profile holding display name and default currency",
+          "Sign out ends the session server-side so the old cookie authorizes nothing; sign in again works and failed sign-ins are rate-limited",
+          "Auth pages are mobile-first from the token set with labelled controls, visible focus, preserved input on error and no double-submit"
+        ],
+        "context": "Person sees: Auth screens (sign-up and sign-in card with email, password, show and hide toggle, submit; profile with display name and default currency) with neutral errors and pending states. Contract: DEFINES the lib/auth session contract (bcryptjs cost 12, opaque random tokens stored server-side, httpOnly Secure-in-production SameSite=Lax cookies, server-side revocation on sign-out, rate-limited sign-in) that every later group scope consumes as sessionUser. Constraints: TR-6 with no email enumeration; human decision for hand-rolled sessions stands.",
+        "covers": [
+          "TR-6",
+          "TR-11"
+        ],
+        "depends_on": [
+          1
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Group creation and invites",
+          "Expenses, balances and activity feeds",
+          "Password reset and account deletion (spec S-10 deferral)"
+        ],
+        "risk": "Auth and security risk: bcryptjs cost 12, opaque server-side sessions with sign-out revocation, httpOnly Secure SameSite cookies, rate-limited sign-in, enumeration-safe errors.",
+        "title": "Email and password accounts with sessions and profile",
+        "why": "A real person can sign up, sign in, sign out and keep a profile, giving every later group flow a trusted identity.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Create a group with name, currency and type and see it listed; only members can open it and missing-or-forbidden reads are indistinguishable with no data leak",
+          "Share an owner invite link, join as a second user, claim a placeholder added by name, and rotate or disable the link with an explicit confirm naming the link",
+          "Rename, remove, archive and leave flows work with confirms; removal or leave with a non-zero balance is blocked with a message pointing at settle-up"
+        ],
+        "context": "Person sees: home group list with per-group balance slot, group detail header and settings shell, members-and-invite screen (member list with owner badges, invite panel with copy, disable and rotate, placeholder add-by-name, claim prompts). Contract: DEFINES the groups and memberships schema plus the membership-first authorization pattern every later group route copies: (sessionUser, groupScope, zod-validated input), 401 unauthenticated, 404 when missing or not a member, double-claim of a placeholder rejected. Constraints: TR-7 including non-zero-balance block and membership-scoped visibility; per-request Pool lifecycle applies to all new queries.",
+        "covers": [
+          "TR-3",
+          "TR-7",
+          "TR-11"
+        ],
+        "depends_on": [
+          2
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Expense entry and split math",
+          "Balances, simplification and payments",
+          "Activity feed UI (expense and payment writers land with their own slices)"
+        ],
+        "risk": "Authorization and boundary risk: server-side membership checks on every group read and write, indistinguishable 404s, unguessable invite tokens with disable and rotate, balance-blocked removal.",
+        "title": "Groups and members with invite links and placeholders",
+        "why": "Friends can create a group, invite by link, claim placeholder seats and manage membership, establishing the authorization boundary.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Create expenses with description, amount, date, category and note as single or multi-payer where payer parts sum to the total, for equal, exact-amount, percentage and share splits",
+          "Validation names the shortfall and its size (for example parts sum to 450, 50 short of 500), the remainder goes to the first payer, and reopening an expense shows the stored split type and each input exactly as entered",
+          "Expense list is newest-first with member and category filter plus description search; edit and delete work for members, keep input on failed save, require a confirm naming the expense, and never half-write",
+          "Unit tests prove integer minor-unit math, sum preservation and remainder placement across generated splits for all four types, plus a failing write leaving no expense, payer, share or activity rows"
+        ],
+        "context": "Person sees: expense editor (amount with currency display, description, date, single-or-multi payer picker with parts, four split-type tabs with per-member inputs for exact amounts, percentages or share counts and included or left out, live sum and shortfall line, category, note, Save) plus the newest-first expense list with filter and search. Contract: DEFINES lib/money calculators and the Expense, ExpensePayer and SplitLine writes together with the expense activity-writer rows (added, edited, deleted including the structured before and after), each create, edit and delete committing expense, payers, split lines and activity entry in one interactive transaction. Balances later read only stored payer parts and computed shares, never the inputs. Constraints: TR-4 minor units and remainder rule, TR-8 atomicity, human decisions to store the split rule and the before and after; no floats cross a module boundary.",
+        "covers": [
+          "TR-3",
+          "TR-4",
+          "TR-8",
+          "TR-11"
+        ],
+        "depends_on": [
+          3
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Balance simplification and settle-up payments",
+          "Activity feed UI (expense activity rows are written now and displayed later)",
+          "Receipts, recurring expenses and multi-currency groups (spec S-10 deferrals)"
+        ],
+        "risk": "Money and correctness risk: integer minor units end to end, four split calculators with remainder to first payer, stored inputs versus computed shares kept consistent, one interactive transaction per write that never half-writes.",
+        "title": "Expenses with all four split types, multi-payer and search",
+        "why": "Members can record who paid and how it splits with exact minor-unit math, the core ledger everything else derives from.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Group page shows per-member net balances plus simplified who-pays-whom with at most N-1 transfers via the stated greedy min-cash-flow, with an explicit settled and all-zero state",
+          "Home shows cross-group you-owe and you-are-owed totals per person alongside per-group balances",
+          "Record full and partial settle-up payments from the debts card with a confirm, delete them as an involved member with a confirm, and see balances update in place with an aria-live announcement",
+          "Amounts render in the group currency from one formatter with tabular numerals; the debts card sits above expenses on narrow screens"
+        ],
+        "context": "Person sees: group debts card with Settle-up buttons, balance banner (settled or owes-summary), home totals cards (you-are-owed, you-owe), per-person rows and group list with per-group balances. Contract: CONSUMES the expense and payment ledger; DEFINES lib/settle net balances plus greedy min-cash-flow simplification and Payment writes and deletes as ledger entries, never balance edits. Constraints: TR-9 with at most N-1 transfers, balances derived by one recompute path and never stored, involved-member-only payment delete.",
+        "covers": [
+          "TR-3",
+          "TR-9",
+          "TR-11"
+        ],
+        "depends_on": [
+          4
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Activity feed UI",
+          "Seed data and deploy guide",
+          "Moving money in the app (settle-up only records payments, per spec)"
+        ],
+        "risk": "Money-trust risk: balances derived by one recompute path and never stored, greedy min-cash-flow capped at N-1 transfers, payments as ledger entries with involved-member-only delete.",
+        "title": "Balances with simplified debts and settle-up payments",
+        "why": "Members can see who owes whom with at most N-1 simplified transfers and record settle-up payments until the group reads all-zero.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Per-group and cross-group activity feeds list expense added, edited and deleted, payment and member events with actor and timestamp, filterable by all, expenses, payments and members with the filter preserved on retry",
+          "Editing an expense writes a feed entry in the same transaction carrying the structured before and after of exactly the changed fields (description, amount, date, payers, participants, split type and inputs, category, note)",
+          "sdlc:seed loads known-password users, every split type, a multi-payer expense, payments and a placeholder (dev-only wipe-and-reload, never production), and QA can log in as a seeded user",
+          "README covers one-command local run and from-scratch Vercel deploy (Neon database, env vars, migrations); main screens stay interactive under 1s with skeleton, empty and error states keyboard-accessible"
+        ],
+        "context": "Person sees: per-group and cross-group activity feeds (filter chips, chronological rows with actor, action and timestamp, link-through to expense or group) with empty, loading, partial and error states, plus seeded data to click through. Contract: CONSUMES activity rows written by the expense, payment and member slices; DEFINES feed readers, the seed script in scripts/ and the README deploy guide; health endpoint documented for sdlc:ready. Constraints: TR-10 same-transaction before and after, TR-12 seed shape and deploy docs, TR-11 token set, accessibility and performance bar.",
+        "covers": [
+          "TR-3",
+          "TR-5",
+          "TR-10",
+          "TR-11",
+          "TR-12"
+        ],
+        "depends_on": [
+          5
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Password reset, native apps, receipts, recurring expenses, multi-currency, charts and notifications (all spec S-10 deferrals)",
+          "Dark mode (explicitly deferred in the UI tokens)"
+        ],
+        "risk": "Audit and operability risk: expense-edited before and after written in the same transaction as the edit, immutable feed rows, dev-only seed guard, production secret guards.",
+        "title": "Activity feeds with seed data and deploy guide",
+        "why": "Everyone can trust the audit trail of what changed, QA can seed reproducible data, and a person can deploy from the README.",
+        "issue": null
+      }
+    ],
+    "understanding": "Epic #1 is greenfield Tabs (the repo has no code): the PRD order is skeleton and accounts first, groups and members second, expenses third, balances and settle-up fourth, activity plus seed and deploy guide last, and the two human replan-project decisions (neon-serverless WebSocket Pool opened and closed per request including on error with nothing at module scope; split rule stored as split type plus per-line inputs beside computed shares with balances reading only stored parts and shares; expense-edited entries carrying a structured before and after written in the same transaction; no backend branching outside getDb()) bind every piece and already live in project.md and docs/trd.md. issues.json holds only #1 itself as sdlc:epic with pulls and closed empty and no roadmap, so there is no other epic to depend on and no epic_links. Six vertical slices chained 1 to 6, each plannable, buildable, reviewable and QA-able in a browser. Clubbing test against a rough 6-file single-PR budget, one line per adjacent pair: [1-2] skeleton versus accounts: low file overlap (app shell, getDb, migrations and health versus lib/auth plus auth screens), accounts independently demoable as signup to profile, combined infra-plus-security too big for one review, so SPLIT. [2-3] accounts versus groups: new surface (group and membership schema, invite and placeholder flow, membership-first authz pattern), groups demoable without any expense (create, invite, claim, rotate, archive), combined identity-plus-boundary too big, so SPLIT. [3-4] groups versus expenses: partial screen overlap on group detail but genuinely new domain (money calculators, four split inputs, multi-payer sums, interactive transactions); expenses meaningless without groups while groups stand alone, and combined membership-plus-ledger would overflow one work order, so SPLIT; the tempting sub-split of piece 4 by split type (equal, exact, percentage, shares) is REJECTED and clubbed inside piece 4 because the later types touch the same calculators and editor inputs, have no standalone value without expense create and list, and all four plus multi-payer fit one PR with two acceptance groups (base create and list, variant inputs and atomicity). [4-5] expenses versus balances: different modules and screens (lib/money and editor versus lib/settle, debts card, home totals and payments); balances are the payoff users trust once a ledger exists, and ledger writes plus derivation plus payments together exceed one PR, so SPLIT. [5-6] balances versus activity, seed and docs: different modules (settle and payments versus activity readers, seed script and README); a feed without payments still shows expense and member events but settle without a feed is already the trusted-numbers payoff, and simplification plus full audit plus seed plus deploy docs would overflow one review, so SPLIT; the tempting sub-splits inside piece 6 by event kind (expense versus payment versus member rows) and a standalone seed-docs issue are REJECTED and clubbed because they share the same writer path and feed UI, one event kind alone is not demoable history, and feed plus seed plus README still fit one work order.",
+    "deferred": []
+  },
+  "children": []
 }

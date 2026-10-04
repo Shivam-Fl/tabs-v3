@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_GROUP_TYPE,
+  INVITE_DISABLED,
+  INVITE_DISABLED_NOTICE,
+  INVITE_ROTATED,
+  INVITE_ROTATED_NOTICE,
   addPlaceholderSchema,
   claimPlaceholderSchema,
   createGroupSchema,
   groupScope,
+  inviteNoticeText,
   isSameOriginPath,
   joinByTokenSchema,
   joinNextSchema,
@@ -109,6 +114,24 @@ describe('group and membership scopes', () => {
       expect(groupScope.safeParse(value).success).toBe(false);
       expect(membershipScope.safeParse(value).success).toBe(false);
     }
+  });
+});
+
+describe('the invite notice', () => {
+  it('maps each outcome the query can carry to its sentence', () => {
+    expect(inviteNoticeText(INVITE_ROTATED)).toBe(INVITE_ROTATED_NOTICE);
+    expect(inviteNoticeText(INVITE_DISABLED)).toBe(INVITE_DISABLED_NOTICE);
+  });
+
+  it('says nothing for an absent, blank or unknown value', () => {
+    for (const value of [undefined, '', '   ', 'ROTATED', 'rotated,disabled', 'taken']) {
+      expect(inviteNoticeText(value)).toBeNull();
+    }
+  });
+
+  it('leads each sentence with the wording the acceptance criterion quotes (AC-13)', () => {
+    expect(INVITE_ROTATED_NOTICE).toMatch(/^New invite link created\./);
+    expect(INVITE_DISABLED_NOTICE).toMatch(/^Invite link disabled\./);
   });
 });
 

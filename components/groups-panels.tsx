@@ -292,11 +292,15 @@ export function InvitePanel({
   groupName,
   invitePath,
   inviteEnabled,
+  inviteNotice = null,
 }: {
   groupId: string;
   groupName: string;
   invitePath: string | null;
   inviteEnabled: boolean;
+  /** The sentence a successful rotate or disable came back with, built from the page's query
+   * (AC-13). One slot, because both outcomes share it and the later one replaces the earlier. */
+  inviteNotice?: string | null;
 }) {
   const [rotateState, rotateAction, rotatePending] = useActionState(rotateInvite, IDLE_GROUP_STATE);
   const [disableState, disableAction, disablePending] = useActionState(
@@ -312,10 +316,6 @@ export function InvitePanel({
   useEffect(() => {
     setAbsolute(invitePath ? new URL(invitePath, window.location.origin).toString() : null);
   }, [invitePath]);
-
-  useEffect(() => {
-    if (rotateState.status === 'success' || disableState.status === 'success') setConfirming(null);
-  }, [rotateState, disableState]);
 
   async function copyLink() {
     const url = absolute;
@@ -334,6 +334,19 @@ export function InvitePanel({
       <h2 id="invite-heading" className="text-lg font-semibold">
         Invite link
       </h2>
+
+      {/* Section level, once, holding whichever invite outcome just happened: the two successes
+          ride one query value, so this is the only place either can render and neither can sit
+          beside the other (AC-13). */}
+      {inviteNotice ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+        >
+          {inviteNotice}
+        </p>
+      ) : null}
 
       {invitePath === null ? (
         <p className="text-sm text-muted">
@@ -366,6 +379,8 @@ export function InvitePanel({
         </>
       )}
 
+      {/* Refusals only: a success redirects to the notice slot above, so the state never comes
+          back here with one to show. */}
       <StateMessage state={rotateState} />
       <StateMessage state={disableState} />
 

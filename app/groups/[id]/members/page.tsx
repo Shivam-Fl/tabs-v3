@@ -7,7 +7,9 @@ import { guardGroup, type GroupAccess } from '../../../../lib/groups/authz';
 import { getMemberBalance } from '../../../../lib/groups/members';
 import { listMembers } from '../../../../lib/groups/queries';
 import {
+  INVITE_NOTICE_PARAM,
   REMOVED_NOTICE_PARAM,
+  inviteNoticeText,
   parseNoticeName,
   removedNoticeText,
 } from '../../../../lib/groups/validation';
@@ -25,13 +27,17 @@ export const metadata: Metadata = { title: 'Members · Tabs' };
  * A remove lands here with the removed name in the query, because the row that held the
  * confirming form is the row the remove deleted (AC-11). The name is reflected into one
  * sentence and nothing else; absent or blank, there is no note to render.
+ *
+ * A rotate or a disable lands here the same way, with its outcome in the invite query (AC-13).
+ * Both outcomes use that one parameter, so the sentence read here is always the latest one —
+ * the panel has a single slot and a later success overwrites the earlier rather than stacking.
  */
 export default async function MembersPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ removed?: string }>;
+  searchParams: Promise<{ removed?: string; invite?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const access = await withDb((handle) => guardGroup(handle.db, id));
@@ -43,18 +49,28 @@ export default async function MembersPage({
 
   const members = await withDb((handle) => listMembers(handle.db, access.group.id));
   const removedName = parseNoticeName(query[REMOVED_NOTICE_PARAM]);
+  const inviteNotice = inviteNoticeText(query[INVITE_NOTICE_PARAM]);
 
-  return <MembersScreen access={access} members={members} removedName={removedName} />;
+  return (
+    <MembersScreen
+      access={access}
+      members={members}
+      removedName={removedName}
+      inviteNotice={inviteNotice}
+    />
+  );
 }
 
 function MembersScreen({
   access,
   members,
   removedName,
+  inviteNotice,
 }: {
   access: Extract<GroupAccess, { status: 'ok' }>;
   members: Awaited<ReturnType<typeof listMembers>>;
   removedName: string | null;
+  inviteNotice: string | null;
 }) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
@@ -76,6 +92,7 @@ function MembersScreen({
               groupName={group.name}
               invitePath={group.inviteToken ? `/join/${group.inviteToken}` : null}
               inviteEnabled={group.inviteEnabled}
+              inviteNotice={inviteNotice}
             />
           </div>
         ) : null}

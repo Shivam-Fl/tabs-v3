@@ -105,6 +105,32 @@ export function leftNoticeText(groupName: string): string {
 }
 
 /**
+ * The invite outcomes share one notice slot (AC-13).
+ *
+ * Rotate and disable were the last two actions answering success inline, and because the panel
+ * that holds their forms stays mounted, the two answers coexisted as sibling status nodes:
+ * rotate, then disable, left both on screen. They now travel home like the other successes, as
+ * a *single* query value on the members page — and one value cannot stack, so a later outcome
+ * replaces the earlier one instead of sitting beside it.
+ *
+ * The value is a closed set and the mapper is total: an absent, blank or unknown value says
+ * nothing rather than reflecting a stranger's string back into the page.
+ */
+export const INVITE_NOTICE_PARAM = 'invite';
+export const INVITE_ROTATED = 'rotated';
+export const INVITE_DISABLED = 'disabled';
+
+export const INVITE_ROTATED_NOTICE = 'New invite link created. The old one no longer works.';
+export const INVITE_DISABLED_NOTICE =
+  'Invite link disabled. Nobody can join with it until you create a new one.';
+
+export function inviteNoticeText(raw: string | undefined): string | null {
+  if (raw === INVITE_ROTATED) return INVITE_ROTATED_NOTICE;
+  if (raw === INVITE_DISABLED) return INVITE_DISABLED_NOTICE;
+  return null;
+}
+
+/**
  * The name a notice query carried, or null when it carried none. A note names the object it is
  * about, so a blank one has nothing to say and renders nothing rather than a sentence with a
  * hole in it — and the value is reflected, never trusted for anything but that sentence.

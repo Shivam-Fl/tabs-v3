@@ -79,7 +79,7 @@ const { hashPassword } = await import('../auth/password');
 const { withDb } = await import('../db/client');
 const { listMigrationFiles, runMigrations } = await import('../db/migrate');
 const { activityEvents, groups, memberships, sessions, users } = await import('../db/schema');
-const { ARCHIVED_GROUP_MESSAGE, GROUP_NOT_FOUND_MESSAGE, IDLE_GROUP_STATE, INVITE_INVALID_MESSAGE, INVITE_ROTATE_FAILED_MESSAGE, UNAUTHENTICATED_MESSAGE, parseNoticeName } = await import('./validation');
+const { ARCHIVED_GROUP_MESSAGE, GROUP_NOT_FOUND_MESSAGE, IDLE_GROUP_STATE, INVITE_DISABLED_NOTICE, INVITE_INVALID_MESSAGE, INVITE_ROTATE_FAILED_MESSAGE, INVITE_ROTATED_NOTICE, UNAUTHENTICATED_MESSAGE, inviteNoticeText, parseNoticeName } = await import('./validation');
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -118,6 +118,13 @@ async function redirectUrl(run: Promise<unknown>): Promise<string> {
     throw error;
   }
   throw new Error('expected the action to redirect');
+}
+
+/** The sentence the members page renders for a URL an invite action just built (AC-13). */
+function inviteNoticeIn(url: string): string | null {
+  return inviteNoticeText(
+    new URL(url, 'http://localhost').searchParams.get('invite') ?? undefined,
+  );
 }
 
 /** A group with an owner and a live invite token, written straight to the database. */
@@ -446,7 +453,7 @@ describe('invite links', () => {
     });
 
     await signInAs(ownerId);
-    await rotateInvite(IDLE_GROUP_STATE, form({ groupId }));
+    await redirectUrl(rotateInvite(IDLE_GROUP_STATE, form({ groupId })));
 
     await signInAs(joinerId);
     expect(await joinByToken(IDLE_GROUP_STATE, form({ token }))).toEqual({
@@ -458,7 +465,7 @@ describe('invite links', () => {
 
   it('works with the token rotation issued', async () => {
     await signInAs(ownerId);
-    await rotateInvite(IDLE_GROUP_STATE, form({ groupId }));
+    await redirectUrl(rotateInvite(IDLE_GROUP_STATE, form({ groupId })));
     const rotated = await tokenOf(groupId);
 
     await signInAs(joinerId);
@@ -469,7 +476,7 @@ describe('invite links', () => {
 
   it('rejects a join with a disabled link', async () => {
     await signInAs(ownerId);
-    expect((await disableInvite(IDLE_GROUP_STATE, form({ groupId }))).status).toBe('success');
+    await redirectUrl(disableInvite(IDLE_GROUP_STATE, form({ groupId })));
 
     await signInAs(joinerId);
     expect(await joinByToken(IDLE_GROUP_STATE, form({ token }))).toEqual({
@@ -477,6 +484,27 @@ describe('invite links', () => {
       message: INVITE_INVALID_MESSAGE,
     });
     expect(await membersOf(groupId)).toHaveLength(1);
+  });
+
+  it('sends rotate and disable to one notice slot, so the later replaces the earlier', async () => {
+    await signInAs(ownerId);
+
+    const rotated = await redirectUrl(rotateInvite(IDLE_GROUP_STATE, form({ groupId })));
+    const disabled = await redirectUrl(disableInvite(IDLE_GROUP_STATE, form({ groupId })));
+
+    // Both successes ride the members page's *single* invite query, so the second cannot sit
+    // beside the first: there is one value and the page's reader turns only it into a sentence
+    // (AC-13). Read back through that reader, which is the contract between action and page.
+    expect(rotated).toBe(`/groups/${groupId}/members?invite=rotated`);
+    expect(disabled).toBe(`/groups/${groupId}/members?invite=disabled`);
+    expect(inviteNoticeIn(rotated)).toBe(INVITE_ROTATED_NOTICE);
+    expect(inviteNoticeIn(disabled)).toBe(INVITE_DISABLED_NOTICE);
+    expect(inviteNoticeIn(disabled)).not.toBe(INVITE_ROTATED_NOTICE);
+
+    const [group] = await withDb((handle) =>
+      handle.db.select().from(groups).where(eq(groups.id, groupId)),
+    );
+    expect(group.inviteEnabled).toBe(false);
   });
 
   it('keeps the previous link working when rotation fails', async () => {
@@ -499,7 +527,7 @@ describe('invite links', () => {
     // The page resolved this token; the owner rotates before the visitor presses the button.
     await signInAs(joinerId);
     await signInAs(ownerId);
-    await rotateInvite(IDLE_GROUP_STATE, form({ groupId }));
+    await redirectUrl(rotateInvite(IDLE_GROUP_STATE, form({ groupId })));
 
     await signInAs(joinerId);
     const state = await joinByToken(IDLE_GROUP_STATE, form({ token }));
@@ -615,7 +643,7 @@ describe('claiming a seat', () => {
 
   it('rejects a claim through a link that is no longer live', async () => {
     await signInAs(ownerId);
-    await disableInvite(IDLE_GROUP_STATE, form({ groupId }));
+    await redirectUrl(disableInvite(IDLE_GROUP_STATE, form({ groupId })));
 
     await signInAs(joinerId);
     const state = await claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId }));

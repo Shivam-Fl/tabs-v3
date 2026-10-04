@@ -20,8 +20,13 @@ import {
   CLAIM_NOTICE_PARAM,
   CLAIM_TAKEN,
   GROUP_NOT_FOUND_MESSAGE,
+  INVITE_DISABLED,
+  INVITE_DISABLED_NOTICE,
   INVITE_INVALID_MESSAGE,
+  INVITE_NOTICE_PARAM,
   INVITE_ROTATE_FAILED_MESSAGE,
+  INVITE_ROTATED,
+  INVITE_ROTATED_NOTICE,
   LEFT_NOTICE_PARAM,
   REMOVED_NOTICE_PARAM,
   SEAT_TAKEN_MESSAGE,
@@ -57,6 +62,12 @@ import {
  * remove and archive — redirect instead, and the success notice travels as a query on the page
  * they land on, because the form that would have held the message is unmounted by the change
  * itself (AC-9, AC-11).
+ *
+ * Rotate and disable redirect too, for a different reason: their forms do stay mounted, but the
+ * two successes share one slot, and an inline answer per form cannot express "replace", only
+ * "stack" (AC-13). They ride the same members-page query, so the later outcome is the only one
+ * left to render. Refusals still return state and stay inline everywhere, because the form that
+ * shows them is never the thing the refusal unmounts.
  */
 
 const UNIQUE_VIOLATION = '23505';
@@ -135,6 +146,15 @@ function archivedNoticePath(groupId: string): string {
 /** Where leaving lands: home, carrying the name of the group that was left. */
 function leftNoticePath(groupName: string): string {
   return `/?${LEFT_NOTICE_PARAM}=${encodeURIComponent(groupName)}`;
+}
+
+/**
+ * Where a successful invite change sends the owner: the members page, whose panel renders the
+ * one notice (AC-13). Both outcomes use this one parameter, which is what makes their notices
+ * replace each other rather than accumulate.
+ */
+function inviteNoticePath(groupId: string, notice: string): string {
+  return `${groupPath(groupId)}/members?${INVITE_NOTICE_PARAM}=${notice}`;
 }
 
 /** The group list and the group's own pages, refreshed after anything that changes them. */
@@ -443,10 +463,10 @@ export async function rotateInvite(
 ): Promise<GroupActionState> {
   const groupId = field(formData, 'groupId');
 
-  const state = await withDb(async (handle) => {
+  const outcome = await withDb(async (handle): Promise<Outcome> => {
     const access = await requireOwner(handle.db, groupId);
-    if (access.status !== 'ok') return refusal(access);
-    if (access.group.archived) return ARCHIVED_STATE;
+    if (access.status !== 'ok') return { state: refusal(access) };
+    if (access.group.archived) return { state: ARCHIVED_STATE };
 
     try {
       // One statement: either the row carries the new token or it still carries the old one.
@@ -456,20 +476,21 @@ export async function rotateInvite(
         .set({ inviteToken: generateInviteToken(), inviteEnabled: true, updatedAt: new Date() })
         .where(eq(groups.id, access.group.id));
     } catch {
-      return {
-        status: 'error',
-        message: INVITE_ROTATE_FAILED_MESSAGE,
-      } as GroupActionState;
+      // A refusal stays on the form, which is still mounted to show it.
+      return { state: { status: 'error', message: INVITE_ROTATE_FAILED_MESSAGE } };
     }
 
+    // Success, unlike the refusals above, is a notice the panel has to share with the other
+    // invite outcome: it rides the query so a later disable replaces it rather than joining it
+    // on screen (AC-13).
     return {
-      status: 'success',
-      message: 'New invite link created. The old one no longer works.',
-    } as GroupActionState;
+      state: { status: 'success', message: INVITE_ROTATED_NOTICE },
+      redirectTo: inviteNoticePath(access.group.id, INVITE_ROTATED),
+    };
   });
 
   revalidateGroup(groupId);
-  return state;
+  return finish(outcome);
 }
 
 export async function disableInvite(
@@ -478,10 +499,10 @@ export async function disableInvite(
 ): Promise<GroupActionState> {
   const groupId = field(formData, 'groupId');
 
-  const state = await withDb(async (handle) => {
+  const outcome = await withDb(async (handle): Promise<Outcome> => {
     const access = await requireOwner(handle.db, groupId);
-    if (access.status !== 'ok') return refusal(access);
-    if (access.group.archived) return ARCHIVED_STATE;
+    if (access.status !== 'ok') return { state: refusal(access) };
+    if (access.group.archived) return { state: ARCHIVED_STATE };
 
     // The token stays on the row; the enabled flag is what a joiner is checked against, so
     // re-enabling later is another rotate rather than a lost secret to recover.
@@ -490,14 +511,15 @@ export async function disableInvite(
       .set({ inviteEnabled: false, updatedAt: new Date() })
       .where(eq(groups.id, access.group.id));
 
+    // Same one slot as rotate: disabling replaces the rotate notice instead of stacking on it.
     return {
-      status: 'success',
-      message: 'Invite link disabled. Nobody can join with it until you create a new one.',
-    } as GroupActionState;
+      state: { status: 'success', message: INVITE_DISABLED_NOTICE },
+      redirectTo: inviteNoticePath(access.group.id, INVITE_DISABLED),
+    };
   });
 
   revalidateGroup(groupId);
-  return state;
+  return finish(outcome);
 }
 
 // --- Joining through a link ---

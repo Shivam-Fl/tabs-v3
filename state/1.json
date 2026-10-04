@@ -12,7 +12,6 @@
     "qa": 0
   },
   "attempt_run": null,
-  "halted": null,
   "pending": null,
   "work_order": null,
   "touch_paths": [],
@@ -91,7 +90,7 @@
     "by": "Shivam-Fl",
     "at": "2026-10-04T15:49:52.525Z"
   },
-  "resume_at": "project",
+  "resume_at": null,
   "flow_plan": {
     "kind": "epic",
     "confidence": 95,
@@ -100,7 +99,7 @@
     "councils": {},
     "decided_at": "2026-10-04T15:50:12.628Z"
   },
-  "stopped_at": "project",
+  "stopped_at": null,
   "dispatched_stage": "project",
   "failure_packet": {
     "issue": 1,
@@ -128,8 +127,5 @@
       "diagnosis": "the triage agent itself did not finish",
       "run": "37214504818"
     }
-  ],
-  "retry_after": "2026-10-04T16:13:53.082Z",
-  "retry_stage": "project",
-  "parked_at": "2026-10-04T15:53:53.496Z"
+  ]
 }

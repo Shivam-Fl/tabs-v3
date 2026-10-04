@@ -172,12 +172,7 @@
     "lib/groups/validation.ts",
     "lib/groups/actions.ts",
     "components/groups-panels.tsx",
-    "app/groups/[id]/members/page.tsx",
-    "app/groups/[id]/page.tsx",
-    "app/page.tsx",
-    "app/groups/[id]/members/loading.tsx",
-    "lib/groups/actions.test.ts",
-    "app/groups/[id]/members/loading.test.ts"
+    "app/groups/[id]/members/page.tsx"
   ],
   "acceptance": [],
   "planned_route": [

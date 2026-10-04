@@ -315,6 +315,20 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           npx --yes playwright install --with-deps chromium >/dev/null 2>&1 || true
 
+      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, set on every agent step to keep the model key out of the
+      # agent's shell, needs bubblewrap: without it Claude Code refuses to install, and the stage
+      # fails before the agent starts. The action's own recipe for its isolation mode; Ubuntu 24.04
+      # blocks the unprivileged user namespaces bubblewrap uses until the sysctl allows them.
+      - name: Subprocess isolation for the credential scrub
+        run: |
+          for i in 1 2 3; do
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends bubblewrap socat && break
+            echo "apt-get attempt $i failed, retrying..."; sleep 5
+          done
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          command -v bwrap
       - name: Implement
         # A HANG DETECTOR, not a budget. Set far above any honest run — an agent reading a
         # real repository legitimately takes a long time, and truncating that to protect a

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { ProfileSaveButton } from '../../components/profile-save-button';
 import { signOut, updateProfile } from '../../lib/auth/actions';
 import { getSessionUser } from '../../lib/auth/session';
 import { SUPPORTED_CURRENCIES } from '../../lib/auth/validation';
@@ -10,8 +11,9 @@ export const metadata: Metadata = { title: 'Your profile · Tabs' };
 /**
  * The signed-in home for an account: display name, default currency, and the way out. Every
  * read and write here is authorized against the request's own session (the architecture
- * invariant), and the form posts to a Server Action — no client island, because nothing on
- * this screen needs state the server cannot hold.
+ * invariant), and the form posts to a Server Action. The one piece of client code is the Save
+ * button, which needs the in-flight state a server render cannot hold; everything else — the
+ * fields, the sign-out form, and the redirect-based saved/invalid notices — stays on the server.
  */
 export default async function ProfilePage({
   searchParams,
@@ -81,12 +83,7 @@ export default async function ProfilePage({
           <p className="text-sm text-muted">New groups start in this currency.</p>
         </div>
 
-        <button
-          type="submit"
-          className="min-h-11 rounded-token bg-accent px-4 font-medium text-surface"
-        >
-          Save
-        </button>
+        <ProfileSaveButton />
       </form>
 
       <form action={signOut}>

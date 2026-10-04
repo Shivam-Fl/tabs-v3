@@ -211,6 +211,22 @@ describe('signup', () => {
     expect(await signUp(email)).toEqual({ status: 'error', message: THROTTLE_MESSAGE });
     expect(await countUsers()).toBe(0);
   });
+
+  it('throttles headerless sign-up once the shared unknown budget is spent', async () => {
+    // Unparseable forwarding headers make clientIp() answer null, and the header is the
+    // caller's to choose — so the IP gate sign-up leans on entirely has to survive a null.
+    request.headers = new Headers({ 'x-forwarded-for': 'not-an-address' });
+    const { email } = nextIdentity();
+
+    // Garbage headers alone block nobody while the shared budget is fresh.
+    expect(await signUp(email)).toEqual({ status: 'success', message: SIGNUP_SUCCESS_MESSAGE });
+    expect(await countUsers()).toBe(1);
+
+    for (let attempt = 0; attempt < IP_FAILURE_LIMIT; attempt += 1) recordFailure({ ip: null });
+
+    expect(await signUp(`second-${email}`)).toEqual({ status: 'error', message: THROTTLE_MESSAGE });
+    expect(await countUsers()).toBe(1);
+  });
 });
 
 describe('signin', () => {

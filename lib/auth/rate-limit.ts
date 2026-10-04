@@ -9,6 +9,13 @@ import { normalizeEmail } from './validation';
  * from a header the caller controls (`x-forwarded-for`'s first entry is whatever the client
  * sent), so it can slow a lazy script down and nothing more.
  *
+ * A caller that names an IP but carries none — a missing, blank or unparseable hint — is
+ * bucketed under the fixed value `unknown` rather than skipping the IP dimension entirely.
+ * Sharing one budget across every headerless client is deliberate: the alternative was no
+ * budget at all, and since the header is the caller's to strip or garble, "no budget" meant
+ * sign-up's IP-only gate vanished on demand. The literal `unknown` cannot collide with a real
+ * bucket, because `clientIp` only ever returns an `isIP`-validated address.
+ *
  * It is per-instance memory, which is a recorded v1 limitation, not an oversight: a
  * distributed guesser gets one budget per instance behind a load balancer. A shared
  * attempts table is the fix and it is deliberately not this slice's — the threat it closes is
@@ -50,12 +57,19 @@ interface KeySpec {
   limit: number;
 }
 
+/** The bucket a caller that named an IP but supplied none of one shares. */
+const UNKNOWN_IP = 'unknown';
+
 function keySpecs(keys: RateLimitKeys): KeySpec[] {
   const specs: KeySpec[] = [];
   const email = keys.email ? normalizeEmail(keys.email) : '';
   if (email) specs.push({ kind: 'email', value: email, limit: EMAIL_FAILURE_LIMIT });
-  const ip = keys.ip?.trim();
-  if (ip) specs.push({ kind: 'ip', value: ip, limit: IP_FAILURE_LIMIT });
+  // A caller that named an IP always gets an IP bucket, so a null hint throttles instead of
+  // escaping. A caller that named none — `clearRateLimit`, which clears only the address —
+  // still gets no IP spec, so its documented "the hint ages out on its own" behaviour holds.
+  if ('ip' in keys) {
+    specs.push({ kind: 'ip', value: keys.ip?.trim() || UNKNOWN_IP, limit: IP_FAILURE_LIMIT });
+  }
   return specs;
 }
 

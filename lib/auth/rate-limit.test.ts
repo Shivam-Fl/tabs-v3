@@ -83,9 +83,28 @@ describe('the per-IP hint', () => {
     expect(checkRateLimit({ ip }).limited).toBe(true);
   });
 
-  it('ignores a missing or empty hint instead of bucketing everything together', () => {
+  it('keeps a real address out of the budget a headerless client spends', () => {
+    const ip = `192.0.2.${(unique += 1) % 250}`;
+    for (let attempt = 0; attempt < IP_FAILURE_LIMIT; attempt += 1) recordFailure({ ip });
+
+    // Burning a real address's budget must not charge the shared bucket a missing hint lands in.
+    expect(checkRateLimit({ ip }).limited).toBe(true);
+    expect(checkRateLimit({ ip: null }).limited).toBe(false);
+  });
+
+  it('throttles a missing or blank hint once the shared unknown budget is spent', () => {
     expect(checkRateLimit({ ip: null }).limited).toBe(false);
     expect(checkRateLimit({ ip: '   ' }).limited).toBe(false);
+
+    for (let attempt = 0; attempt < IP_FAILURE_LIMIT; attempt += 1) recordFailure({ ip: null });
+
+    // A missing hint, a blank one and a whitespace-only one are one population: an attacker who
+    // strips or garbles the header must not thereby escape the gate sign-up leans on entirely.
+    expect(checkRateLimit({ ip: null }).limited).toBe(true);
+    expect(checkRateLimit({ ip: '   ' }).limited).toBe(true);
+
+    const untouched = `192.0.2.${(unique += 1) % 250}`;
+    expect(checkRateLimit({ ip: untouched }).limited).toBe(false);
   });
 });
 

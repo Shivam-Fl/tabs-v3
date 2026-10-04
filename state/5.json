@@ -545,21 +545,23 @@
       "AC-5",
       "AC-6",
       "AC-7",
-      "AC-8"
+      "AC-8",
+      "AC-9",
+      "AC-10"
     ],
-    "sha": "3f7150c7f9d33f7196b08200cee9b04dd99198d4",
-    "run_id": "37234362254",
-    "work_order_version": 1,
-    "at": "2026-10-04T21:24:15.329Z"
+    "sha": "03b329478f4ddae8c2e29c917e2bf5305bb401a9",
+    "run_id": "37238552797",
+    "work_order_version": 2,
+    "at": "2026-10-04T22:26:23.213Z"
   },
   "qa_open_bugs": [
     {
-      "id": "BUG-1",
-      "title": "Stale double-claim of a placeholder is rejected silently, never showing the rejection message"
+      "id": "BUG-3",
+      "title": "Remove and archive success notes never render; the confirming forms unmount with their rows"
     },
     {
-      "id": "BUG-2",
-      "title": "Rename applies immediately with no confirm step, though AC-4 requires one naming the group"
+      "id": "BUG-4",
+      "title": "No skeleton loading state on the members screen though ui.md designs one"
     }
   ],
   "rejected_artifacts": {

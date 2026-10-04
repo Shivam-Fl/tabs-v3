@@ -1,7 +1,7 @@
 {
   "issue": 15,
   "pr": null,
-  "state": "triage",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -24,8 +24,14 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-04T20:30:37.229Z",
-  "updated_at": "2026-10-04T20:30:37.229Z",
-  "history": [],
+  "updated_at": "2026-10-04T20:30:56.075Z",
+  "history": [
+    {
+      "at": "2026-10-04T20:30:56.075Z",
+      "agent": "intake",
+      "action": "-> planning"
+    }
+  ],
   "issue_snapshot": {
     "title": "Follow-ups from #13: 1 from the review",
     "body": "What the review and QA of PR #14 (for #13) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### updateProfile docstring still says the profile form has 'no client island', which the new ProfileSaveButton island makes false\n\n> updateProfile docstring still says the profile form has 'no client island', which the new ProfileSaveButton island makes false\n> \n> `lib/auth/actions.ts:184`\n> \n> Evidence: grep 'no client island' hits lib/auth/actions.ts:184 ('the profile form is a plain form with no client island') and app/profile/page.tsx:13; the PR updates the page.tsx comment to describe the Save-button island but leaves the actions.ts claim untouched while rendering <ProfileSaveButton /> inside the updateProfile form (actions.ts itself is not in the diff)\n> \n> Fix: Update the updateProfile docstring to match the page comment: the form stays server-rendered with redirect notices and its only client code is the Save button island.\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #13.",

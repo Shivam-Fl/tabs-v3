@@ -79,7 +79,7 @@ const { hashPassword } = await import('../auth/password');
 const { withDb } = await import('../db/client');
 const { listMigrationFiles, runMigrations } = await import('../db/migrate');
 const { activityEvents, groups, memberships, sessions, users } = await import('../db/schema');
-const { ARCHIVED_GROUP_MESSAGE, GROUP_NOT_FOUND_MESSAGE, IDLE_GROUP_STATE, INVITE_INVALID_MESSAGE, INVITE_ROTATE_FAILED_MESSAGE, SEAT_TAKEN_MESSAGE, UNAUTHENTICATED_MESSAGE, ALREADY_MEMBER_MESSAGE } = await import('./validation');
+const { ARCHIVED_GROUP_MESSAGE, GROUP_NOT_FOUND_MESSAGE, IDLE_GROUP_STATE, INVITE_INVALID_MESSAGE, INVITE_ROTATE_FAILED_MESSAGE, UNAUTHENTICATED_MESSAGE } = await import('./validation');
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -540,38 +540,68 @@ describe('claiming a seat', () => {
     expect(events[0].createdAt).toBeInstanceOf(Date);
   });
 
-  it('rejects a second claim of the same seat', async () => {
+  it('sends a lost claim back to the join page with the seat-taken notice', async () => {
     await signInAs(joinerId);
     await redirectUrl(claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId })));
 
     await signInAs(thirdId);
-    const state = await claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId }));
+    const url = await redirectUrl(
+      claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId })),
+    );
 
-    expect(state).toEqual({ status: 'error', message: SEAT_TAKEN_MESSAGE });
-    expect(await membersOf(groupId)).toHaveLength(2);
+    // The rejection has to outlive the action's own revalidation, which refreshes this page to
+    // a list without the seat and unmounts the form that used to hold the message. So it is
+    // asserted as the URL the join page reads, spelling the query out: that string is the
+    // contract between the two, and a change to either side has to fail here (AC-9).
+    expect(url).toBe(`/join/${token}?claim=taken`);
+
+    const members = await membersOf(groupId);
+    expect(members).toHaveLength(2);
+    // The seat stayed with the first claimant, and losing did not half-join the loser.
+    expect(members.find((member) => member.id === seatId)?.userId).toBe(joinerId);
+    expect(members.some((member) => member.userId === thirdId)).toBe(false);
   });
 
-  it('rejects a claim by somebody who is already a member', async () => {
+  it('sends a claim by somebody who is already in the group to the group page', async () => {
     await signInAs(joinerId);
     await redirectUrl(claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId })));
 
-    const state = await claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId }));
+    const url = await redirectUrl(
+      claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId })),
+    );
 
-    expect(state).toEqual({ status: 'error', message: ALREADY_MEMBER_MESSAGE });
+    // Same landing as the page-load member bounce, so an already-member claim has one answer
+    // whichever way it is reached.
+    expect(url).toBe(`/groups/${groupId}`);
     expect(await membersOf(groupId)).toHaveLength(2);
   });
 
-  it('rejects a claim against a seat in another group', async () => {
+  it('rejects a claim against a seat in another group with the same notice', async () => {
     const other = await seedGroup('Other trip');
     await signInAs(thirdId);
 
-    const state = await claimPlaceholder(
-      IDLE_GROUP_STATE,
-      form({ token, membershipId: other.ownerMembershipId }),
+    const url = await redirectUrl(
+      claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: other.ownerMembershipId })),
     );
 
-    expect(state).toEqual({ status: 'error', message: SEAT_TAKEN_MESSAGE });
+    // A seat this group does not have is a claim that failed, and says so the way a lost race
+    // does rather than naming the other group.
+    expect(url).toBe(`/join/${token}?claim=taken`);
     expect(await membersOf(other.groupId)).toHaveLength(1);
+  });
+
+  it('keeps a malformed claim on the page as an inline error', async () => {
+    await signInAs(thirdId);
+
+    // Input that never reached a seat cannot describe one, so there is nothing to redirect
+    // back with — this stays on the form.
+    const state = await claimPlaceholder(
+      IDLE_GROUP_STATE,
+      form({ token, membershipId: 'not-a-uuid' }),
+    );
+
+    expect(state).toEqual({ status: 'error', message: INVITE_INVALID_MESSAGE });
+    expect(await membersOf(groupId)).toHaveLength(2);
   });
 
   it('rejects a claim through a link that is no longer live', async () => {

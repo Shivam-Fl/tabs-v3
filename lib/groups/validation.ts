@@ -63,6 +63,19 @@ export const INVITE_ROTATE_FAILED_MESSAGE =
   'The invite link could not be replaced. The current link still works.';
 
 /**
+ * How a lost seat claim reaches the person who lost it (AC-9).
+ *
+ * The claim cannot answer in its own form state: the action's revalidation refreshes the join
+ * page, the seat leaves the list, and the form that would have rendered the message unmounts
+ * with it — the loser would see a silent refresh and no reason for it. So the outcome travels
+ * back as a query on the page they came from and is rendered at panel level instead. Both the
+ * redirect that builds that URL and the page that reads it share these two constants, so the
+ * parameter and its value cannot drift into two spellings of the same notice.
+ */
+export const CLAIM_NOTICE_PARAM = 'claim';
+export const CLAIM_TAKEN = 'taken';
+
+/**
  * A trim that cannot be walked around by a caller that skips the form: every name the product
  * stores is trimmed, because ` Ada` and `Ada ` render identically and would sort apart.
  */

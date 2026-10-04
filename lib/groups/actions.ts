@@ -15,6 +15,8 @@ import {
   ALREADY_MEMBER_MESSAGE,
   ARCHIVED_GROUP_MESSAGE,
   CHECK_FIELDS_MESSAGE,
+  CLAIM_NOTICE_PARAM,
+  CLAIM_TAKEN,
   GROUP_NOT_FOUND_MESSAGE,
   INVITE_INVALID_MESSAGE,
   INVITE_ROTATE_FAILED_MESSAGE,
@@ -104,6 +106,11 @@ function finish(outcome: Outcome): GroupActionState {
 
 function groupPath(groupId: string): string {
   return `/groups/${groupId}`;
+}
+
+/** Where a lost claim sends the loser: back to the join page, which renders the notice (AC-9). */
+function claimTakenPath(token: string): string {
+  return `/join/${encodeURIComponent(token)}?${CLAIM_NOTICE_PARAM}=${CLAIM_TAKEN}`;
 }
 
 /** The group list and the group's own pages, refreshed after anything that changes them. */
@@ -534,6 +541,10 @@ export async function joinByToken(
  * WHERE clause is what makes it atomic: of two people claiming the same seat, exactly one
  * gets a row back. A member who already holds a membership here cannot take a second one,
  * and the unique `(group_id, user_id)` is what enforces that even under a race.
+ *
+ * Whoever loses — the second claimer of the seat, or somebody who already holds a membership —
+ * is sent somewhere that can still tell them so: back to the join page with the notice in its
+ * query (AC-9), or on to the group they are already in.
  */
 export async function claimPlaceholder(
   _previous: GroupActionState,
@@ -559,7 +570,15 @@ export async function claimPlaceholder(
       .where(and(eq(memberships.groupId, group.id), eq(memberships.userId, user.id)))
       .limit(1);
 
-    if (alreadyIn.length > 0) return { state: { status: 'error', message: ALREADY_MEMBER_MESSAGE } };
+    // Already a member is the same landing the join page gives somebody who opens the link
+    // twice: the group, not an error, because there is nothing left for them to do here.
+    if (alreadyIn.length > 0) {
+      return {
+        state: { status: 'success', message: ALREADY_MEMBER_MESSAGE },
+        redirectTo: groupPath(group.id),
+        groupId: group.id,
+      };
+    }
 
     try {
       const adopted = await handle.db.transaction(async (tx) => {
@@ -590,10 +609,25 @@ export async function claimPlaceholder(
         return claimed;
       });
 
-      if (!adopted) return { state: { status: 'error', message: SEAT_TAKEN_MESSAGE } };
+      // Somebody got there first. The refusal is a redirect rather than returned state because
+      // this action's own revalidation refreshes the join page to a list without this seat, and
+      // the form that would render the message unmounts with the seat — the loser would see the
+      // page simply come back blank. The notice rides the URL back to that page instead.
+      if (!adopted) {
+        return {
+          state: { status: 'error', message: SEAT_TAKEN_MESSAGE },
+          redirectTo: claimTakenPath(parsed.data.token),
+        };
+      }
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
-      return { state: { status: 'error', message: ALREADY_MEMBER_MESSAGE } };
+      // The unique (group_id, user_id) says this person already holds a seat here — the race
+      // equivalent of the check above, and it lands them in the same place.
+      return {
+        state: { status: 'success', message: ALREADY_MEMBER_MESSAGE },
+        redirectTo: groupPath(group.id),
+        groupId: group.id,
+      };
     }
 
     return {

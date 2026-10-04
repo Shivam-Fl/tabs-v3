@@ -7,7 +7,13 @@ import { getSessionUser } from '../../../lib/auth/session';
 import { withDb } from '../../../lib/db/client';
 import { memberships } from '../../../lib/db/schema';
 import { findGroupByInviteToken } from '../../../lib/groups/queries';
-import { GROUP_TYPE_LABELS, type GroupType } from '../../../lib/groups/validation';
+import {
+  CLAIM_NOTICE_PARAM,
+  CLAIM_TAKEN,
+  GROUP_TYPE_LABELS,
+  SEAT_TAKEN_MESSAGE,
+  type GroupType,
+} from '../../../lib/groups/validation';
 
 export const metadata: Metadata = { title: 'Join a group · Tabs' };
 
@@ -22,9 +28,20 @@ export const metadata: Metadata = { title: 'Join a group · Tabs' };
  * A signed-in non-member chooses between two things that look similar and are not: claiming a
  * seat somebody already added for them (which adopts that row, and everything recorded on it)
  * or joining as a new member.
+ *
+ * A losing claim arrives back here with `?claim=taken` (AC-9). It is read and rendered rather
+ * than acted on: the seat is gone, so the panel simply says why and offers the plain join that
+ * was always the other half of this page.
  */
-export default async function JoinPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export default async function JoinPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ claim?: string }>;
+}) {
+  const [{ token }, query] = await Promise.all([params, searchParams]);
+  const claimNotice = query[CLAIM_NOTICE_PARAM] === CLAIM_TAKEN ? SEAT_TAKEN_MESSAGE : null;
 
   const resolved = await withDb(async (handle) => {
     const group = await findGroupByInviteToken(handle.db, token);
@@ -72,6 +89,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
         <JoinPanel
           token={token}
           groupName={group.name}
+          claimNotice={claimNotice}
           seats={seats.map((seat) => ({
             id: seat.id,
             displayName: seat.displayName,

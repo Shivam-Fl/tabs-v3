@@ -626,15 +626,30 @@ export function JoinPanel({
   token,
   groupName,
   seats,
+  claimNotice = null,
 }: {
   token: string;
   groupName: string;
   seats: { id: string; displayName: string; matchesYou: boolean }[];
+  /** Why the visitor is back here after a claim, when a claim is what sent them (AC-9). */
+  claimNotice?: string | null;
 }) {
   const [state, joinAction, joinPending] = useActionState(joinByToken, IDLE_GROUP_STATE);
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Panel level, not per seat: the seat the visitor tried for is no longer on this page to
+          carry a message, and the refusal is about the page as a whole anyway. */}
+      {claimNotice ? (
+        <p
+          role="alert"
+          aria-live="polite"
+          className="rounded-token border border-danger/50 bg-surface p-3 text-sm text-danger"
+        >
+          {claimNotice}
+        </p>
+      ) : null}
+
       <form action={joinAction} className="flex flex-col gap-3">
         <input type="hidden" name="token" value={token} />
         <button type="submit" disabled={joinPending} aria-busy={joinPending} className={PRIMARY_BUTTON}>

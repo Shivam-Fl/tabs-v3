@@ -376,5 +376,24 @@
   "work_order_posted_at": "2026-10-04T18:48:06.446Z",
   "work_order_from": "plan",
   "work_order_comment": "5983225594",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Signup throttling can be bypassed entirely by sending unparseable forwarding headers: signup is gated on the IP hint alone, and when clientIp() returns null the limiter receives zero keys and never engages.",
+        "detail": "Signup throttling can be bypassed entirely by sending unparseable forwarding headers: signup is gated on the IP hint alone, and when clientIp() returns null the limiter receives zero keys and never engages.\n\n`lib/auth/actions.ts:83`\n\nEvidence: actions.ts:83 gates signup only on checkRateLimit({ ip }); rate-limit.ts keySpecs (lines 54-58) skips empty email and null/blank ip, so with ip=null specs=[] and checkRateLimit returns {limited:false} while recordFailure writes nothing. clientIp returns null for missing, non-IP, or over-60-char header values (covered by rate-limit.test.ts), and the first x-forwarded-for entry is attacker-controlled, so garbage in both headers reaches the null path on every request and signup stays unthrottled. Signin is unaffected (per-email primary key still applies).\n\nFix: Gate signup on a fallback bucket when ip is null (e.g. a fixed 'ip:unknown' key with a tight limit) so the gate always exists; or count signup attempts under the normalized email as a secondary key.",
+        "severity": "minor",
+        "category": "security",
+        "file": "lib/auth/actions.ts"
+      },
+      {
+        "title": "The profile Save button has no pending/double-submit guard: double-clicking Save issues two updateProfile requests instead of the one the work order's QA script requires.",
+        "detail": "The profile Save button has no pending/double-submit guard: double-clicking Save issues two updateProfile requests instead of the one the work order's QA script requires.\n\n`app/profile/page.tsx:84`\n\nEvidence: app/profile/page.tsx:46-90 is a plain server-action form with no client island and no disabled/isPending state on the Save button (line 84), unlike components/auth-form.tsx:911-918 which disables while pending and drops second submits. The writes are idempotent (same values twice), so the end state is identical — this is one redundant request per double-click, not corruption.\n\nFix: Give the profile form a pending state (small client island or useFormStatus) that disables Save while the update is in flight, matching the auth island.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/profile/page.tsx"
+      }
+    ],
+    "pr": "12"
+  }
 }

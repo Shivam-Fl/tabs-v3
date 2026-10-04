@@ -18,7 +18,57 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "acceptance": [
+      {
+        "check": "updateProfile docstring in lib/auth/actions.ts no longer claims the profile form has 'no client island'; it states the form stays server-rendered with redirect notices and its only client code is the Save button island",
+        "how_to_verify": "grep -rn 'no client island' lib/auth/actions.ts returns no hits; npm run typecheck passes",
+        "id": "AC-1",
+        "verify": "test"
+      },
+      {
+        "check": "Signed in, opening /profile, editing the display name and clicking Save still shows 'Profile saved.' and the saved name persists on reload",
+        "how_to_verify": "Sign in, visit http://localhost:3000/profile, change Display name, click Save, observe the saved notice, reload and confirm the name persisted",
+        "id": "AC-2",
+        "verify": "browser"
+      }
+    ],
+    "approach": "Edit only the updateProfile docstring in lib/auth/actions.ts (lines 181-185) so it matches the already-correct app/profile/page.tsx comment: the form stays server-rendered with redirect-based saved/invalid notices and its only client code is the <ProfileSaveButton /> island. No runtime, markup, or test change; verify with grep that the stale phrase is gone and typecheck passes.",
+    "confidence": 95,
+    "confidence_rationale": "Comment-only fix with exact replacement text already established by the page comment and the ProfileSaveButton docstring; reproduction confirmed by direct grep and read.",
+    "evidence": [
+      "grep 'no client island' hits lib/auth/actions.ts:184 ('the profile form is a plain form with no client island')",
+      "app/profile/page.tsx:13-16 already describes the Save-button island; <ProfileSaveButton /> rendered inside the updateProfile form at page.tsx:86",
+      "components/profile-save-button.tsx:6 confirms it is 'the only client island on that screen'"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Rewrite the updateProfile docstring (lines 181-185) to remove the false 'plain form with no client island' claim and state: the profile form is server-rendered with redirect-based saved/invalid notices, and its only client code is the Save button island (components/profile-save-button.tsx) which holds the in-flight pending state.",
+        "path": "lib/auth/actions.ts",
+        "why": "The docstring contradicts the shipped UI since PR #14 added the ProfileSaveButton island; the page comment was updated but this one was missed."
+      }
+    ],
+    "issue": 15,
+    "kind": "chore",
+    "out_of_scope": [
+      "Any behavior change to updateProfile, the profile page markup, or the Save button pending-state logic — the save flow already works and is only regression-checked by AC-2"
+    ],
+    "qa_script": [
+      "grep -rn 'no client island' lib app components — expect no hits",
+      "Read lib/auth/actions.ts updateProfile docstring and confirm it names the Save button island and redirect notices",
+      "npm run typecheck",
+      "Sign in, visit /profile, change Display name, click Save, confirm 'Profile saved.' notice and persistence on reload"
+    ],
+    "reproduced": true,
+    "risks": [
+      "Comment-only change: no runtime, auth, or data-path impact; touches no forbidden paths (.sdlc/**, docs/**, .github/**) and no new external hosts."
+    ],
+    "root_cause": "PR #14 added the ProfileSaveButton client island and updated the app/profile/page.tsx comment, but left the updateProfile docstring in lib/auth/actions.ts untouched, so it still claims the form has 'no client island'.",
+    "understanding": "Issue #15 is a single review follow-up from PR #14 (for #13): the updateProfile docstring at lib/auth/actions.ts:184 falsely says the profile form has 'no client island', while app/profile/page.tsx renders <ProfileSaveButton /> (a 'use client' island) inside that form. The fix is docstring-only, matching the already-correct page comment.",
+    "version": 1,
+    "mode": "committed"
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -75,108 +125,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "plan",
-  "validated_work_order": {
-    "acceptance": [
-      {
-        "check": "updateProfile docstring in lib/auth/actions.ts no longer claims the profile form has 'no client island'; it states the form stays server-rendered with redirect notices and its only client code is the Save button island",
-        "how_to_verify": "grep -rn 'no client island' lib/auth/actions.ts returns no hits; npm run typecheck passes",
-        "id": "AC-1",
-        "verify": "test"
-      },
-      {
-        "check": "Signed in, opening /profile, editing the display name and clicking Save still shows 'Profile saved.' and the saved name persists on reload",
-        "how_to_verify": "Sign in, visit http://localhost:3000/profile, change Display name, click Save, observe the saved notice, reload and confirm the name persisted",
-        "id": "AC-2",
-        "verify": "browser"
-      }
-    ],
-    "approach": "Edit only the updateProfile docstring in lib/auth/actions.ts (lines 181-185) so it matches the already-correct app/profile/page.tsx comment: the form stays server-rendered with redirect-based saved/invalid notices and its only client code is the <ProfileSaveButton /> island. No runtime, markup, or test change; verify with grep that the stale phrase is gone and typecheck passes.",
-    "confidence": 95,
-    "confidence_rationale": "Comment-only fix with exact replacement text already established by the page comment and the ProfileSaveButton docstring; reproduction confirmed by direct grep and read.",
-    "evidence": [
-      "grep 'no client island' hits lib/auth/actions.ts:184 ('the profile form is a plain form with no client island')",
-      "app/profile/page.tsx:13-16 already describes the Save-button island; <ProfileSaveButton /> rendered inside the updateProfile form at page.tsx:86",
-      "components/profile-save-button.tsx:6 confirms it is 'the only client island on that screen'"
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "Rewrite the updateProfile docstring (lines 181-185) to remove the false 'plain form with no client island' claim and state: the profile form is server-rendered with redirect-based saved/invalid notices, and its only client code is the Save button island (components/profile-save-button.tsx) which holds the in-flight pending state.",
-        "path": "lib/auth/actions.ts",
-        "why": "The docstring contradicts the shipped UI since PR #14 added the ProfileSaveButton island; the page comment was updated but this one was missed."
-      }
-    ],
-    "issue": 15,
-    "kind": "chore",
-    "out_of_scope": [
-      "Any behavior change to updateProfile, the profile page markup, or the Save button pending-state logic — the save flow already works and is only regression-checked by AC-2"
-    ],
-    "qa_script": [
-      "grep -rn 'no client island' lib app components — expect no hits",
-      "Read lib/auth/actions.ts updateProfile docstring and confirm it names the Save button island and redirect notices",
-      "npm run typecheck",
-      "Sign in, visit /profile, change Display name, click Save, confirm 'Profile saved.' notice and persistence on reload"
-    ],
-    "reproduced": true,
-    "risks": [
-      "Comment-only change: no runtime, auth, or data-path impact; touches no forbidden paths (.sdlc/**, docs/**, .github/**) and no new external hosts."
-    ],
-    "root_cause": "PR #14 added the ProfileSaveButton client island and updated the app/profile/page.tsx comment, but left the updateProfile docstring in lib/auth/actions.ts untouched, so it still claims the form has 'no client island'.",
-    "understanding": "Issue #15 is a single review follow-up from PR #14 (for #13): the updateProfile docstring at lib/auth/actions.ts:184 falsely says the profile form has 'no client island', while app/profile/page.tsx renders <ProfileSaveButton /> (a 'use client' island) inside that form. The fix is docstring-only, matching the already-correct page comment.",
-    "version": 1
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-04T20:41:38.675Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "acceptance": [
-      {
-        "check": "updateProfile docstring in lib/auth/actions.ts no longer claims the profile form has 'no client island'; it states the form stays server-rendered with redirect notices and its only client code is the Save button island",
-        "how_to_verify": "grep -rn 'no client island' lib/auth/actions.ts returns no hits; npm run typecheck passes",
-        "id": "AC-1",
-        "verify": "test"
-      },
-      {
-        "check": "Signed in, opening /profile, editing the display name and clicking Save still shows 'Profile saved.' and the saved name persists on reload",
-        "how_to_verify": "Sign in, visit http://localhost:3000/profile, change Display name, click Save, observe the saved notice, reload and confirm the name persisted",
-        "id": "AC-2",
-        "verify": "browser"
-      }
-    ],
-    "approach": "Edit only the updateProfile docstring in lib/auth/actions.ts (lines 181-185) so it matches the already-correct app/profile/page.tsx comment: the form stays server-rendered with redirect-based saved/invalid notices and its only client code is the <ProfileSaveButton /> island. No runtime, markup, or test change; verify with grep that the stale phrase is gone and typecheck passes.",
-    "confidence": 95,
-    "confidence_rationale": "Comment-only fix with exact replacement text already established by the page comment and the ProfileSaveButton docstring; reproduction confirmed by direct grep and read.",
-    "evidence": [
-      "grep 'no client island' hits lib/auth/actions.ts:184 ('the profile form is a plain form with no client island')",
-      "app/profile/page.tsx:13-16 already describes the Save-button island; <ProfileSaveButton /> rendered inside the updateProfile form at page.tsx:86",
-      "components/profile-save-button.tsx:6 confirms it is 'the only client island on that screen'"
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "Rewrite the updateProfile docstring (lines 181-185) to remove the false 'plain form with no client island' claim and state: the profile form is server-rendered with redirect-based saved/invalid notices, and its only client code is the Save button island (components/profile-save-button.tsx) which holds the in-flight pending state.",
-        "path": "lib/auth/actions.ts",
-        "why": "The docstring contradicts the shipped UI since PR #14 added the ProfileSaveButton island; the page comment was updated but this one was missed."
-      }
-    ],
-    "issue": 15,
-    "kind": "chore",
-    "out_of_scope": [
-      "Any behavior change to updateProfile, the profile page markup, or the Save button pending-state logic — the save flow already works and is only regression-checked by AC-2"
-    ],
-    "qa_script": [
-      "grep -rn 'no client island' lib app components — expect no hits",
-      "Read lib/auth/actions.ts updateProfile docstring and confirm it names the Save button island and redirect notices",
-      "npm run typecheck",
-      "Sign in, visit /profile, change Display name, click Save, confirm 'Profile saved.' notice and persistence on reload"
-    ],
-    "reproduced": true,
-    "risks": [
-      "Comment-only change: no runtime, auth, or data-path impact; touches no forbidden paths (.sdlc/**, docs/**, .github/**) and no new external hosts."
-    ],
-    "root_cause": "PR #14 added the ProfileSaveButton client island and updated the app/profile/page.tsx comment, but left the updateProfile docstring in lib/auth/actions.ts untouched, so it still claims the form has 'no client island'.",
-    "understanding": "Issue #15 is a single review follow-up from PR #14 (for #13): the updateProfile docstring at lib/auth/actions.ts:184 falsely says the profile form has 'no client island', while app/profile/page.tsx renders <ProfileSaveButton /> (a 'use client' island) inside that form. The fix is docstring-only, matching the already-correct page comment.",
-    "version": 1
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-04T20:43:52.002Z",
+  "work_order_from": "plan",
+  "work_order_comment": "5984200985"
 }

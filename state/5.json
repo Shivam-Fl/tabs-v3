@@ -112,123 +112,61 @@
         "id": "AC-12",
         "source": "TR-11",
         "verify": "browser"
+      },
+      {
+        "check": "Rotating the invite link and then disabling it shows only the 'Invite link disabled.' note; the earlier 'New invite link created.' note is gone, because invite outcomes share one panel-level notice slot that each success replaces rather than stacks beside.",
+        "how_to_verify": "QA rotates the invite link behind its naming confirm, then disables it behind its naming confirm, and asserts the disable note is visible while the rotate note has count zero.",
+        "id": "AC-13",
+        "source": "IAC-2",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
       {
-        "approach": "Separate invite_tokens table (one row per link, many active links per group)",
-        "rejected_because": "TR-7 and ui.md describe a single link panel with copy/disable/rotate; one token+enabled flag on the group is the smallest shape that satisfies it."
-      },
-      {
-        "approach": "Claim-by-email-match only (a placeholder is claimable solely by the user whose email or display name matches it)",
-        "rejected_because": "The repo has no verified identity beyond email and strict matching strands seats on typos; open seat-pick with server-side atomic double-claim rejection is testable now, matching hints stay UI-only."
-      },
-      {
-        "approach": "Lift remove/archive action state to the parent panels so success messages render above the unmount line without navigating",
-        "rejected_because": "It restructures three client islands and invents a second feedback mechanism beside the redirect-with-notice pattern T-6 already proves green; redirect keeps one mechanism for the whole unmount family and pins each contract as an assertable URL string."
+        "approach": "Client-only last-wins notice state in InvitePanel (one useState holding the latest success message)",
+        "rejected_because": "Unpinnable under the node-only vitest contract the repo enforces, and it leaves two success slots mounted for a future action to restack; a single invite query value makes stacking structurally unrepresentable."
       }
     ],
-    "approach": "Extend the v2 redirect-with-notice mechanism — proven green by T-6 — to the three remaining sites in the same unmount family, and add the members loading boundary v2 never scoped. removeMember and archiveGroup succeed via the existing Outcome/finish redirect path instead of inline success state: remove lands on the members page carrying the removed display name, archive lands on the group page carrying the archived flag, and the already-redirecting leaveGroup carries the left group name home; all three notes render at panel or page level (role=status) above the line where the confirming form unmounts. Every error path (non-zero balance, self-remove, non-owner, archived target, unauthenticated) stays inline because its form stays mounted — the same split v2 drew for claim errors. Notice param constants live beside CLAIM_TAKEN in validation.ts so each redirect and its reading page cannot drift. Separately, a members loading.tsx streams skeleton member rows plus the invite-panel loading button state in ui.md tokens with motion-safe pulse. No rename component is touched; the atomic claim UPDATE plus 23505 mapping is untouched.",
+    "approach": "Finish the redirect-with-notice generalization v3 proved green on remove/archive/leave by extending it to the last two inline-success actions, rotateInvite and disableInvite. Each succeeds via the existing Outcome/finish redirect path to the members page carrying a single invite query value (?invite=rotated or ?invite=disabled); the members page maps that one value to its sentence through a shared constant beside CLAIM_TAKEN and InvitePanel renders it once at section level (role=status). A single query value makes stacking structurally impossible: each success replaces the value rather than appending a sibling node. Every error path stays inline because its confirming form stays mounted.",
     "assumptions": [
-      "Any signed-in member may add a placeholder by name; only the owner may rename, remove members, archive, rotate or disable the invite link.",
-      "Placeholder claim is open seat-pick: a non-member claiming an unclaimed placeholder adopts that row (UPDATE ... WHERE user_id IS NULL) and that adoption IS the join; a user who already holds a membership row cannot claim another placeholder; double-claim is rejected atomically with 23505 mapping.",
-      "Group type is the closed TRD set trip/home/couple/other, NOT NULL defaulting to 'other'; currency reuses SUPPORTED_CURRENCIES (INR default from profile).",
-      "Archive hides the group from the home list but members can still open it with a read-only banner; archived groups reject join/claim/mutation writes (leave still permitted); there is no unarchive in this ticket.",
-      "Owner leave transfers ownership to the earliest-joined remaining member; the last member leaving archives the group.",
-      "Invite token is 32 bytes CSPRNG base64url stored unique; disable flips invite_enabled, rotate issues a fresh token and the old one stops working; token and enabled flag are re-checked at submit time."
+      "Only the owner may rotate or disable the invite link.",
+      "Invite token is 32 bytes CSPRNG base64url stored unique; token and enabled flag are re-checked at submit time."
     ],
-    "confidence": 80,
-    "confidence_rationale": "BUG-3's mechanism is browser-proven by T-11 itself plus code-read of the exact unmount sites on the PR branch, and the fix reuses the redirect-with-notice pattern T-6 already proves green. BUG-4's fix is the stock Next.js loading.tsx pattern against a precise ui.md line. Held below 90 because no live preview exists in this checkout and three redirect-URL contracts change existing success-case expectations.",
-    "debate_summary": "QA attempt 2 ratified v2 rather than refuting it: BUG-1 fixed, BUG-2 dropped as a criterion defect. The question was scope, not premise: v2 fixed the join page but the same unmount family covers remove/archive/leave (BUG-3), and the designed members loading state was never built (BUG-4, failing AC-6).",
+    "confidence": 85,
+    "confidence_rationale": "Defect traced to a precise two-hook site on the PR branch and confirmed by QA's snapshot showing two sibling role=status nodes; the fix reuses the redirect-with-notice pattern this ticket proves green four times over; preflight clean.",
+    "debate_summary": "v3 was incomplete, not wrong: QA attempt 2 verifies BUG-3 and BUG-4 fixed, but the invite panel was left untouched, producing PR-introduced BUG-5. This order finishes the generalization. It also repairs the refused v4 revision, which carried this same fix but stripped `source` from every criterion.",
     "evidence": [
-      "qa-report.json attempt 2: BUG-1 fixed via T-6; BUG-2 dropped with T-4/T-8 proving save-then-note rename",
-      "qa-report.json BUG-3: row gone and banner up but neither crafted note paints within 10s polls; RemoveMemberForm inside the deleted row, ArchiveGroupForm inside the archived-gated settings section",
-      "PR-branch code-read: removeMember/archiveGroup return inline success state; leaveGroup redirects bare to /",
-      "skeleton-audit.txt: no loading.tsx, Suspense, or skeleton markup in app/groups, app/join, or groups-panels; ui.md:113 requires skeleton member rows plus loading invite-button state",
-      "No failure-packet.json present — plain QA-fail root-cause revision"
+      "qa-report.json attempt 2: BUG-3 fixed (T-5/T-6/T-7), BUG-4 fixed (T-10/T-11), single new fail T-13/BUG-5",
+      "error-context.md: rotate note count expected 0, received 1; snapshot shows sibling status nodes f2e16+f2e17",
+      "PR-branch code-read: InvitePanel two useActionState hooks each with unconditional StateMessage; rotateInvite/disableInvite return inline success"
     ],
     "files": [
       {
         "action": "edit",
-        "change": "Export notice-param constants for the three success redirects (removed-name, archived-flag, left-group-name) beside CLAIM_TAKEN; absent or blank params render nothing.",
+        "change": "Add INVITE_NOTICE_PARAM with closed rotated/disabled values, the two shared sentences, and an inviteNoticeText mapper returning null for unknown/blank input, beside CLAIM_TAKEN.",
         "path": "lib/groups/validation.ts"
       },
       {
         "action": "edit",
-        "change": "removeMember and archiveGroup succeed through the Outcome/finish redirect path (members page with removed name, group page with archived flag); leaveGroup redirect to / carries the left group name. Error paths keep returning inline state.",
+        "change": "rotateInvite and disableInvite succeed via the Outcome/finish redirect path to the members page carrying ?invite=rotated / ?invite=disabled; all refusals keep returning inline error state.",
         "path": "lib/groups/actions.ts"
       },
       {
         "action": "edit",
-        "change": "MembersPanel accepts an optional removed-name notice prop rendered as panel-level role=status alert above the list; RemoveMemberForm and ArchiveGroupForm keep inline StateMessage for errors only.",
+        "change": "InvitePanel accepts a single inviteNotice prop rendered once at section level (role=status); the two StateMessage renders remain for error states only.",
         "path": "components/groups-panels.tsx"
       },
       {
         "action": "edit",
-        "change": "Read the notice searchParams and pass the removed name to MembersPanel; signed-out redirect, member bounce, and 404 unchanged.",
+        "change": "Members page reads the invite param through inviteNoticeText and passes the sentence to InvitePanel; removed/left notices and 404 behavior unchanged.",
         "path": "app/groups/[id]/members/page.tsx"
-      },
-      {
-        "action": "edit",
-        "change": "Read the archived notice searchParam and render the named success note at page level above the read-only banner.",
-        "path": "app/groups/[id]/page.tsx"
-      },
-      {
-        "action": "edit",
-        "change": "Read the left-group notice searchParam and render the note above the group list; empty, error, and signed-out states unchanged.",
-        "path": "app/page.tsx"
-      },
-      {
-        "action": "create",
-        "change": "Loading boundary with skeleton member rows and invite-panel loading button state in ui.md tokens with motion-safe pulse, streamed while the members server component resolves.",
-        "path": "app/groups/[id]/members/loading.tsx"
       }
     ],
     "issue": 5,
-    "kind": "feature",
-    "mode": "committed",
-    "qa_script": [
-      "Sign up as A, create a group, have B join via the invite link; as A remove B behind its confirm and assert the row is gone AND the note is visible above the list.",
-      "Create a second group; archive it behind its confirm and assert the read-only banner AND the archived note are both visible.",
-      "Leave a group as sole member and assert home shows the left note with the group off the list and its URL a 404.",
-      "Throttle the network and open a members page cold; assert skeleton rows and loading invite state paint before data resolves.",
-      "Regression: stale-claim race still shows the seat-taken alert with plain join offered; rename still saves with a note and no confirm."
-    ],
-    "reproduced": false,
-    "residual_risks": [
-      "True concurrent double-claim covered by atomic UPDATE plus 23505 mapping, not by a unit-test race.",
-      "Activity readers land with the later TR-10 ticket; this ticket writes member-event rows only.",
-      "Notice query persists across refresh (same tradeoff as ?claim=taken); reflected names render React-escaped, blank params render nothing.",
-      "Group-detail and join cold paints still have no loading boundary; their skeletons belong to later slices."
-    ],
-    "risks": [
-      "Three existing success-case tests (remove, archive, leave redirect) must be updated to the redirect URLs in the same edit.",
-      "Panel-level notes reuse the actions' exact sentences so T-11 assertions match without re-derivation.",
-      "Home with ?left=<name> must keep T-5's redirect-home shape: notice is additive, left group URL must still 404."
-    ],
-    "root_cause": "(1) BUG-3, same unmount family v2 fixed on the join page but one screen over: remove/archive success notes live in useActionState forms the success unmounts (deleted row; archived-gated settings section), and leave redirects bare dropping its state. Messages are correct; they never survive to paint. (2) BUG-4 omission: group pages await all data inline with no loading.tsx or Suspense boundary, so cold navigation paints blank; v2 never scoped a loading boundary, so no v2 change could have greened AC-6's loading half.",
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "successful removeMember redirects to the members page carrying the removed-name notice (repro of BUG-3 remove half)",
-          "successful archiveGroup redirects to the group page carrying the archived notice (repro of BUG-3 archive half)",
-          "successful leaveGroup redirects home carrying the left-group notice (repro of BUG-3 leave half)",
-          "remove/archive/leave refusals still return inline error state with no redirect and no membership or activity change",
-          "existing remove/archive success cases updated to assert redirect URLs; membership and ActivityEvent assertions unchanged"
-        ],
-        "path": "lib/groups/actions.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "members loading boundary renders skeleton member rows and a loading invite-button state (repro of BUG-4)"
-        ],
-        "path": "app/groups/[id]/members/loading.test.ts"
-      }
-    ],
-    "understanding": "The v2 work order was not wrong — QA attempt 2 proves it: BUG-1 is fixed (T-6 passes on the ?claim=taken redirect) and BUG-2 was correctly dropped as a criterion defect (T-4/T-8 prove rename is save-then-note by design). What v2 was is incomplete: the identical unmount defect covers three more sites (remove note in the deleted row's form, archive note in the archived-gated settings section, leave note dropped by a bare redirect) — BUG-3, browser-proven by T-11. And v2 never scoped any loading boundary, so AC-6's loading half could never green — BUG-4, proven by skeleton-audit.txt against ui.md:113. This revision generalizes v2's proven redirect-with-notice mechanism to remove/archive/leave and adds the members loading.tsx, with AC-1 through AC-10 carried forward untouched and new AC-11/AC-12 numbered after them.",
-    "version": 3
+    "version": 4,
+    "understanding": "The v3 plan was not wrong — QA attempt 2 proves it: BUG-3 is fixed (T-5/T-6/T-7 pass) and BUG-4 is fixed (T-10/T-11 pass). What v3 was is incomplete: it left the invite panel, the fourth inline-success site in the same stale-notice family, untouched, so rotate-then-disable stacks two success notes (BUG-5, T-13). Separately, the v4 revision carrying this same fix was refused by the validator because it rewrote every acceptance check without `source`, leaving IAC-1/IAC-2/IAC-3 unanswered; this order restores AC-1 through AC-12 verbatim with their sources and adds AC-13 (source IAC-2) for BUG-5.",
+    "root_cause": "InvitePanel holds two independent useActionState hooks (rotateInvite and disableInvite), each rendering its own unconditional StateMessage, so rotate-then-disable successes coexist as two sibling role=status nodes. rotateInvite and disableInvite are the last two group actions still returning inline success instead of the Outcome/finish redirect path. The messages are correct; they are never replaced, only accumulated.",
+    "mode": "committed"
   },
   "touch_paths": [
     "lib/groups/validation.ts",
@@ -628,10 +566,10 @@
     }
   ],
   "approved_too_high": false,
-  "work_order_version": 3,
-  "work_order_posted_at": "2026-10-04T22:31:46.166Z",
+  "work_order_version": 4,
+  "work_order_posted_at": "2026-10-04T23:46:41.155Z",
   "work_order_from": "root-cause",
-  "work_order_comment": "5985171062",
+  "work_order_comment": "5985721564",
   "implemented_version": 3,
   "follow_ups": {
     "review": [

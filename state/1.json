@@ -25,5 +25,12 @@
   "review_root_caused": [],
   "created_at": "2026-10-04T15:49:50.692Z",
   "updated_at": "2026-10-04T15:49:50.692Z",
-  "history": []
+  "history": [],
+  "issue_snapshot": {
+    "title": "Build Tabs from the spec (docs/spec/tabs.md)",
+    "body": "Build the product docs/spec/tabs.md describes, end to end: decide the architecture, then deliver it in the spec's order of work, until it is live on Vercel and ready for real users.\n\nThe spec is the requirements. Where it is silent, decide and say what you decided.",
+    "sha256": "d6172b993dc0b5f9279a0156a91c06bd4cba249c6f0bd5af0f12aafe82b23997",
+    "by": "Shivam-Fl",
+    "at": "2026-10-04T15:49:52.525Z"
+  }
 }

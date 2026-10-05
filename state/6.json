@@ -82,5 +82,202 @@
     "decided_at": "2026-10-05T01:39:46.998Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "Signed-in member creates expenses with description, amount, date, category and note as single-payer and multi-payer for all four split types",
+        "how_to_verify": "QA creates one expense per split type plus one multi-payer expense",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Shortfall errors name the shortfall and size, remainder lands on first payer, reopening shows stored split type and inputs exactly as entered",
+        "how_to_verify": "QA submits bad parts, checks a remainder case, reopens and compares fields",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Newest-first list with member/category filter plus search; edit/delete work, failed saves keep input, delete confirm names the expense",
+        "how_to_verify": "QA filters, searches, edits, deletes, submits a failing save",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Unit tests prove integer math, sum preservation, remainder placement across generated splits, plus failing writes leaving no rows",
+        "how_to_verify": "vitest run lib/money/splits.test.ts lib/expenses/actions.test.ts",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "test"
+      },
+      {
+        "check": "Signed-out and stranger callers get indistinguishable unauthenticated/not-found answers on expense reads and writes",
+        "how_to_verify": "QA probes expense URLs and actions signed out and as non-member",
+        "id": "AC-5",
+        "source": "TR-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Each create/edit/delete commits expense, payers, split lines and activity entry in one interactive transaction",
+        "how_to_verify": "vitest run lib/expenses/actions.test.ts atomicity cases",
+        "id": "AC-6",
+        "source": "TR-8",
+        "verify": "test"
+      },
+      {
+        "check": "Money crosses boundaries only as integer minor units; percentages parsed to basis points at the zod boundary",
+        "how_to_verify": "vitest run lib/money/splits.test.ts lib/expenses/validation.test.ts",
+        "id": "AC-7",
+        "source": "TR-4",
+        "verify": "test"
+      },
+      {
+        "check": "Expense editor and list follow token set with labelled controls, five states, group-currency amounts, usable on phone viewport",
+        "how_to_verify": "QA drives screens on phone and laptop with keyboard",
+        "id": "AC-8",
+        "source": "TR-11",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Recompute shares on read instead of storing computed shares",
+        "rejected_because": "Balances must read one stored derived path (ADR-0007); recompute-on-read duplicates money math and risks disagreement on rounding."
+      },
+      {
+        "approach": "FK member_id to memberships with ON DELETE CASCADE",
+        "rejected_because": "Removing a zero-balance member would erase payer/share history and rewrite others' balances; app-validated ids with snapshots keep the ledger intact."
+      },
+      {
+        "approach": "Separate expense_history table for before/after instead of payload on activity_event",
+        "rejected_because": "One nullable jsonb payload in the same transaction needs no extra join or write ordering."
+      }
+    ],
+    "approach": "Add expenses, expense_payers and split_lines tables plus a jsonb payload on activity_event behind one guarded migration. Put the four integer split calculators in lib/money/splits.ts, add lib/expenses validation/queries/actions (each write in one db.transaction with its activity row, reusing guardGroup and withDb), and build the editor island plus new/edit pages and the group-page expenses section. Prove with math property tests and transaction-atomicity tests.",
+    "assumptions": [
+      "Members addressed by membership id; any member may write expenses",
+      "Payer order is submission order; remainder goes to position zero",
+      "Percentages stored as integer basis points; no membership FK on payer/split rows (validated in-transaction) with name snapshots",
+      "Shared db.transaction path on both backends; no new module branches on backend"
+    ],
+    "confidence": 78,
+    "confidence_rationale": "Patterns to copy (guardGroup, withDb transactions with activity rows, PGlite action tests) already exist and are tested; risk is concentrated in new money math and the before/after shape, both covered by planned tests.",
+    "debate_summary": "The critique file held an empty object, so there was nothing to judge: no findings to confirm, narrow, or dismiss. I verified the proposal directly against plan/brief.md, docs/trd.md, and the code (guardGroup, withDb/getDb, 0003 migration precedent, group page placeholder). The proposal respects both brief decisions (stored split rule with inputs beside computed shares; atomic writes with before/after activity payload; Neon Pool lifecycle via withDb close with no new backend branches) and the split's criteria (each IAC-1..4 has a sourced criterion; TR-3/TR-4/TR-8/TR-11 each have one). I kept the proposal intact and added only the missing arbiter fields (debate_summary, residual_risks).",
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add expenses, expense_payers, split_lines tables; extend activity_event with nullable expense_id and payload jsonb",
+        "path": "lib/db/schema.ts",
+        "why": "Single source of truth for the TR-8 ledger and TR-10 payload"
+      },
+      {
+        "action": "create",
+        "change": "Hand-written guarded 0004 migration with IF NOT EXISTS tables and indexes, following the 0003 precedent",
+        "path": "lib/db/migrations/0004_expenses.sql",
+        "why": "Same migrations on PGlite and Neon via existing runner"
+      },
+      {
+        "action": "create",
+        "change": "Pure integer calculators for equal/exact/percentage/shares with first-payer remainder rule and shortfall errors",
+        "path": "lib/money/splits.ts",
+        "why": "TR-4 money core; one derived path balances will read"
+      },
+      {
+        "action": "create",
+        "change": "Zod boundary schemas for expense inputs, payer parts, per-type rules and list filters",
+        "path": "lib/expenses/validation.ts",
+        "why": "Shortfall-naming errors; only integers cross inward"
+      },
+      {
+        "action": "create",
+        "change": "Newest-first list with member/category filter and description search plus edit read-back",
+        "path": "lib/expenses/queries.ts",
+        "why": "Shared read layer for list, filters and edit reopen"
+      },
+      {
+        "action": "create",
+        "change": "create/update/delete Server Actions each in one db.transaction with the activity row and before/after diff",
+        "path": "lib/expenses/actions.ts",
+        "why": "TR-8 atomicity reusing the audited groups pattern"
+      },
+      {
+        "action": "create",
+        "change": "Client ExpenseEditor island with split tabs, live sum line, kept input on error and delete confirm",
+        "path": "components/expense-editor.tsx",
+        "why": "ui.md expense-editor screen with five states"
+      },
+      {
+        "action": "create",
+        "change": "Server wrapper for new expense rendering the editor with payer-me and equal-split defaults",
+        "path": "app/groups/[id]/expenses/new/page.tsx",
+        "why": "Creation entry point"
+      },
+      {
+        "action": "create",
+        "change": "Server wrapper rendering the editor prefilled from stored split type and inputs",
+        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
+        "why": "IAC-2 reopen fidelity per ADR-0007"
+      },
+      {
+        "action": "edit",
+        "change": "Add expenses section with filter, search, newest-first rows and empty state to group detail",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "IAC-3 list lives on the group page"
+      }
+    ],
+    "issue": 6,
+    "qa_script": [
+      "Add an equal-split and a multi-payer expense; confirm newest-first list with group-currency amounts.",
+      "Submit short payer parts; confirm the error names the shortfall and size and keeps input.",
+      "Add exact, percentage and share expenses; confirm a remainder lands on the first payer.",
+      "Reopen an expense; confirm stored split type and inputs show exactly as entered.",
+      "Filter by member and category, search by description.",
+      "Delete via the naming confirm; probe signed-out and non-member access."
+    ],
+    "residual_risks": [
+      "Remainder definition under multi-payer: first payer is submission order position zero, unverified against a conflicting reading until QA checks it.",
+      "Before/after diff shape for expense-edited activity rows is new and has no prior fixture; a field-name mismatch would surface only in the edit test and QA feed check.",
+      "Neon interactive-transaction path cannot be exercised in CI/QA (PGlite only); the shared db.transaction path plus the backend-branch invariant is the only guard.",
+      "Failed-save input retention and delete-confirm naming are browser-only behaviors with no test coverage; QA must drive them."
+    ],
+    "risks": [
+      "Forbidden paths (docs/spec, docs/trd.md, docs/ui.md, .sdlc/**) untouched, so TR-10/activity-model prose cannot be edited here; schema comments carry the decision.",
+      "Inputs vs computed shares must agree on every write; actions compute shares server-side in the same transaction."
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "generated splits preserve totals with remainder on first payer for equal/percentage/shares",
+          "exact pass-through and shortfall messages; basis-point parsing without floats"
+        ],
+        "path": "lib/money/splits.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "shortfall messages for payer parts, exact amounts, percentages; filter schema shapes"
+        ],
+        "path": "lib/expenses/validation.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "round-trip for all four types; forced failure leaves no rows; edit writes before/after; delete keeps feed row; auth refusals"
+        ],
+        "path": "lib/expenses/actions.test.ts"
+      }
+    ],
+    "understanding": "Issue #6 is the core expense ledger: single/multi-payer expenses across all four split types with integer minor-unit math and first-payer remainder; stored split rule beside computed shares per ADR-0007; atomic create/edit/delete with activity rows carrying before/after; newest-first list with filter and search.",
+    "unknowns": [
+      "QA auth mode (derived vs fixture) is still open but the plan needs neither, using session-cookie tests like the groups suite."
+    ],
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-05T01:46:35.377Z",
+  "validated_ac_changes": []
 }

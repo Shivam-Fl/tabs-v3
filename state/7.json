@@ -589,6 +589,21 @@
       "work_order_version": 1,
       "run_url": "https://github.com/Shivam-Fl/tabs-v3/actions/runs/37279829002",
       "prior_signatures": []
+    },
+    "triage": {
+      "verdict": "resume",
+      "diagnosis": "root-cause's revised work order was refused by post-work-order.mjs, not broken by the stage. The artifact it submitted carries nine acceptance entries (AC-1..AC-9) with only `id` and `check` — every `source`, `verify` and `how_to_verify` that previous-work-order.json (v1) had for AC-1..AC-8 is gone — so no entry names an IAC id and out_of_scope defers nothing, leaving IAC-1..IAC-4 unanswered. The cause is visible in the transcript: the session Wrote a complete 13981-char work order, its first StructuredOutput used the flat shape instead of the `{work_order: ...}` envelope the job's --json-schema demands (minProperties/maxProperties 1), the SDK rejected it, four Edit attempts to fix the file failed (Edit is not in --allowedTools; the last is \"Claude requested permissions ... you haven't granted it yet\"), so it re-submitted by hand and its final reply is \"The output tool expects the work order nested under a single key — resubmitting in that shape.\" The hand-typed re-submission kept only the required keys, and the job wrote that condensation over the preflighted file before posting. The stage's actual analysis is sound and untouched by this: components/ui.tsx:34 `if (state.status === 'idle' || state.message === '') return null;` is exactly the early return that stops StateMessage rendering a live region until it has a message — QA's BUG-1/T-12 — and the revision's one-line correction plus the new AC-9 for the persistent region are the right remedy. This is not transient: prior_signatures is empty, the refusal is deterministic, and the log has no rate, quota or provider failure (the only provider lines are a successful local litellm translator); it is also not a broken check — post-work-order.mjs and check-split-criteria.mjs implement the split contract the issue body states.",
+      "evidence": "failed-run.log, job publish step \"Post it and route\": `sdlc: the work order neither answers nor defers IAC-1, IAC-2, IAC-3, IAC-4 from the issue's \"## Acceptance (from the split)\"` followed by `##[error]Process completed with exit code 1.` — the run's only ##[error]. Same step: `tools: Bash×16, Edit×4, Glob×1, Read×15, StructuredOutput×2, Write×1`, `Write .../work-order.json (13981 chars)`, four `Edit ... FAILED` (last: `Claude requested permissions to write to .../work-order.json, but you haven't granted it yet`), and root-cause-transcript.json's final reply `The output tool expects the work order nested under a single key — resubmitting in that shape.` The refused text is on the ledger as rejected_artifacts[\"work-order\"] with that same message in `errors`, and its acceptance[] entries hold only `id`/`check` (AC-9 is new: \"The debts card renders a persistent polite live region (role=status) from first paint\"), against previous-work-order.json (v1) where AC-1..AC-8 each carry `source` (IAC-1, IAC-2, IAC-3, IAC-4, TR-3, TR-9, TR-10, IAC-3), `verify` and `how_to_verify`. components/ui.tsx:33-45 confirms the revision's diagnosis."
     }
-  }
+  },
+  "triage_history": [
+    {
+      "at": "2026-10-05T07:58:41.067Z",
+      "stage": "root-cause",
+      "verdict": "resume",
+      "confidence": 82,
+      "diagnosis": "root-cause's revised work order was refused by post-work-order.mjs, not broken by the stage. The artifact it submitted carries nine acceptance entries (AC-1..AC-9) with only `id` and `check` — every `source`, `verify` and `how_to_verify` that previous-work-order.json (v1) had for AC-1..AC-8 is gone — so no entry names an IAC id and out_of_scope defers nothing, leaving IAC-1..IAC-4 unanswered. The cause is visible in the transcript: the session Wrote a complete 13981-char work order, its first St",
+      "run": "37279829002"
+    }
+  ]
 }

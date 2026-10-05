@@ -84,6 +84,20 @@
         "id": "AC-8",
         "source": "TR-11",
         "verify": "browser"
+      },
+      {
+        "check": "A refused expense save shows each failed rule exactly once in the page: one visible shortfall sentence, not repeated across field error, live note and submit-row message",
+        "how_to_verify": "QA submits short payer parts and counts the shortfall sentence exactly once in main (T-16 repro)",
+        "id": "AC-9",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "Saving an expense edit without changing anything reports that nothing changed instead of Expense updated",
+        "how_to_verify": "QA opens an expense editor, saves untouched, and reads the no-change notice on the group page (T-15 repro)",
+        "id": "AC-10",
+        "source": "TR-8",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
@@ -98,128 +112,88 @@
       {
         "approach": "Separate expense_history table for before/after instead of payload on activity_event",
         "rejected_because": "One nullable jsonb payload in the same transaction needs no extra join or write ordering."
+      },
+      {
+        "approach": "Add a jsdom component test rendering the editor to count refusal sentences",
+        "rejected_because": "Vitest runs in node env with no DOM harness; adding jsdom plus a renderer just for this duplicates what QA's T-16 already proves in a real browser, and the AC-9 browser criterion is the permanent net."
+      },
+      {
+        "approach": "Dedupe the triple render by comparing message text at render time",
+        "rejected_because": "String matching is fragile across locales and future messages; gating by section (fieldErrors presence) is deterministic and keeps the server sentence as the single source."
       }
     ],
-    "approach": "Add expenses, expense_payers and split_lines tables plus a jsonb payload on activity_event behind one guarded migration. Put the four integer split calculators in lib/money/splits.ts, add lib/expenses validation/queries/actions (each write in one db.transaction with its activity row, reusing guardGroup and withDb), and build the editor island plus new/edit pages and the group-page expenses section. Prove with math property tests and transaction-atomicity tests.",
+    "approach": "Targeted fix on the PR branch, no rebuild. (1) In components/expense-editor.tsx, render the submit-row StateMessage only when there are no field errors (the same gate the top summary already uses), and suppress the payer/split LiveNote for a section the server just refused (errors.payers / errors.splits present), so each refusal sentence renders exactly once beside its field; pre-submit live advice is unchanged and DeleteExpenseForm keeps its StateMessage since it has no field-error path. (2) In lib/expenses/validation.ts add EXPENSE_UNCHANGED ('unchanged') and map it in expenseNoticeText to the existing no-change sentence; in lib/expenses/actions.ts redirect the unchanged edit path with that notice while the updated path keeps EXPENSE_UPDATED. The group page needs no edit because it renders expenseNoticeText generically. (3) Correct the existing unchanged-save test assertion to the unchanged URL and add the notice-mapping test; QA re-runs the T-15/T-16 specs against the two new criteria.",
     "assumptions": [
-      "Members addressed by membership id; any member may write expenses",
-      "Payer order is submission order; remainder goes to position zero",
-      "Percentages stored as integer basis points; no membership FK on payer/split rows (validated in-transaction) with name snapshots",
-      "Shared db.transaction path on both backends; no new module branches on backend"
+      "QA re-runs the T-15/T-16 specs verbatim against AC-9/AC-10",
+      "The no-change sentence stays worded as the codebase already defines it",
+      "No ledger, transaction or money-math behavior changes in this fix"
     ],
-    "confidence": 78,
-    "confidence_rationale": "Patterns to copy (guardGroup, withDb transactions with activity rows, PGlite action tests) already exist and are tested; risk is concentrated in new money math and the before/after shape, both covered by planned tests.",
-    "debate_summary": "The critique file held an empty object, so there was nothing to judge: no findings to confirm, narrow, or dismiss. I verified the proposal directly against plan/brief.md, docs/trd.md, and the code (guardGroup, withDb/getDb, 0003 migration precedent, group page placeholder). The proposal respects both brief decisions (stored split rule with inputs beside computed shares; atomic writes with before/after activity payload; Neon Pool lifecycle via withDb close with no new backend branches) and the split's criteria (each IAC-1..4 has a sourced criterion; TR-3/TR-4/TR-8/TR-11 each have one). I kept the proposal intact and added only the missing arbiter fields (debate_summary, residual_risks).",
+    "confidence": 85,
+    "confidence_rationale": "Both causes are confirmed at line level against the PR branch code and match QA evidence exactly (3 render sites for 3 counted occurrences; both redirect branches using one notice constant; the existing test asserting the buggy URL). The fix touches only presentation and a notice param, with existing patterns and tests to extend.",
+    "evidence": [
+      "T-16 counts /short of/ 3x in main; components/expense-editor.tsx renders that sentence in FieldError (errors.payers), LiveNote (paidNote via paidPartsMessage) and the submit-row StateMessage (state.message), while only the top summary is gated on empty fieldErrors",
+      "T-16 spec first asserts #expense-payers-error contains the shortfall, so the FieldError is the surviving instance and the other two echoes must go",
+      "lib/expenses/actions.ts updateExpense returns message 'Nothing to change.' for unchanged but redirects with EXPENSE_UPDATED in both paths, discarding the message; validation.ts defines no unchanged notice value",
+      "lib/expenses/actions.test.ts 'writes nothing at all for a save that changes nothing' asserts ?expense=updated, which is why CI stayed green while QA documented BUG-2"
+    ],
     "files": [
       {
         "action": "edit",
-        "change": "Add expenses, expense_payers, split_lines tables; extend activity_event with nullable expense_id and payload jsonb",
-        "path": "lib/db/schema.ts",
-        "why": "Single source of truth for the TR-8 ledger and TR-10 payload"
-      },
-      {
-        "action": "create",
-        "change": "Hand-written guarded 0004 migration with IF NOT EXISTS tables and indexes, following the 0003 precedent",
-        "path": "lib/db/migrations/0004_expenses.sql",
-        "why": "Same migrations on PGlite and Neon via existing runner"
-      },
-      {
-        "action": "create",
-        "change": "Pure integer calculators for equal/exact/percentage/shares with first-payer remainder rule and shortfall errors",
-        "path": "lib/money/splits.ts",
-        "why": "TR-4 money core; one derived path balances will read"
-      },
-      {
-        "action": "create",
-        "change": "Zod boundary schemas for expense inputs, payer parts, per-type rules and list filters",
-        "path": "lib/expenses/validation.ts",
-        "why": "Shortfall-naming errors; only integers cross inward"
-      },
-      {
-        "action": "create",
-        "change": "Newest-first list with member/category filter and description search plus edit read-back",
-        "path": "lib/expenses/queries.ts",
-        "why": "Shared read layer for list, filters and edit reopen"
-      },
-      {
-        "action": "create",
-        "change": "create/update/delete Server Actions each in one db.transaction with the activity row and before/after diff",
-        "path": "lib/expenses/actions.ts",
-        "why": "TR-8 atomicity reusing the audited groups pattern"
-      },
-      {
-        "action": "create",
-        "change": "Client ExpenseEditor island with split tabs, live sum line, kept input on error and delete confirm",
+        "change": "Gate the submit-row StateMessage on empty fieldErrors and suppress the payer/split LiveNote when the server refused that section, so each refusal sentence renders exactly once; DeleteExpenseForm untouched",
         "path": "components/expense-editor.tsx",
-        "why": "ui.md expense-editor screen with five states"
-      },
-      {
-        "action": "create",
-        "change": "Server wrapper for new expense rendering the editor with payer-me and equal-split defaults",
-        "path": "app/groups/[id]/expenses/new/page.tsx",
-        "why": "Creation entry point"
-      },
-      {
-        "action": "create",
-        "change": "Server wrapper rendering the editor prefilled from stored split type and inputs",
-        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
-        "why": "IAC-2 reopen fidelity per ADR-0007"
+        "why": "BUG-1 triple-rendered refusal: FieldError, LiveNote echo and unconditional StateMessage each render the same sentence"
       },
       {
         "action": "edit",
-        "change": "Add expenses section with filter, search, newest-first rows and empty state to group detail",
-        "path": "app/groups/[id]/page.tsx",
-        "why": "IAC-3 list lives on the group page"
+        "change": "Add EXPENSE_UNCHANGED notice constant and map it in expenseNoticeText to the no-change sentence; unknown values still return null",
+        "path": "lib/expenses/validation.ts",
+        "why": "BUG-2 has no unchanged notice value, so the action cannot redirect to one"
+      },
+      {
+        "action": "edit",
+        "change": "Redirect the unchanged edit path with the unchanged notice while the updated path keeps EXPENSE_UPDATED",
+        "path": "lib/expenses/actions.ts",
+        "why": "Both result kinds currently redirect to ?expense=updated, making the no-change message unreachable"
       }
     ],
     "issue": 6,
+    "kind": "bug",
+    "out_of_scope": [
+      "Remainder placement UI (still unit-proven only, per QA coverage gap)",
+      "Any ledger, transaction or money-math change; writes and balances are untouched"
+    ],
     "qa_script": [
-      "Add an equal-split and a multi-payer expense; confirm newest-first list with group-currency amounts.",
-      "Submit short payer parts; confirm the error names the shortfall and size and keeps input.",
-      "Add exact, percentage and share expenses; confirm a remainder lands on the first payer.",
-      "Reopen an expense; confirm stored split type and inputs show exactly as entered.",
-      "Filter by member and category, search by description.",
-      "Delete via the naming confirm; probe signed-out and non-member access."
+      "Submit short payer parts; count the shortfall sentence exactly once in main and confirm #expense-payers-error holds it",
+      "Submit a short exact split and a bad percentage; confirm one refusal sentence each",
+      "Open an expense editor and save untouched; confirm the no-change notice instead of Expense updated",
+      "Edit for real; confirm Expense updated still shows with the feed row"
     ],
-    "residual_risks": [
-      "Remainder definition under multi-payer: first payer is submission order position zero, unverified against a conflicting reading until QA checks it.",
-      "Before/after diff shape for expense-edited activity rows is new and has no prior fixture; a field-name mismatch would surface only in the edit test and QA feed check.",
-      "Neon interactive-transaction path cannot be exercised in CI/QA (PGlite only); the shared db.transaction path plus the backend-branch invariant is the only guard.",
-      "Failed-save input retention and delete-confirm naming are browser-only behaviors with no test coverage; QA must drive them."
-    ],
+    "reproduced": false,
     "risks": [
-      "Forbidden paths (docs/spec, docs/trd.md, docs/ui.md, .sdlc/**) untouched, so TR-10/activity-model prose cannot be edited here; schema comments carry the decision.",
-      "Inputs vs computed shares must agree on every write; actions compute shares server-side in the same transaction."
+      "FieldError carries no live-region role, so after dedupe the refusal is visible exactly once; a stricter screen-reader announcement audit is out of scope and QA T-16 counts visible text",
+      "DeleteExpenseForm keeps its StateMessage by design since it has no field-error path; no change there"
     ],
+    "root_cause": "BUG-1: parseExpenseInput returns the shortfall sentence in two places by design (message plus fieldErrors.payers), and the editor renders it three times: the FieldError beside the payer rows, the client LiveNote recomputing the same paidPartsMessage, and the submit-row StateMessage rendering state.message unconditionally. Only the top summary is gated on empty fieldErrors, so every field-level refusal echoes twice plus the live-region third. BUG-2: updateExpense maps both the updated and the unchanged result kinds to the same EXPENSE_UPDATED notice param (validation.ts defines no unchanged notice value), so the redirect discards the Nothing-to-change message; worse, the existing unchanged-save test asserts the buggy ?expense=updated URL, which is why CI stayed green while the defect shipped.",
     "tests": [
       {
-        "action": "create",
+        "action": "edit",
         "cases": [
-          "generated splits preserve totals with remainder on first payer for equal/percentage/shares",
-          "exact pass-through and shortfall messages; basis-point parsing without floats"
-        ],
-        "path": "lib/money/splits.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "shortfall messages for payer parts, exact amounts, percentages; filter schema shapes"
-        ],
-        "path": "lib/expenses/validation.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "round-trip for all four types; forced failure leaves no rows; edit writes before/after; delete keeps feed row; auth refusals"
+          "no-change save redirects to ?expense=unchanged and writes no activity row (corrects the existing assertion that locked in ?expense=updated)",
+          "changed save still redirects to ?expense=updated with a before/after feed row"
         ],
         "path": "lib/expenses/actions.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "expenseNoticeText maps the unchanged notice to the no-change sentence and still returns null for unknown values",
+          "shortfall parse returns the shortfall sentence as both message and fieldErrors.payers: the single-sentence contract the editor dedupe relies on"
+        ],
+        "path": "lib/expenses/validation.test.ts"
       }
     ],
-    "understanding": "Issue #6 is the core expense ledger: single/multi-payer expenses across all four split types with integer minor-unit math and first-payer remainder; stored split rule beside computed shares per ADR-0007; atomic create/edit/delete with activity rows carrying before/after; newest-first list with filter and search.",
-    "unknowns": [
-      "QA auth mode (derived vs fixture) is still open but the plan needs neither, using session-cookie tests like the groups suite."
-    ],
-    "version": 1,
+    "understanding": "Attempt 1 (PR #20, plan v1) was architecturally right: 14 of 16 QA tests pass and every AC-1..AC-8 rollup passes. What it got wrong is two details in brand-new code, and its own test suite locked one of them in. First, components/expense-editor.tsx renders a refused shortfall sentence three times: the FieldError beside the payer rows, the client LiveNote recomputing the same paidPartsMessage, and the submit-row StateMessage rendering state.message unconditionally (only the top summary is gated on having no field errors). QA T-16 counts /short of/ 3x in main and the code has exactly these three render sites. Second, lib/expenses/actions.ts redirects both the updated and the unchanged edit paths to ?expense=updated so the Nothing-to-change message is unreachable, and lib/expenses/actions.test.ts asserts that buggy URL, which is why CI stayed green while QA documented BUG-2. Neither is a flaw in the v1 ledger design; both are small implementation errors with precise line-level fixes.",
+    "version": 2,
     "mode": "committed"
   },
   "touch_paths": [
@@ -374,10 +348,10 @@
   "validated_at": "2026-10-05T01:46:35.377Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
-  "work_order_version": 1,
-  "work_order_posted_at": "2026-10-05T01:49:20.047Z",
-  "work_order_from": "plan",
-  "work_order_comment": "5986736118",
+  "work_order_version": 2,
+  "work_order_posted_at": "2026-10-05T03:24:00.768Z",
+  "work_order_from": "root-cause",
+  "work_order_comment": "5987551374",
   "implemented_version": 1,
   "follow_ups": {
     "review": [

@@ -32,5 +32,12 @@
       "action": "-> triage"
     }
   ],
-  "epic": 31
+  "epic": 31,
+  "issue_snapshot": {
+    "title": "Signing in lands on Home, never on Profile; every signed-in page shows the app shell top bar with Tabs mark linking H...",
+    "body": "Deferred from #33 by its work order: the shared 404 (app/not-found.tsx) stays shell-less and session-blind by TR-3 design, so forbidden and missing reads stay indistinguishable.\n\n## Acceptance (from the split)\n\n- **IAC-1** Signing in lands on Home, never on Profile; every signed-in page shows the app shell top bar with Tabs mark linking Home, current place, and account menu opening Profile and Sign out.\n\nPart of #31.\nDepends on #33.",
+    "sha256": "112e13413fb70efced24b8c94e5545688a979907ffa1b59a5ffb19ca2c60f79c",
+    "by": "github-actions[bot]",
+    "at": "2026-10-05T22:25:45.468Z"
+  }
 }

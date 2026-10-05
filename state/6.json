@@ -505,6 +505,21 @@
       "work_order_version": 2,
       "run_url": "https://github.com/Shivam-Fl/tabs-v3/actions/runs/37262825259",
       "prior_signatures": []
+    },
+    "triage": {
+      "verdict": "resume",
+      "diagnosis": "root-cause's last step, `node .sdlc/bin/post-work-order.mjs` (FROM_STAGE=root-cause), correctly refused the work order: its acceptance criteria carry no `source`, so issue 6's split criteria IAC-1..IAC-4 were neither answered nor deferred. The artifact judged is the session's structured result (4579 bytes, AC-1..AC-11 with only `id`/`check`), which .github/workflows/sdlc-root-cause.yml writes over the agent's own work-order.json — root-cause-transcript.json shows the first StructuredOutput call was rejected for shape (reply: \"The output tool expects a single `work_order` key — resubmitting in that shape.\"), and `source` was lost in the slimmer re-emission, not in the stage's reasoning: the revision's BUG-3 root cause matches the ledger's qa_open_bugs exactly. Nothing transient — session ended is_error false after 30 turns, no network/rate/quota/provider error in the log, prior_signatures empty, attempt 3 within limits. The stage did its work; only the last step refused the shape it was handed.",
+      "evidence": "failed-run.log, job 'publish', step 'Post it and route': `sdlc: the work order neither answers nor defers IAC-1, IAC-2, IAC-3, IAC-4 from the issue's \"## Acceptance (from the split)\"…` then `##[error]Process completed with exit code 1.` — the refusal text is the error, the exit code only how it surfaced. Gate: .sdlc/bin/post-work-order.mjs → unansweredSplitCriteria in .sdlc/bin/lib/issue-body.js (reads `acceptance[].source`). Artifact 11325258898: work-order.json is 4579 bytes while root-cause-transcript.json in the same artifact records `Write work-order.json (9727 chars)` and the reply above — two documents, and the substitution step keeps the smaller. sdlc-state:state/6.json rejected_artifacts['work-order'] = {at 2026-10-05T04:21:38.663Z, run 37262825259, errors [the refusal], text 5047 chars}; the run's own upload was previous-work-order.json (v2), whose AC-1..AC-10 already carry source IAC-1..IAC-4/TR-n. Same refusal was triaged `resume` on issue 3 (plan) and twice on issue 5 (root-cause) — state/3.json, state/5.json triage_history — with no framework_defect, and #5 recovered."
     }
-  }
+  },
+  "triage_history": [
+    {
+      "at": "2026-10-05T04:28:49.910Z",
+      "stage": "root-cause",
+      "verdict": "resume",
+      "confidence": 82,
+      "diagnosis": "root-cause's last step, `node .sdlc/bin/post-work-order.mjs` (FROM_STAGE=root-cause), correctly refused the work order: its acceptance criteria carry no `source`, so issue 6's split criteria IAC-1..IAC-4 were neither answered nor deferred. The artifact judged is the session's structured result (4579 bytes, AC-1..AC-11 with only `id`/`check`), which .github/workflows/sdlc-root-cause.yml writes over the agent's own work-order.json — root-cause-transcript.json shows the first StructuredOutput call ",
+      "run": "37262825259"
+    }
+  ]
 }

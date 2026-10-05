@@ -1,4 +1,16 @@
-import { boolean, index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import type { ExpenseEditPayload } from '../expenses/validation';
 
 /**
  * The migration ledger — operational bookkeeping, not a domain table. The migration runner
@@ -103,15 +115,24 @@ export const memberships = pgTable(
 );
 
 /**
- * The member rows of the activity feed (TR-10). Only membership events are written here by this
- * ticket — expense and payment events belong to theirs — and a row is written in the same
- * transaction as the change it records, so the feed can never disagree with the membership table.
+ * The rows of the activity feed (TR-10). A row is written in the same transaction as the change
+ * it records, so the feed can never disagree with the tables it describes.
  *
  * `actor_user_id` is who did it, `subject_*` is who it happened to: for a join, a claim and a
  * leave they are the same person, but a removal is the owner acting on somebody else, and a
  * feed that stored only the actor could not say who was removed. The subject name is copied
  * rather than joined because the membership row it came from is deleted by the event that
  * records it, and a placeholder being removed has no user id to join to at all.
+ *
+ * An expense event has no user subject at all — it is about a thing, not a person — so
+ * `subject_name` carries the expense's description at the moment of the event and
+ * `subject_user_id` stays null. `expense_id` is the link back to what it acted on, and it is
+ * `set null` rather than cascading because an expense-deleted row must outlive the delete that
+ * produced it: the feed is the record that the expense existed.
+ *
+ * `payload` is the structured half of TR-10's expense-edited row — the before and after of the
+ * fields that changed — and stays null on every other kind, which needs no more than its actor,
+ * subject and timestamp.
  */
 export const activityEvents = pgTable(
   'activity_event',
@@ -126,7 +147,113 @@ export const activityEvents = pgTable(
     subjectUserId: uuid('subject_user_id').references(() => users.id, { onDelete: 'set null' }),
     subjectName: text('subject_name').notNull(),
     kind: text('kind').notNull(),
+    expenseId: uuid('expense_id').references(() => expenses.id, { onDelete: 'set null' }),
+    payload: jsonb('payload').$type<ExpenseEditPayload>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('activity_event_group_id_created_at_idx').on(table.groupId, table.createdAt)],
+);
+
+/**
+ * Expenses (TR-8): the ledger everything else derives from. `amount_minor` is the whole, in
+ * integer minor units — the only shape money is ever stored in — and `split_type` names the
+ * rule that produced the split lines beside it, because ADR-0007 stores the rule with its
+ * result rather than trying to recover it from the computed shares.
+ *
+ * `date` is a `date`, not a timestamp: an expense happens on a day, the viewer's time zone must
+ * not move it, and `mode: 'string'` keeps it the `YYYY-MM-DD` a date input speaks rather than a
+ * Date object that has to survive JSON, a time zone and a round trip to stay the same day.
+ *
+ * The index is `(group_id, date, id)` because that is exactly the group page's "newest first"
+ * read — one group's expenses, newest day first, with the id breaking a tie between two on the
+ * same day so the order is a decision rather than whatever the planner returns.
+ */
+export const expenses = pgTable(
+  'expenses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    description: text('description').notNull(),
+    amountMinor: integer('amount_minor').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    category: text('category').notNull().default('other'),
+    note: text('note'),
+    splitType: text('split_type').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('expenses_group_id_date_id_idx').on(table.groupId, table.date, table.id)],
+);
+
+/**
+ * What each member paid towards one expense: one row per payer, and the rows sum to the
+ * expense's total (validated at the boundary before anything is written).
+ *
+ * There is deliberately **no foreign key to `memberships`**, which is the ADR-0007 trade: a
+ * group that removes a member must not erase who paid for what or rewrite everyone else's
+ * balance, so the reference is an id validated inside the same transaction and the name is a
+ * snapshot taken at write time. The row outlives the seat, and reads by that seat still find it.
+ *
+ * `(expense_id, membership_id)` is unique because one member paying twice towards one expense
+ * is two parts of the same number, not two rows. `position` is the order they were entered in,
+ * which is what "the first payer" means for the rounding remainder and what makes an edit that
+ * changes nothing else leave the remainder where it was.
+ */
+export const expensePayers = pgTable(
+  'expense_payers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    expenseId: uuid('expense_id')
+      .notNull()
+      .references(() => expenses.id, { onDelete: 'cascade' }),
+    membershipId: uuid('membership_id').notNull(),
+    displayName: text('display_name').notNull(),
+    amountMinor: integer('amount_minor').notNull(),
+    position: integer('position').notNull().default(0),
+  },
+  (table) => [
+    unique('expense_payers_expense_id_membership_id_unique').on(
+      table.expenseId,
+      table.membershipId,
+    ),
+    index('expense_payers_expense_id_idx').on(table.expenseId),
+    index('expense_payers_membership_id_idx').on(table.membershipId),
+  ],
+);
+
+/**
+ * What each member owes: the input they entered, whether they were in the split at all, and the
+ * share that input computes to (ADR-0007, TRD "SplitLine").
+ *
+ * Both halves are stored on purpose. `share_minor` is the result every balance and debt reads —
+ * one derived path, never recomputed on read — while `input_value` is what the person typed, in
+ * the unit the expense's `split_type` names: minor units for `exact`, basis points for
+ * `percentage` (33.33% is 3333), a count for `shares`, and null for `equal`, where there is
+ * nothing to type. Reopening the editor from `share_minor` alone could not recover the rule:
+ * a typed 33.33% and a typed exact amount can round to the same share, so the form would come
+ * back showing a rule nobody entered. `included` is the third thing the person decided — a
+ * member can be left out — and it is what makes a zero-share row mean "deliberately out"
+ * rather than "missing".
+ *
+ * No membership foreign key, for the same reason `expense_payers` has none.
+ */
+export const splitLines = pgTable(
+  'split_lines',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    expenseId: uuid('expense_id')
+      .notNull()
+      .references(() => expenses.id, { onDelete: 'cascade' }),
+    membershipId: uuid('membership_id').notNull(),
+    displayName: text('display_name').notNull(),
+    included: boolean('included').notNull().default(true),
+    inputValue: integer('input_value'),
+    shareMinor: integer('share_minor').notNull(),
+  },
+  (table) => [
+    unique('split_lines_expense_id_membership_id_unique').on(table.expenseId, table.membershipId),
+    index('split_lines_expense_id_idx').on(table.expenseId),
+    index('split_lines_membership_id_idx').on(table.membershipId),
+  ],
 );

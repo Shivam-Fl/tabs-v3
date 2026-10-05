@@ -49,6 +49,26 @@ function amountLabel(amount: string, currency: string): string {
   return parsed === null ? amount.trim() : formatMinorUnits(parsed, currency);
 }
 
+/**
+ * A suggested transfer's identity as a React key: both endpoints **and the amount it is for**.
+ *
+ * The amount belongs in here, and leaving it out was the bug (BUG-2). A row holds what the user
+ * typed in `useState`, initialized once, and recording a partial payment revalidates this page so
+ * the same two endpoints come back with a shrunken suggestion. Under an endpoints-only key React
+ * reuses the mounted row: the field keeps the fragment just paid while the suggestion printed
+ * beside it has already moved. Keying by the amount too remounts exactly the row whose suggestion
+ * changed, so its field re-initializes from the remainder instead (AC-10).
+ *
+ * A refused submit moves no amount, so the key is stable, the row is not remounted, and the typed
+ * value plus its field error stay under the row that submitted (T-9). Both behaviours are pinned
+ * by `app/groups/[id]/settle-row-identity.test.ts`.
+ */
+export function transferRowKey(
+  transfer: Pick<Transfer, 'fromMembershipId' | 'toMembershipId' | 'amountMinor'>,
+): string {
+  return `${transfer.fromMembershipId}:${transfer.toMembershipId}:${transfer.amountMinor}`;
+}
+
 function TransferRow({
   groupId,
   currency,
@@ -182,7 +202,10 @@ export function SettleUpForm({
     <div className="flex flex-col gap-3">
       <ul className="flex flex-col gap-2">
         {transfers.map((transfer) => {
-          const key = `${transfer.fromMembershipId}:${transfer.toMembershipId}`;
+          // Endpoints and amount: the same row key the refusal marker is compared against below,
+          // so a row that re-initializes and a row that keeps what was typed are decided by one
+          // expression rather than two that could drift.
+          const key = transferRowKey(transfer);
 
           return archived ? (
             <li

@@ -122,7 +122,12 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/settle/validation.ts",
+    "lib/settle/actions.ts",
+    "lib/settle/actions.test.ts",
+    "lib/settle/balances.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

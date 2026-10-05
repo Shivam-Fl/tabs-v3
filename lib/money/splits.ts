@@ -150,9 +150,13 @@ export interface SplitShare {
 
 /** Exact integer division of a non-negative numerator, whatever its magnitude. */
 function floorDivide(numerator: number, denominator: number): number {
-  // BigInt rather than `Math.floor(a / b)` because the numerator of a percentage share is
-  // total × basis points: at the top of the amount range that product passes the point where a
-  // double still counts one at a time, and the paisa it loses would land in somebody's balance.
+  // BigInt rather than `Math.floor(a / b)`, because what is divided here is a product — a
+  // percentage share is total × basis points, a share of the shares is total × one member's
+  // count — and a double only counts one at a time below 2^53. Inside the boundary's own bounds
+  // both products do fit (2,147,483,647 × 10,000 is 2.1e13; × 999,999 is 2.1e15), but this
+  // function answers for a caller that reached `splitAmount` without meeting the boundary too,
+  // and the paisa a rounded product loses would land in somebody's balance. One rule, exact for
+  // every input it is handed.
   return Number(BigInt(numerator) / BigInt(denominator));
 }
 

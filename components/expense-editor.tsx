@@ -17,17 +17,25 @@ import {
   percentPartsMessage,
   splitPartsMessage,
   splitValueMessage,
-  type ExpenseActionState,
 } from '../lib/expenses/validation';
 import {
   PERCENT_SCALE,
   SPLIT_TYPES,
-  parseBasisPoints,
   parseMinorUnits,
-  parseShares,
+  parseSplitValue,
   shortfallMinor,
   type SplitType,
 } from '../lib/money/splits';
+import {
+  ConfirmStep,
+  DANGER_BUTTON,
+  FieldError,
+  INPUT_CLASSES,
+  LABEL_CLASSES,
+  PRIMARY_BUTTON,
+  QUIET_BUTTON,
+  StateMessage,
+} from './ui';
 
 /**
  * The expense editor (TR-8): one island for creating and for editing, so the rules about what a
@@ -46,42 +54,17 @@ import {
  * Amounts are text in and out: the field holds "12.50", the boundary parses it to 1250, and
  * reopening an expense prints 1250 back as "12.50". A `type="number"` input would put the
  * locale, the spinner and the browser's own floating point between the person and the ledger.
+ *
+ * What a typed split value means is `parseSplitValue`'s, not this island's: the same function the
+ * boundary validates with reads the field back, so the advice here and the refusal there cannot
+ * disagree about what a stored number is. The class strings and the small shared components come
+ * from `components/ui.tsx`, like every other form's.
  */
 
-const INPUT_CLASSES =
-  'min-h-11 w-full rounded-token border border-muted/40 bg-surface px-3 text-ink placeholder:text-muted';
-const LABEL_CLASSES = 'text-sm font-medium';
-const PRIMARY_BUTTON =
-  'min-h-11 rounded-token bg-accent px-4 font-medium text-surface disabled:opacity-60';
-const QUIET_BUTTON = 'min-h-11 rounded-token border border-muted/40 px-4 font-medium';
-const DANGER_BUTTON = 'min-h-11 rounded-token border border-danger/50 px-4 font-medium text-danger';
 const CHIP_ON =
   'flex min-h-11 cursor-pointer items-center rounded-token border border-accent px-3 text-sm font-medium text-accent';
 const CHIP_OFF =
   'flex min-h-11 cursor-pointer items-center rounded-token border border-muted/40 px-3 text-sm font-medium';
-
-function StateMessage({ state }: { state: ExpenseActionState }) {
-  if (state.status === 'idle' || state.message === '') return null;
-
-  return (
-    <p
-      role={state.status === 'error' ? 'alert' : 'status'}
-      aria-live="polite"
-      className={state.status === 'error' ? 'text-sm text-danger' : 'text-sm text-lent'}
-    >
-      {state.message}
-    </p>
-  );
-}
-
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-  return (
-    <p id={id} className="text-sm text-danger">
-      {message}
-    </p>
-  );
-}
 
 /** A line about the numbers as they stand: advice while typing, never a substitute for the save. */
 function LiveNote({ tone, text }: { tone: 'ok' | 'bad'; text: string }) {
@@ -103,13 +86,6 @@ function valueLabel(splitType: SplitType, name: string): string {
   if (splitType === 'percentage') return `Percentage for ${name}`;
   if (splitType === 'shares') return `Shares for ${name}`;
   return `Amount for ${name}`;
-}
-
-function parseValue(splitType: SplitType, raw: string): number | null {
-  if (splitType === 'exact') return parseMinorUnits(raw);
-  if (splitType === 'percentage') return parseBasisPoints(raw);
-  if (splitType === 'shares') return parseShares(raw);
-  return null;
 }
 
 export function ExpenseEditor({
@@ -202,7 +178,7 @@ export function ExpenseEditor({
       return { tone: 'ok', text: `Split equally between ${included.length}.` };
     }
 
-    const values = included.map((participant) => parseValue(splitType, participant.value));
+    const values = included.map((participant) => parseSplitValue(splitType, participant.value));
     if (values.some((value) => value === null)) {
       return { tone: 'bad', text: splitValueMessage(splitType) };
     }
@@ -571,20 +547,18 @@ export function DeleteExpenseForm({
     <form action={formAction} className="flex flex-col gap-2">
       <input type="hidden" name="groupId" value={groupId} />
       <input type="hidden" name="expenseId" value={expenseId} />
-      <div className="flex flex-col gap-2 rounded-token border border-danger/40 p-3">
-        <p role="alert" className="text-sm">
-          {`Delete “${description}”? It leaves the group and stops counting towards every balance.`}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={isPending} aria-busy={isPending} className={DANGER_BUTTON}>
-            {isPending ? 'Deleting…' : 'Delete expense'}
-          </button>
-          <button type="button" onClick={() => setConfirming(false)} className={QUIET_BUTTON}>
-            Cancel
-          </button>
-        </div>
+      <ConfirmStep
+        question={`Delete “${description}”? It leaves the group and stops counting towards every balance.`}
+        confirmLabel="Delete expense"
+        pendingLabel="Deleting…"
+        isPending={isPending}
+        onCancel={() => setConfirming(false)}
+      >
+        {/* The refusal renders inside the confirm box, where it has always been: a success
+            redirects to the group with the note, so a refusal is the only thing this form is
+            still here to say. */}
         <StateMessage state={state} />
-      </div>
+      </ConfirmStep>
     </form>
   );
 }

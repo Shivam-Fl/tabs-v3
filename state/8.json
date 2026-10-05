@@ -16,7 +16,6 @@
     "n": 1,
     "run": "37307819061"
   },
-  "halted": null,
   "pending": {
     "stage": "implement",
     "rework": null,
@@ -423,7 +422,7 @@
     "decided_at": "2026-10-05T11:13:34.667Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "qa",
+  "dispatched_stage": "merge",
   "validated_from": "plan",
   "validated_at": "2026-10-05T11:24:41.106Z",
   "validated_ac_changes": [],

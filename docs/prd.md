@@ -1,6 +1,6 @@
 # Product requirements
 
-_Generated from `project-brief.json` for #1. Edit the brief, not this file._
+_Generated from `project-brief.json` for #31. Edit the brief, not this file._
 
 ## The problem
 
@@ -34,6 +34,7 @@ Splitting shared costs among friends, flatmates and trip groups still runs on me
 - Expenses third
 - Balances and settle-up fourth
 - Activity, seed and deploy guide last
+- Professional fintech-grade UI redesign across every screen, behaviour and money rules unchanged
 
 ## Deliberately not doing
 

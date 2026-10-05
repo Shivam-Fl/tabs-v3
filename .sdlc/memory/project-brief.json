@@ -6,11 +6,11 @@
         "path": "app/"
       },
       {
-        "holds": "Shared React components built only from the ui tokens; no data fetching inside",
+        "holds": "Shared React components built only from the ui tokens, including the one component set (buttons, inputs, rows, cards, avatars, badges, dialogs/sheets, toasts, skeletons); no data fetching inside",
         "path": "components/"
       },
       {
-        "holds": "Drizzle schema (single source of truth), SQL migrations, getDb() that returns PGlite or a neon-serverless Pool",
+        "holds": "Drizzle schema (single source of truth), SQL migrations, getDb() returning PGlite or a neon-serverless Pool",
         "path": "lib/db/"
       },
       {
@@ -34,50 +34,44 @@
         "path": "scripts/"
       }
     ],
-    "shape": "One Next.js App Router application on Vercel serverless. Browser talks only to Next.js routes/Server Actions; all reads and writes go through a server-side authorization check against the session user, then through Drizzle to either embedded PGlite (DATABASE_URL unset: dev, CI, QA) or Neon Postgres (DATABASE_URL set: production). Pure domain logic (money splits, balances, debt simplification) lives in framework-free lib/ modules covered by unit tests; the database holds a ledger of expenses and payments from which balances are always derived."
+    "shape": "One Next.js App Router application on Vercel serverless. The browser talks only to Next.js routes and Server Actions; all reads and writes pass a server-side authorization check against the session user, then go through Drizzle to either embedded PGlite (DATABASE_URL unset: dev, CI, QA) or Neon Postgres (DATABASE_URL set: production). Pure domain logic (money splits, balances, debt simplification) lives in framework-free lib/ modules covered by unit tests; the database holds a ledger of expenses and payments from which balances are always derived."
   },
   "assumptions": [
     {
-      "assumption": "Node 20 or newer is available wherever the pipeline builds and runs (Vercel, CI runner, QA box).",
-      "basis": "Next.js 16 requires Node 20.9+; the clean CI runner ships node/npm.",
-      "if_wrong": "Builds fail immediately on every ticket until the runner or engines field is fixed; cheap to detect, blocks everything.",
-      "validate_by": "First skeleton ticket runs next build on CI."
+      "assumption": "Vercel plus Neon remain available with the Storage-tab integration that auto-injects a pooled DATABASE_URL.",
+      "basis": "Neon/Vercel documented integration; the repo is already deployed this way.",
+      "if_wrong": "Production database wiring must be redesigned; local, CI and QA on PGlite are unaffected.",
+      "validate_by": "First production deploy connects Vercel, adds Neon, and sets secrets per the README."
     },
     {
-      "assumption": "Neon's free tier and Vercel serverless limits comfortably hold a v1 Splitwise-class workload.",
-      "basis": "Spec targets friends/flatmates/trips, not high-throughput; pooled Neon URL for runtime, direct URL for migrations.",
-      "if_wrong": "Connection exhaustion or cost forces pooling config or a paid tier mid-project.",
-      "validate_by": "Skeleton ticket load-smokes the health endpoint and one group flow against Neon."
+      "assumption": "One currency per group is sufficient for v1; no exchange rates are ever needed.",
+      "basis": "Spec hard constraint: multi-currency groups are explicitly not in this version.",
+      "if_wrong": "Money math, formatting and the balance derivation all assume a single group currency and would need a rates model.",
+      "validate_by": "No issue before v1 asks for a second currency in one group."
     },
     {
-      "assumption": "One currency per group with integer minor units covers all v1 money needs; no FX or multi-currency splits.",
-      "basis": "Spec explicitly defers multiple currencies and exchange rates to later.",
-      "if_wrong": "Split math and the schema need a currency-per-expense rework; contained but touches every money ticket.",
-      "validate_by": "Human gate confirms S-10 deferral stands."
+      "assumption": "QA keeps booting the app locally via compose on localhost:3000 with PGlite, not against Vercel previews.",
+      "basis": ".sdlc/config.yml env.mode is compose with a localhost-only allowlist.",
+      "if_wrong": "The sdlc:serve target and seed strategy would need to change to drive remote previews.",
+      "validate_by": "Next QA run boots via npm run sdlc:serve and drives http://localhost:3000."
     },
     {
-      "assumption": "PGlite (WASM Postgres) behaves as real Postgres for this schema: plain tables, no extensions, single connection.",
-      "basis": "Drizzle documents a PGlite driver and PGlite embeds PostgreSQL 18; the same migrations run on both.",
-      "if_wrong": "Migration or query incompatibilities force conditional SQL per backend; the dual-DB decision unravels.",
-      "validate_by": "Skeleton ticket runs the full migration set plus seed on both backends in CI."
+      "assumption": "Inter can be bundled at build time via next/font with no runtime fetch to Google Fonts.",
+      "basis": "next/font self-hosts font files at build time; the standard pattern for offline-safe builds.",
+      "if_wrong": "First build with the font wired in fails or flashes unstyled text, and the theme falls back to the system stack.",
+      "validate_by": "CI build with next/font/Inter passes and QA screenshots show Inter, not fallback."
     },
     {
-      "assumption": "The repo owner will connect the Vercel project and add Neon from the Storage tab by hand; the pipeline never provisions cloud resources.",
-      "basis": "Pipeline allowlists are localhost-only and agents hold no Vercel/Neon credentials.",
-      "if_wrong": "No production deploy or preview exists and deploy tickets stall waiting on a person.",
-      "validate_by": "README deploy guide names the manual steps; open question asks the owner to confirm."
+      "assumption": "lucide-react stays actively maintained as the single icon dependency for the life of v1.",
+      "basis": "Web research in 2026 shows active 1.x releases and default adoption in Next.js starter stacks.",
+      "if_wrong": "Icons freeze on the last published version; replacement means swapping one dependency, not redesigning screens.",
+      "validate_by": "npm audit / version check during each dependency pass."
     }
   ],
   "commands": {
     "ready": "curl -fsS http://localhost:3000/api/health",
     "seed": "npm run db:seed",
     "serve": "npm run build && npm run start -- --port 3000",
-    "stubbed": [
-      "sdlc:verify is a stub until the skeleton ticket adds typecheck, the Vitest suite and a Next.js build for it to run",
-      "sdlc:serve is a stub until the skeleton ticket adds the Next.js app for build/start to boot",
-      "sdlc:seed is a stub until the seed ticket adds scripts/seed for it to execute",
-      "sdlc:ready is a stub until the skeleton ticket adds the /api/health endpoint for it to poll"
-    ],
     "verify": "npm ci && npm run typecheck && npm run test:ci && npm run build"
   },
   "confidence": 82,
@@ -85,10 +79,16 @@
     "TypeScript strict; Server Components and Server Actions by default, 'use client' only for interactive islands",
     "Validate every server input with zod at the route/action boundary; user-safe errors name what is off and by how much",
     "Drizzle schema in lib/db/schema is the single source of truth; migrations are SQL files applied automatically on boot, never hand-edits to prod",
-    "Money crosses module boundaries only as integer minor units; formatting happens at render time from the group's currency",
-    "Tests colocate as *.test.ts beside the lib/ module they prove and run under Vitest; no test needs network or a real server",
+    "Money crosses module boundaries only as integer minor units; formatting happens at render time from the group currency",
+    "Tests colocate as *.test.ts beside the lib/ module or app/ route they prove and run under Vitest; no test needs network or a real server",
     "No dependency that needs native bindings or a background process; anything added must work on Vercel serverless and a clean CI runner with node/npm only",
-    "PRs touch one concern, describe the manual QA path, and never touch the reserved framework paths"
+    "UI work uses only the design tokens in the ui section and the shared components/ set; no screen invents its own spacing, type size, colour or empty/loading/error treatment",
+    "PRs touch one concern, describe the manual QA path, and never touch the reserved framework paths",
+    "The verify suite is typecheck + test:ci + build (via sdlc:verify). There is no lint script and none was added on purpose — a config the repo does not have is a decision about what the checks enforce. The work-order pack's lint step is not applicable here.",
+    "A refusal sentence renders exactly once in the page — its field/section error, or the summary, or the live region, never two of them (PR #20 BUG-1).",
+    "An action that succeeds by changing the page redirects with a notice query param rendered in one role=status slot per panel; inline action state is for refusals only (ADR-0008).",
+    "Every form that acts gets a pending/double-submit guard: isPending in an auth island, a useFormStatus button island on a plain server form (ProfileSaveButton, PR #14). A bare server form submits twice on a double-click.",
+    "Destructive flows confirm by naming their object through the shared ConfirmStep; rename deliberately does not — save-then-note. The AC that demanded a rename confirm was the defect, amended in PR #16."
   ],
   "coverage": [
     {
@@ -126,7 +126,6 @@
     {
       "disposition": "requirement",
       "refs": [
-        "TR-4",
         "TR-8"
       ],
       "section": "S-5"
@@ -163,7 +162,7 @@
       "disposition": "non_goal",
       "refs": [],
       "section": "S-10",
-      "why": "Password reset, native apps, in-app payments, receipts, recurring expenses, multi-currency, charts and email are explicitly deferred by the spec; the schema must not make them hard but no ticket builds them."
+      "why": "Password reset, native apps, in-app payments, receipts, recurring expenses, multi-currency groups, charts and email notifications are deliberately deferred so v1 ships trustworthy shared-expense basics; the schema must not make them hard later."
     },
     {
       "disposition": "scope",
@@ -172,7 +171,8 @@
         "Groups and members second",
         "Expenses third",
         "Balances and settle-up fourth",
-        "Activity, seed and deploy guide last"
+        "Activity, seed and deploy guide last",
+        "Professional fintech-grade UI redesign across every screen, behaviour and money rules unchanged"
       ],
       "section": "S-11"
     }
@@ -185,40 +185,52 @@
       "title": "Next.js App Router on Vercel"
     },
     {
-      "because": "The spec requires Postgres with zero local setup: Neon when DATABASE_URL is set, an embedded in-process Postgres otherwise, same migrations on both. PGlite is a WASM build of real PostgreSQL with a first-class Drizzle driver, so dev, CI and browser QA need nothing installed; Drizzle is light, serverless-safe and speaks to both backends. Prisma was rejected for its heavier engine downloads on serverless/CI and a weaker PGlite story. The http driver was rejected for the Neon side: it cannot hold an interactive transaction, and creating, editing or deleting an expense must write the expense, its payers, its shares and its activity entry atomically (TR-8: never half-written).",
-      "consequences": "Easy: npm run dev works with nothing set; CI runs the real dialect with no containers; one migration set serves both backends; expense writes commit atomically via db.transaction. Hard: schema must stay within plain-Postgres SQL both backends accept; PGlite must never be used in production where disk is ephemeral; A WebSocket Pool must not outlive the request that uses it on serverless: getDb() on the Neon side opens the Pool for the request and closes it when the request's work is done, including after an error, and nothing holds a Pool or client at module scope, so every transaction must open, commit and close inside one request.",
-      "decision": "Use Drizzle ORM with a getDb() switch: @electric-sql/pglite when DATABASE_URL is unset, Neon via Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket) when DATABASE_URL is set; one SQL migration set applied automatically on boot.",
+      "because": "The spec requires Postgres with zero local setup: Neon when DATABASE_URL is set, an embedded in-process Postgres otherwise, same migrations on both. PGlite is a WASM build of real PostgreSQL with a first-class Drizzle driver, so dev, CI and browser QA need nothing installed; Drizzle is light, serverless-safe and speaks to both backends.",
+      "consequences": "Easy: npm run dev works with nothing set; CI runs the real dialect with no containers; one migration set serves both backends. Hard: schema must stay within plain-Postgres SQL both backends accept; a WebSocket Pool must not outlive the request that uses it, so every transaction opens, commits and closes inside one request.",
+      "decision": "Use Drizzle ORM with a getDb() switch: @electric-sql/pglite when DATABASE_URL is unset, Neon via Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket) when DATABASE_URL is set; one SQL migration set applied automatically on boot. Rejected Prisma (heavier engine downloads, weaker PGlite story) and the neon-http driver (cannot hold the interactive transactions TR-8 requires).",
       "title": "Drizzle with PGlite locally and Neon in production"
     },
     {
-      "because": "The product needs only email/password plus server-revocable sessions; there is no OAuth and no external identity provider. Auth.js v5 is in security-patch mode with its own team pointing new projects at Better Auth, and its JWT strategy cannot revoke on sign-out without a denylist — while the spec requires sign-out to end the session on the server. Hand-rolled opaque tokens in a sessions table give exactly that with two dozen lines.",
+      "because": "The product needs only email/password plus server-revocable sessions; there is no OAuth and no external identity provider. Auth.js v5 is in security-patch mode with its own team pointing new projects elsewhere, and its JWT strategy cannot revoke on sign-out without extra machinery the spec forbids us to skip.",
       "consequences": "Easy: sign-out revocation is a row delete; no auth framework to track. Hard: the project owns session hygiene (expiry, rotation, cleanup) and must get cookie flags right once.",
       "decision": "Hand-rolled auth: bcryptjs password hashes plus opaque random session tokens stored server-side in httpOnly cookies; no Auth.js, no third-party auth service.",
       "title": "Hand-rolled sessions, no auth framework"
     },
     {
-      "because": "Native bcrypt and argon2 packages have documented native-binding load failures on Vercel serverless, while bcryptjs is pure JS with no node-gyp step. OWASP prefers argon2id for new systems, but a hash that fails to load in production is worse than a slightly older algorithm; bcrypt at cost 12 remains an accepted choice.",
-      "consequences": "Easy: hashing works identically on Vercel, CI and PGlite-backed dev with zero build tooling. Hard: migrating to argon2id later means re-hashing on next sign-in; the hash column must store the algorithm identifier to allow that.",
+      "because": "Native bcrypt and argon2 packages have documented native-binding load failures on Vercel serverless, while bcryptjs is pure JS with no node-gyp step. A hash that fails to load in production is worse than a slightly older algorithm; bcrypt at cost 12 remains an accepted choice.",
+      "consequences": "Easy: hashing works identically on Vercel, CI and PGlite-backed dev with zero build tooling. Hard: migrating to argon2id later means re-hashing on next sign-in; the hash column stores the algorithm identifier to allow that.",
       "decision": "Hash passwords with bcryptjs (cost factor 12); store the algorithm with the hash so a future upgrade path stays open.",
       "title": "bcryptjs for password hashing"
     },
     {
-      "because": "The spec demands the simplification algorithm be stated with its guarantees. True minimum-transfer settlement is NP-complete (subset-sum), so the honest choice is the standard greedy min-cash-flow over net balances: settle max debtor against max creditor until empty. It guarantees at most N-1 transfers and no cycles, which is what Splitwise-class apps ship; claiming absolute minimality would be false.",
+      "because": "The spec demands the simplification algorithm be stated with its guarantees. True minimum-transfer settlement is NP-complete, so the honest choice is the standard greedy min-cash-flow over net balances: settle max debtor against max creditor until empty. Claiming absolute minimality would be false.",
       "consequences": "Easy: O(E + N log N), trivially testable, explainable in UI copy. Hard: rare cases exist where one fewer transfer is theoretically possible; support copy must say fewest-achieved-by-algorithm, never optimal.",
       "decision": "Simplify debts with greedy min-cash-flow on net balances (max debtor vs max creditor), guaranteeing at most N-1 transfers; document the algorithm and this guarantee in code and UI.",
       "title": "Greedy min-cash-flow debt simplification"
     },
     {
-      "because": ".sdlc/config.yml on a fresh repo calls npm run sdlc:verify and npm run sdlc:serve, so npm scripts are the contract regardless of stack. A clean CI runner has only node/npm and python3, so verify must install its own toolchain (npm ci) before typecheck, unit tests and build; QA boots compose locally and polls readiness, so serve must boot a production build and ready must hit the DB-checking health endpoint.",
-      "consequences": "Easy: no config edit needed for the pipeline to drive any ticket; verify fails loudly while code exists and the verb is still a stub. Hard: serve does a full build first, so QA boot is minutes not seconds — accepted for testing what ships.",
-      "decision": "The four verbs are npm scripts with production-shaped targets: verify installs then typechecks, unit-tests and builds; serve builds then starts on 3000; seed runs the seed script; ready curls /api/health. All four start as stubs until the code they run exists.",
+      "because": ".sdlc/config.yml on a fresh repo calls npm run sdlc:verify and npm run sdlc:serve, so npm scripts are the contract regardless of stack. A clean CI runner has only node/npm and python3, so verify must install its own toolchain before typecheck, unit tests and build; QA boots compose locally and polls readiness, so serve must boot a production build and ready must hit the DB-checking health endpoint.",
+      "consequences": "Easy: no config edit needed for the pipeline to drive any ticket; verify fails loudly while code exists and the verb is still a stub. Hard: serve does a full build first, so QA boot is minutes not seconds, accepted for testing what ships.",
+      "decision": "The four verbs are npm scripts with production-shaped targets: verify installs then typechecks, unit-tests and builds; serve builds then starts on 3000; seed runs the seed script; ready curls /api/health.",
       "title": "npm sdlc verbs with production-shaped targets"
     },
     {
-      "because": "Reopening an edit form from computed shares alone cannot recover what the user typed: a 33.33% input and an exact-amount input can produce the same stored share, so round-tripping through computed values silently rewrites the user's rule. Storing the inputs makes editing idempotent from the user's perspective — the form reopens showing exactly what was entered — while keeping the money math on one derived path.",
-      "consequences": "Easy: the edit form is a pure function of stored inputs; the record shows the rule, not just its outcome. Hard: two representations of one split must be kept consistent on every write — always in the same transaction as the expense (TR-8) — and validators must check the inputs and the computed shares agree.",
-      "decision": "Store the split rule beside its result: the split type on Expense, and on each split line the member's input as entered (exact amount, percentage or share count, and whether they were included) beside the computed share. The edit form reopens showing exactly what was entered. Balances and debts read only the stored payer parts and computed shares, never the inputs.",
+      "because": "Reopening an edit form from computed shares alone cannot recover what the user typed: a 33.33% input and an exact-amount input can produce the same stored share, so round-tripping through computed values silently rewrites the user's rule. Storing the inputs makes editing idempotent from the user's perspective while keeping the money math on one derived path.",
+      "consequences": "Easy: the edit form is a pure function of stored inputs; the record shows the rule, not just its outcome. Hard: two representations of one split must be kept consistent on every write, always in the same transaction as the expense, and validators must check inputs and computed shares agree.",
+      "decision": "Store the split rule beside its result: the split type on Expense, and on each split line the member's input as entered (exact amount, percentage or share count, and whether they were included) beside the computed share. Balances and debts read only the stored payer parts and computed shares, never the inputs.",
       "title": "Store the split rule with the expense"
+    },
+    {
+      "because": "A success message returned to the submitting form never paints when the success unmounts that form: revalidatePath re-renders the tree, a remove deletes the row that held the form, an archive unmounts the section it sat in. Three QA bugs came from that one mechanism before the rule existed.",
+      "consequences": "Easy: one query value is structurally unable to produce two stacked notes; writer and reader cannot drift. Hard: every success-with-navigation must go through the redirect helper, and panels each need their one role=status slot.",
+      "decision": "A Server Action whose success changes the page redirects with a notice query param from a closed vocabulary, rendered in one role=status slot per panel; inline action state is for refusals only. Rejected: inline success state on the submitting form, per-action status slots in shared client state, and lifting the message above the re-rendered list.",
+      "title": "Success notices ride redirect query params"
+    },
+    {
+      "because": "Issue #31 found Tabs working but looking like a prototype: no app shell, a text-only landing page with a developer health link, a one-stack group page with the primary action buried, a generic expense form, unstyled browser controls, raw ISO dates and UTC times, zero shown in debt red, and no shared component set. The maintainer's replan decision keeps stack, data model, money rules, TRs and every other decision exactly as they are and asks only for the interface to be redesigned to consumer-fintech standard, decided once in docs/ui.md so every ticket follows it. The frontend-design and ux skills already name the shape: roles not hex values, one type scale, tabular money, direction in words and colour, and every screen's five states.",
+      "consequences": "Easy: every later ticket builds from one token set and one component set, so screens look like one product; QA checks each screen against the same five states. Hard: the rewrite must touch nearly every visible surface at once without changing any behaviour, data shape or money rule, so review must reject any diff that smuggles a behaviour change inside a visual one.",
+      "decision": "Rewrite docs/ui.md into a complete professional design system for the product issue #31 describes, following the frontend-design and ux skills: the full token set (neutral ramp, surfaces, accent, owed/lent/danger with tints, type scale, extended spacing, radius, elevation), Inter loaded with next/font, lucide-react as the single icon dependency, shared specs for buttons, inputs including money inputs, segmented control, list rows, cards, avatars, badges, dialogs and bottom sheets, toasts, skeletons and empty states, the app shell and navigation, and each screen's structure (landing, auth, home, group page with sections, expense editor, settle-up flow, members and invite, activity, profile) with its states. Behaviour, data and money rules stay exactly as they are.",
+      "title": "UI-only redesign to a complete design system"
     }
   ],
   "deploy": "Vercel, Git-connected: pushes to main deploy to production with Neon Postgres added from the project's Storage tab (pooled DATABASE_URL for runtime, direct URL for migrations); every pull request gets an automatic Vercel preview deployment. The pipeline's own QA does not drive those previews — env.mode is compose with a localhost-only allowlist — it boots the PR branch locally via npm run sdlc:serve and drives http://localhost:3000. First production deploy needs a person to connect Vercel, add Neon, and set the required secrets per the README guide.",
@@ -228,15 +240,14 @@
     "Expense parts always sum to the expense total; the rounding remainder of equal, percentage and share splits goes to the first payer, deterministically.",
     "Balances are derived from the expense/payment ledger by one recompute path and are never stored; settle-up payments are ledger entries, not balance edits.",
     "Session tokens are opaque random values stored server-side; sign-out deletes the session row and a signed-out token authorizes nothing.",
-    "Timestamps are stored in UTC and rendered in the viewer's time zone; amounts are rendered in the group's currency.",
+    "Timestamps are stored in UTC and rendered in the viewer time zone; amounts are rendered in the group currency.",
     "A member with a non-zero balance can be neither removed nor leave; every membership change is recorded in the activity feed.",
     "No code except getDb() itself may branch on which database backend is active; CI and QA run on PGlite only, so a Neon-only code path would hide from every test."
   ],
-  "issue": 1,
+  "issue": 31,
   "open_questions": [
-    "qa_auth.mode is currently none, but every group flow requires a signed-in user. Change it to derived (QA signs itself up via /signup, passwords derived from QA_FIXTURE_SEED) or fixture (QA logs in as seeded users)? Derived exercises signup on every run; fixture is simpler. Which do you want?",
-    "The first production deploy and every Vercel preview need a person to connect the repo to Vercel, add Neon from the Storage tab, and set the required secrets. Who does that, and is it done before or after the skeleton ticket lands?",
-    "What is the default currency for new profiles and groups (spec mentions paisa, suggesting INR)? Confirm INR as the default so seed data, formatting tests and QA share one expectation."
+    "qa_auth.mode is still none, yet every group flow needs a signed-in user: change it to derived (QA signs itself up via /signup, passwords derived from QA_FIXTURE_SEED) or fixture (QA logs in as seeded users)? In practice every QA run signs its own timestamped accounts up through /signup, so the derived behaviour exists without the config.",
+    "The first production deploy and every Vercel preview need a person to connect the repo to Vercel, add Neon from the Storage tab, and set the required secrets. Who does that, and is it done before or after the redesign tickets land?"
   ],
   "prd": {
     "constraints": [
@@ -264,7 +275,8 @@
       "Groups and members second",
       "Expenses third",
       "Balances and settle-up fourth",
-      "Activity, seed and deploy guide last"
+      "Activity, seed and deploy guide last",
+      "Professional fintech-grade UI redesign across every screen, behaviour and money rules unchanged"
     ],
     "success": [
       {
@@ -296,74 +308,82 @@
       }
     ]
   },
-  "product": "Tabs is a Splitwise-class shared-expenses web app: groups of friends, flatmates or trip companions record who paid for what, split each expense (equally, by exact amounts, percentages or shares, with multiple payers allowed), see live balances with simplified who-pays-whom debts, settle up with recorded payments, and follow everything in an activity feed. One TypeScript Next.js application on Vercel with Postgres (Neon in production, embedded PGlite locally), real email/password accounts, exact integer-minor-unit money math, and a mobile-first UI ready for real users.",
+  "product": "Tabs is a Splitwise-class shared-expenses web app: groups of friends, flatmates or trip companions record who paid for what, split each expense (equally, by exact amounts, percentages or shares, with multiple payers allowed), see live balances with simplified who-pays-whom debts, settle up with recorded payments, and follow everything in an activity feed. One TypeScript Next.js application on Vercel with Postgres (Neon in production, embedded PGlite locally), real email/password accounts, exact integer-minor-unit money math, and a mobile-first UI held to a polished consumer-fintech standard by one shared design system. Issue #31 redesigns only the interface: every screen is reorganised and restyled, while stack, data model, money rules and behaviour stay exactly as they are.",
   "research": {
     "findings": [
       {
-        "affects": "Next.js App Router on Vercel",
-        "claim": "Next.js 16.x (React 19, App Router, Turbopack default) is the current stable line; App Router is the recommended router for all new projects.",
+        "affects": "ADR-0001: Next.js App Router on Vercel",
+        "claim": "Next.js 16.x with React 19 is the current stable line; App Router is the recommended router for all new projects.",
         "confidence": 85,
-        "evidence": "Next.js 16 shipped Oct 2025; reports of 16.1/16.2.x/16.3.x as latest stable in 2026 with React 19.2.x; App Router described as replacing the pages router as the recommended approach for all new projects; minimum Node 20.9+.",
+        "evidence": "Next.js 16 shipped Oct 2025 with 16.1/16.2.x/16.3.x reported as latest stable in 2026 with React 19.2.x; App Router described as replacing the pages router as the recommended approach for all new projects; minimum Node 20.9+.",
         "source": "web search: Next.js latest stable version 2026 App Router React version"
       },
       {
-        "affects": "Drizzle with PGlite locally and Neon in production",
-        "claim": "PGlite is a WASM build of real PostgreSQL with a first-class Drizzle driver, usable in Node with no install; the standard CI pattern is drizzle-orm/pglite for the real dialect without containers.",
+        "affects": "ADR-0002: Drizzle with PGlite locally and Neon in production",
+        "claim": "PGlite is a WASM build of real PostgreSQL with a first-class Drizzle driver, usable in Node with no install.",
         "confidence": 90,
-        "evidence": "PGlite described as PostgreSQL compiled to WASM via Emscripten in a TypeScript client library for Node/Bun/Deno with no other dependencies; Drizzle docs pattern: wrap a PGlite instance with drizzle() from drizzle-orm/pglite; drizzle-orm stable exports ./pglite and ./pglite/migrator.",
+        "evidence": "PGlite described as PostgreSQL compiled to WASM via Emscripten in a TypeScript client library for Node/Bun/Deno with no other dependencies; Drizzle docs pattern wraps a PGlite instance with drizzle() from drizzle-orm/pglite.",
         "source": "web search: PGlite embedded Postgres current version Drizzle ORM integration"
       },
       {
-        "affects": "Drizzle with PGlite locally and Neon in production",
-        "claim": "Neon via Vercel Storage auto-injects a pooled DATABASE_URL for runtime plus an unpooled URL for migrations; the Drizzle Neon-HTTP pattern is the documented serverless usage.",
+        "affects": "ADR-0002: Drizzle with PGlite locally and Neon in production",
+        "claim": "Neon via Vercel Storage auto-injects a pooled DATABASE_URL for runtime plus an unpooled URL for migrations; the Neon side must use the neon-serverless WebSocket driver, not the http driver, to hold interactive transactions.",
         "confidence": 85,
-        "evidence": "Vercel Storage -> Create Database -> Neon auto-injects DATABASE_URL (pooled) into all environments with DATABASE_URL_UNPOOLED for migrations; code pattern const sql = neon(process.env.DATABASE_URL!) and drizzle-orm/neon-http cited.",
+        "evidence": "Vercel Storage -> Create Database -> Neon auto-injects pooled DATABASE_URL with DATABASE_URL_UNPOOLED for migrations; Drizzle neon-http is one-shot requests with no persistent session, so it cannot run interactive multi-statement transactions.",
         "source": "web search: Neon Postgres Vercel Storage integration DATABASE_URL pooled connection serverless"
       },
       {
-        "affects": "bcryptjs for password hashing",
+        "affects": "ADR-0004: bcryptjs for password hashing",
         "claim": "On Vercel serverless, bcryptjs (pure JS) is recommended over native bcrypt/argon2 packages, which have documented native-binding load failures.",
         "confidence": 80,
-        "evidence": "Vercel serverless has documented native binding issues with both native bcrypt and argon2; bcryptjs avoids node-gyp entirely and is sufficient at cost factor 12; @node-rs/argon2 reported loading failures on Vercel.",
+        "evidence": "Vercel serverless has documented native binding issues with both native bcrypt and argon2; bcryptjs avoids node-gyp entirely and is sufficient at cost factor 12.",
         "source": "web search: password hashing Vercel serverless bcrypt argon2 recommendation 2025"
       },
       {
-        "affects": "Hand-rolled sessions, no auth framework",
+        "affects": "ADR-0003: Hand-rolled sessions, no auth framework",
         "claim": "For simple email/password with server-side session control, hand-rolled sessions are simpler than Auth.js v5, which is in security-patch mode with its team pointing new projects elsewhere.",
-        "confidence": 75,
-        "evidence": "Auth.js v5 described as stable since late 2024 but as of Sept 2025 in security-patch mode with the Better Auth team taking over maintenance and guidance pointing new projects to Better Auth; iron-session/Auth.js comparisons note rolling your own is simpler for simple email/password with custom sessions.",
-        "source": "web search: Auth.js v5 Next.js custom session cookies iron-session versus Auth.js simple email password app"
-      },
-      {
-        "affects": "Greedy min-cash-flow debt simplification",
-        "claim": "The standard Splitwise-class simplification is greedy min-cash-flow over net balances, guaranteeing at most N-1 transfers; true minimum-transfer settlement is NP-complete so absolute minimality cannot be promised.",
         "confidence": 80,
-        "evidence": "Tutorials describe: compute net Paid-minus-Share per member, repeatedly settle max debtor against max creditor with min(abs(debt),credit), guaranteeing at most (N-1) transactions and no cycles; separate analysis reduces exact minimization to subset-sum and calls it NP-complete.",
-        "source": "web search: Splitwise simplify debts greedy min cash flow algorithm guarantee fewest transfers"
+        "evidence": "Auth.js v5 described as stable since late 2024 but as of Sept 2025 in security-patch mode with maintenance moving to the Better Auth team and guidance pointing new projects at Better Auth.",
+        "source": "web search: Auth.js v5 maintenance status Better Auth recommendation 2025"
       },
       {
-        "affects": "Drizzle with PGlite locally and Neon in production",
-        "claim": "Drizzle's neon-http driver cannot hold an interactive multi-statement transaction because its one-shot HTTP requests have no persistent session for BEGIN/COMMIT across awaited statements; interactive db.transaction requires the WebSocket-based neon-serverless driver (a Pool from @neondatabase/serverless).",
+        "affects": "ADR-0005: Greedy min-cash-flow debt simplification",
+        "claim": "Greedy min-cash-flow over net balances is the standard stated algorithm for Splitwise-class settlement, guaranteeing at most N-1 transfers.",
         "confidence": 85,
-        "evidence": "Neon's plain HTTP neon() driver does not support interactive multi-statement transactions — use the WebSocket Pool; Drizzle's own connect-to-Neon guide: if you need session or interactive transaction support, use the WebSocket-based neon-serverless driver; neon-http throws client-side where interactive db.transaction callbacks are used.",
-        "source": "web search: Drizzle ORM Neon serverless driver vs neon-http interactive transactions WebSocket Pool"
+        "evidence": "Minimum-transfer settlement reduces to subset-sum (NP-complete); the documented standard approach settles the max debtor against the max creditor iteratively, which empties at least one balance per transfer and therefore uses at most N-1 transfers.",
+        "source": "first-party: docs/spec/tabs.md Balances section plus algorithm literature cited in ADR-0005"
+      },
+      {
+        "affects": "ADR-0009: UI-only redesign to a complete design system",
+        "claim": "lucide-react is an actively maintained, tree-shakeable icon set and the default icon dependency for Next.js starter stacks in 2026.",
+        "confidence": 85,
+        "evidence": "lucide-react 1.x releases reported through 2026 (1.24.0, 1.26.0, 1.43/1.44.0); documented as tree-shakeable at roughly 2KB per icon, the default for shadcn/ui Next.js starters, installed via npm install lucide-react.",
+        "source": "web search: lucide-react icon set Next.js dependency maintained 2026"
+      },
+      {
+        "affects": "ADR-0009: UI-only redesign to a complete design system",
+        "claim": "next/font self-hosts Inter at build time with no runtime fetch and no layout shift, and Tailwind v4 expresses the whole theme as CSS-first design tokens.",
+        "confidence": 90,
+        "evidence": "next/font loads the body font at build time with automatic self-hosting and zero layout shift; Tailwind v4 defines theme values as CSS custom properties consumed directly by utilities, which is the documented path for a token-driven theme.",
+        "source": "web search: next/font Inter self-hosting Tailwind v4 CSS-first theme tokens"
       }
     ],
     "questions": [
       "What Next.js/React/Node versions are current and supported, so the stack pins a live line?",
-      "Can Postgres run embedded with zero setup and share migrations with hosted Neon via Drizzle?",
+      "Can Postgres run embedded with zero setup and share migrations with hosted Neon via Drizzle, including interactive transactions?",
       "How does the Vercel Neon integration wire DATABASE_URL (pooled vs direct) for serverless use?",
       "Which password hash works reliably on Vercel serverless without native bindings?",
       "Is an auth framework needed for email/password plus server-revocable sessions?",
       "Which debt-simplification algorithm is standard, and what can it honestly guarantee?",
-      "Which Drizzle Neon driver holds interactive transactions, and what does the http driver not support?"
+      "Which single icon set and font-loading path fit a Next.js App Router app with no runtime font fetch and a tree-shakeable icon bundle?"
     ],
     "rejected_sources": [
-      "Stale npm registry snippets quoting old PGlite/Postgres versions — version claims taken from 2026-dated sources and the projects' own docs instead of aggregator copies."
+      "Tutorial posts recommending the Drizzle neon-http driver for all serverless use: rejected because one-shot HTTP requests cannot hold the interactive transactions TR-8 requires.",
+      "Forum advice to mix emoji glyphs or inline SVGs for icons: rejected because a product needs one consistent stroke width and tree-shaking, which is what lucide-react provides."
     ]
   },
   "stack": {
-    "choice": "TypeScript 5, Next.js 16 (App Router) + React 19 on Node 20+, Tailwind CSS v4, Drizzle ORM, PGlite (embedded WASM Postgres) when DATABASE_URL is unset and Neon Postgres via Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket) when DATABASE_URL is set, bcryptjs password hashing, hand-rolled DB sessions, Vitest + TypeScript typecheck",
+    "choice": "TypeScript 5, Next.js 16 (App Router) + React 19 on Node 20+, Tailwind CSS v4, Drizzle ORM, PGlite (embedded WASM Postgres) when DATABASE_URL is unset and Neon Postgres via Drizzle's neon-serverless driver (a Pool from @neondatabase/serverless over WebSocket) when DATABASE_URL is set, bcryptjs password hashing, hand-rolled DB sessions, lucide-react icons, Inter via next/font, Vitest + TypeScript typecheck",
     "rejected": [
       {
         "because": "Heavier engine downloads on serverless and CI, and a weaker embedded-Postgres story than Drizzle's first-class PGlite driver.",
@@ -382,11 +402,15 @@
         "option": "Dockerized or system Postgres for dev/CI"
       },
       {
-        "because": "Its one-shot HTTP requests hold no persistent session, so it cannot run interactive multi-statement transactions; creating, editing or deleting an expense must commit the expense, its payers, its shares and its activity entry atomically (TR-8).",
+        "because": "Its one-shot HTTP requests hold no persistent session, so it cannot run interactive multi-statement transactions; creating, editing or deleting an expense must commit atomically per TR-8.",
         "option": "Drizzle's neon-http driver for the Neon side"
+      },
+      {
+        "because": "Mixed glyphs, emoji and hand-drawn SVGs drift in stroke width and cannot be tree-shaken as one set; one dependency keeps every screen on one stroke.",
+        "option": "Mixed emoji / inline SVGs instead of a single icon set"
       }
     ],
-    "why": "The spec already fixes the big choices (TypeScript, Next.js App Router, Vercel, Postgres with PGlite-local/Neon-production), and research confirms each is on a live, documented path: Next.js 16 + React 19 is the current stable line, PGlite has a first-class Drizzle driver for zero-setup real-Postgres semantics, and Neon auto-wires pooled DATABASE_URL from Vercel Storage. Where the spec is silent, boring wins: Drizzle over Prisma for weight, hand-rolled DB sessions over Auth.js because server-side sign-out revocation is required, bcryptjs over argon2 because native bindings fail on serverless. The Neon side uses Drizzle's neon-serverless driver (WebSocket Pool), not the http driver, because expense writes must commit expense, payers, shares and activity rows in one interactive transaction and the http driver cannot hold one. Everything runs on node/npm alone, which is all the clean CI runner and the compose QA boot provide."
+    "why": "The spec already fixes the big choices (TypeScript, Next.js App Router, Vercel, Postgres with PGlite-local/Neon-production), and research confirms each is on a live, documented path: Next.js 16 + React 19 is the current stable line, PGlite has a first-class Drizzle driver for zero-setup real-Postgres semantics, and Neon auto-wires pooled DATABASE_URL from Vercel Storage. Where the spec is silent, boring wins: Drizzle over Prisma for weight, hand-rolled DB sessions over Auth.js because server-side sign-out revocation is required, bcryptjs over argon2 because native bindings fail on serverless. The Neon side uses Drizzle's neon-serverless driver (WebSocket Pool), not the http driver, because expense writes must commit expense, payers, shares and activity rows in one interactive transaction and the http driver cannot hold one. The redesign adds only two presentational dependencies to this settled stack: lucide-react as the single icon set and Inter loaded with next/font, both build-time safe on serverless and CI. Everything runs on node/npm alone, which is all the clean CI runner and the compose QA boot provide."
   },
   "trd": {
     "data_model": [
@@ -453,7 +477,7 @@
         "errors": "Health returns degraded status naming the failing check",
         "idempotency": "N/A (read-only)",
         "name": "GET /api/health",
-        "shape": "{ status: ok|degraded, db: ok|down, latencyMs } — checks database reachability with a live query"
+        "shape": "{ status: ok|degraded, db: ok|down, latencyMs } — checks database reachability with a live query; never linked from product surfaces"
       }
     ],
     "nfrs": [
@@ -499,8 +523,7 @@
         "rationale": "Spec hard constraint: money is exact and the remainder rule is stated and tested.",
         "requirement": "All money is integer minor units end to end, never floats; every split's parts sum to the whole with the rounding remainder assigned to the first payer, covered by unit tests.",
         "sources": [
-          "S-2",
-          "S-5"
+          "S-2"
         ],
         "verified_by": "Vitest property tests over generated splits assert sum preservation and remainder placement."
       },
@@ -567,7 +590,7 @@
       {
         "id": "TR-11",
         "priority": "must",
-        "rationale": "A product people choose needs mobile-first, accessible, fast screens — not a prototype.",
+        "rationale": "A product people choose needs mobile-first, accessible, fast screens held to one design system — not a prototype.",
         "requirement": "Mobile-first responsive UI from the token set; one h1 and heading hierarchy, labelled controls, keyboard access and visible focus; designed empty/loading/error states; group-currency formatting; main screens interactive under 1s.",
         "sources": [
           "S-8"
@@ -588,130 +611,235 @@
   },
   "ui": {
     "accessibility": [
-      "Text contrast at least 4.5:1 for body and 3:1 for large text against surfaces",
-      "Every control has a programmatic label; icon-only buttons get aria-labels",
-      "Full keyboard path: tab order matches visual order, visible focus ring on all tokens, dialogs trap and return focus",
-      "One h1 per page, hierarchical headings, and aria-live announcements for balance/feed updates after mutations"
+      "Text contrast at least 4.5:1 for body and muted text, 3:1 for large text and icons, on every surface including tinted banners",
+      "Every control has a programmatic label; icon-only buttons get aria-labels; icons are aria-hidden next to text",
+      "Full keyboard path: tab order matches visual order, visible focus ring on all controls, segmented options move with arrow keys, dialogs trap and return focus",
+      "One h1 per page with hierarchical headings; balance and feed updates announced via aria-live; success notices render in one role=status slot per panel",
+      "Touch targets at least 44px; reduced motion disables all animation; direction is never conveyed by colour alone"
     ],
     "layouts": [
       {
-        "purpose": "Am I owed or owing, and which group needs attention?",
-        "regions": "Header (app name, user menu) / totals cards (you-are-owed, you-owe) / per-person rows / group list with per-group balance / primary Create group action",
-        "responsive": "Cards stack vertically; per-person rows collapse to two-line entries; create action becomes a floating button.",
-        "screen": "Home",
+        "purpose": "Explain Tabs to a visitor and lead to sign up or sign in.",
+        "regions": "Minimal marketing header (mark + Sign in) / hero (headline, one-line product story, primary Create account + secondary Sign in) / three-step how-it-works (record, split, settle) / trust line (exact money math, private groups) / footer with product links only — no developer or health links anywhere",
+        "responsive": "Single column at 375px with 16px gutters; centred column up to 1024px on desktop.",
+        "screen": "Landing",
         "states": {
-          "empty": "No groups yet: illustration, what Tabs does in one line, Create-your-first-group button.",
-          "error": "Failed to load with retry; cached balances are never shown as current.",
-          "ideal": "Totals plus per-person and per-group balances all loaded.",
-          "loading": "Skeleton cards and rows, no layout shift when data arrives.",
-          "partial": "Groups that loaded render with balances; failed ones show inline retry rows, never a full-page error."
-        }
-      },
-      {
-        "purpose": "Who owes whom here, and what happened recently?",
-        "regions": "Group header (name, currency, settings) / balance banner (settled or owes-summary) / simplified-debts card with Settle-up buttons / expenses list with filter+search / recent activity excerpt",
-        "responsive": "Debts card moves above expenses on narrow screens; filters collapse into a disclosure.",
-        "screen": "Group detail",
-        "states": {
-          "empty": "No expenses yet: what to do first with an Add-expense button; settled banner when all balances are zero.",
-          "error": "Full-page error with retry; never a half-rendered ledger.",
-          "ideal": "Balances, debts, expenses and activity all present.",
-          "loading": "Skeleton header, debts card and three expense rows.",
-          "partial": "Cached header with stale badge plus inline retry for the failed section."
-        }
-      },
-      {
-        "purpose": "Record an expense correctly the first time.",
-        "regions": "Amount + currency display / description + date / payer picker (single or multi with parts) / split-type tabs with per-member inputs (exact amount, percentage or share count, included or left out) / live remainder/sum validation line / category + note / Save; reopening an existing expense shows the stored split type and each member's input exactly as entered",
-        "responsive": "Single column; split-type tabs become a select; member rows stay full-width.",
-        "screen": "Expense editor",
-        "states": {
-          "empty": "New expense: blank with payer defaulting to me and split defaulting to equal.",
-          "error": "Failed save keeps all input, names the problem, offers retry.",
-          "ideal": "Valid split with the sum line confirming parts equal the total.",
-          "loading": "Saving state disables Save and shows progress; form never unmounts mid-save.",
-          "partial": "Not applicable: the form is local state, so it cannot partially load; member list failure blocks open with an error."
-        }
-      },
-      {
-        "purpose": "Who is in this group and how do new people join?",
-        "regions": "Member list with balances and owner badges / invite-link panel with copy, disable and rotate / placeholder add-by-name / claim prompts for matching placeholders",
-        "responsive": "Invite panel stacks above the member list on narrow screens.",
-        "screen": "Members and invite",
-        "states": {
-          "empty": "Only the owner: prompt to share the invite link with copy button.",
-          "error": "Invite rotation failure keeps the old link active and says so.",
-          "ideal": "Members, balances and a working invite link.",
-          "loading": "Skeleton member rows; invite panel shows a loading button state.",
-          "partial": "Member list renders while invite-link fetch retries inline."
-        }
-      },
-      {
-        "purpose": "What changed, who changed it, and when?",
-        "regions": "Filter (all/expenses/payments/members) / chronological event rows with actor, action and timestamp / link-through to the expense or group",
-        "responsive": "Filters become a horizontal scroll chip row; rows collapse to two lines.",
-        "screen": "Activity",
-        "states": {
-          "empty": "No activity yet: explains the feed fills as the group acts.",
-          "error": "Feed error with retry; filter selection is preserved.",
-          "ideal": "Chronological events with actor and time.",
-          "loading": "Skeleton event rows.",
-          "partial": "Loaded days render; failed pages show a load-more retry."
+          "ideal": "Visitor understands Tabs in seconds and reaches sign up or sign in in one click.",
+          "empty": "First visit: hero, three-step explainer, and primary Create account plus secondary Sign in; nothing assumes an account.",
+          "loading": "Not applicable: static content, no data fetching; fonts swap without layout shift via next/font.",
+          "partial": "Not applicable: no data fetching on this page.",
+          "error": "Marketing page rarely fails alone; a boot failure shows the shared failure card with retry."
         }
       },
       {
         "purpose": "Let a legitimate user in and keep everyone else out.",
-        "regions": "Single centered card: email + password, show/hide toggle, submit; links between sign-in, sign-up and (later) reset placeholder",
-        "responsive": "Card goes full-width with comfortable touch targets; no other change.",
+        "regions": "Centred card (max 420px) on a calm page: email + password with visible labels, show/hide toggle, hint text for password rules on sign up, primary submit, links between sign-in and sign-up; signing in lands on Home, never on Profile",
+        "responsive": "Card goes full-width with 16px gutters and 44px targets; no other change.",
         "screen": "Auth (sign in / sign up)",
         "states": {
+          "ideal": "Clean centred card, no errors, submit clearly labelled.",
           "empty": "Not applicable: the form is always actionable, never data-driven.",
-          "error": "One neutral message that never reveals whether an email is registered; input preserved.",
-          "ideal": "Clean form, no errors.",
-          "loading": "Submit becomes a pending spinner; double-submit is impossible.",
-          "partial": "Not applicable: no data fetching on this screen."
+          "loading": "Submit becomes a pending spinner with disabled state; double-submit is impossible.",
+          "partial": "Not applicable: no data fetching on this screen.",
+          "error": "One neutral message that never reveals whether an email is registered; input preserved; rate-limit refusal names the wait, not the account."
+        }
+      },
+      {
+        "purpose": "Am I owed or owing, and which group needs attention?",
+        "regions": "App shell / balance summary card (hero number: net position, you-are-owed and you-owe totals) / people rows (per-person you-owe / owes-you with avatars) / group list as rich rows (name, member count, per-group balance, chevron) / primary Create group action",
+        "responsive": "Cards stack vertically; per-person rows collapse to two lines; create action is a header button on desktop and a thumb-reachable fixed button on phones.",
+        "screen": "Home",
+        "states": {
+          "ideal": "Totals plus per-person and per-group balances all loaded.",
+          "empty": "No groups yet: illustration, one line on what Tabs does, Create-your-first-group button.",
+          "loading": "Skeleton summary card and group rows shaped like the real content; no layout shift when data arrives.",
+          "partial": "Groups that loaded render with balances; failed ones show inline retry rows, never a full-page error.",
+          "error": "Failed to load with retry; cached balances are never shown as current."
+        }
+      },
+      {
+        "purpose": "Who owes whom here, and what happened recently?",
+        "regions": "App shell with back-to-Home breadcrumb / group header (avatar-mark, name, currency badge, Settings entry) / summary card (your balance as the hero number, who-owes-whom lines, primary Add expense + secondary Settle up) / sections as tabs or segmented control: Expenses (search + member/category filters in a disclosure on phones, newest-first rows, row overflow menu for edit/delete) / Balances and settle up (simplified who-pays-whom with per-transfer Settle up opening the sheet) / Activity (recent excerpt linking to the full feed) / Members (roster excerpt linking to members); settings (rename, archive) live behind the Settings entry, never on the main scroll",
+        "responsive": "Summary card first, then section tabs; Add expense is a header button on desktop and a fixed bottom button on phones; desktop 1024px may place the summary in a side card beside the main column.",
+        "screen": "Group page",
+        "states": {
+          "ideal": "Summary, section content, expenses and activity excerpt all present and consistent.",
+          "empty": "No expenses yet: what to do first with an Add-expense button; settled banner when all balances are zero.",
+          "loading": "Skeleton summary card, section tabs, and three expense rows; no layout shift.",
+          "partial": "Loaded sections render; a failed section shows an inline retry inside its own panel without clearing the rest.",
+          "error": "Full-page error with retry; never a half-rendered ledger."
+        }
+      },
+      {
+        "purpose": "Record an expense correctly the first time.",
+        "regions": "App shell with back-to-group / amount first (large money input, group currency prefix, decimal input mode, autofocused) + description / date (styled picker, human reading) / payer area (single payer by default; Paid by several people reveals per-person parts) / split-type segmented control (equal/exact/percentage/shares) with per-member rows (avatar, name, computed share live) only for the chosen type / live remainder/sum validation line / category + note / sticky bottom bar with primary Save and Cancel; reopening shows the stored split type and each member's input exactly as entered",
+        "responsive": "Single column; member rows stay full-width; sticky bottom save bar on phones.",
+        "screen": "Expense editor",
+        "states": {
+          "ideal": "Valid split with the sum line confirming parts equal the total; per-member shares shown live.",
+          "empty": "New expense: amount blank and autofocused, payer defaulting to me, split defaulting to equal among everyone.",
+          "loading": "Saving disables Save and shows progress (Saving plus spinner); the form never unmounts mid-save and double submit is impossible.",
+          "partial": "Not applicable: the form is local state, so it cannot partially load; member-list failure blocks open with an error.",
+          "error": "Failed save keeps all input, names the problem, offers retry; validation summary names the shortfall and its size."
+        }
+      },
+      {
+        "purpose": "Record a payment from one member to another, in full or in part.",
+        "regions": "Bottom sheet on phones / centred dialog on desktop: who pays whom line, suggested amount prefilled and editable for partial payment, optional date, one Record payment confirm plus cancel; opened from Balances and settle up per-transfer Settle up buttons, never as inline forms on rows; destructive delete of a recorded payment lives in the payment detail overflow menu and confirms by naming it",
+        "responsive": "Bottom sheet on phones with thumb-reachable confirm; centred dialog on desktop.",
+        "screen": "Settle-up flow",
+        "states": {
+          "ideal": "Suggested transfer confirmed and recorded with one confirm; feed and balances update with a toast.",
+          "empty": "Not applicable: the sheet always opens from a suggested transfer with a positive amount.",
+          "loading": "Confirm shows pending and disables; the sheet stays mounted until the redirect notice fires.",
+          "partial": "After a partial payment the sheet (or its confirmation) shows what remains owed between the pair.",
+          "error": "Failed record keeps the sheet open with all input, names the problem, offers retry."
+        }
+      },
+      {
+        "purpose": "Who is in this group and how do new people join?",
+        "regions": "App shell with back-to-group / member list rows (avatar, name, You/Owner/Placeholder badges, per-member balance) with overflow menus for owner actions / invite-link panel (link with copy button, disable and rotate with confirm) / add-placeholder-by-name form / claim prompts for matching placeholders on join",
+        "responsive": "Invite panel stacks above the member list on phones.",
+        "screen": "Members and invite",
+        "states": {
+          "ideal": "Members, balances and a working invite link.",
+          "empty": "Only the owner: prompt to share the invite link with a copy button.",
+          "loading": "Skeleton member rows; invite panel shows a loading button state.",
+          "partial": "Member list renders while invite-link fetch retries inline.",
+          "error": "Invite rotation failure keeps the old link active and says so; member-action failures name the balance blocker and point at settle-up."
+        }
+      },
+      {
+        "purpose": "What changed, who changed it, and when?",
+        "regions": "App shell with back context / filter segmented control or scroll chip row (all/expenses/payments/members) / chronological event rows (actor avatar, plain-sentence action, relative-then-human timestamp in the viewer zone, link-through); expense-edited entries summarise the before/after of exactly the changed fields",
+        "responsive": "Filters become a horizontal scroll chip row; rows collapse to two lines.",
+        "screen": "Activity",
+        "states": {
+          "ideal": "Chronological events with actor, human-readable time, and link-through to the expense or group.",
+          "empty": "No activity yet: explains the feed fills as the group acts.",
+          "loading": "Skeleton event rows shaped like the real rows.",
+          "partial": "Loaded days render; failed pages show a load-more retry.",
+          "error": "Feed error with retry; filter selection is preserved."
+        }
+      },
+      {
+        "purpose": "Let the user control their name and default currency.",
+        "regions": "App shell / single settings card: display name field, default currency select (styled), Save with pending guard; sign-out lives in the account menu, never as a red button on this page",
+        "responsive": "Card goes full-width with 16px gutters; no other change.",
+        "screen": "Profile",
+        "states": {
+          "ideal": "Display name and default currency shown and editable, saved with confirmation.",
+          "empty": "Not applicable: profile fields always render with current values.",
+          "loading": "Save shows pending via the shared button island; the form never unmounts mid-save.",
+          "partial": "Not applicable: single small form, no partial data.",
+          "error": "Failed save keeps all input, names the problem, offers retry via the shared failure treatment."
         }
       }
     ],
     "patterns": [
       {
-        "pattern": "Forms and validation",
-        "rule": "Validate on submit and on blur; inline errors sit under the field and the summary line names the shortfall and its size (e.g. parts sum to 450, 50 short of 500). Failed saves never clear input."
+        "pattern": "App shell and navigation",
+        "rule": "One app shell on every signed-in page: slim top bar with the Tabs mark (links Home), the current place (group name), and an account menu (avatar opens Profile and Sign out). Every nested page has a back link or breadcrumb (Group to Expense, Group to Members, Home to Group); never a dead end. Signing in lands on Home. Nothing important hides behind a hamburger on phones; no developer artefacts (health links, raw ids, ISO dates, UTC timestamps) anywhere in the product."
+      },
+      {
+        "pattern": "Buttons",
+        "rule": "Four variants built once and reused: primary (accent fill), secondary (surface + border), ghost (text only), destructive (danger). Two sizes, 36px and 44px tall (44px for touch). Every button has hover, focus-visible ring, active, disabled and pending (spinner or Saving plus disabled) states. Labels are verbs: Add expense, Settle up, Record payment, Save. Double-submit is structurally impossible via pending guards."
+      },
+      {
+        "pattern": "Inputs including money inputs",
+        "rule": "Visible label above, optional hint below, error below in danger colour with an icon; 44px tall on touch, sunken fill or white with border, accent ring on focus. Money inputs are right-aligned tabular figures with the group currency prefix inside the field and decimal input mode; the expense amount is large and autofocused. Placeholders are examples, never labels. Nothing default-browser: selects, date inputs, checkboxes and radios are all styled to match."
+      },
+      {
+        "pattern": "Segmented control",
+        "rule": "Used for split type and feed filters; one clear selected state, arrow-key movement between options, full keyboard operability."
+      },
+      {
+        "pattern": "List rows",
+        "rule": "Avatar or icon left, title plus metadata stacked middle, amount right-aligned and coloured by direction with words alongside; the whole row is the hit target with hover/pressed background. Row actions live in an overflow menu or the detail view, never as inline Edit/Delete buttons; destructive choices confirm."
+      },
+      {
+        "pattern": "Cards",
+        "rule": "Surface background, 1px hairline border, shadow-sm, padding from the spacing scale, optional header with title plus action. The key balance on a screen is the largest text on it."
+      },
+      {
+        "pattern": "Avatars",
+        "rule": "Initials on a stable colour derived from the member id; 32px in rows, 40px in headers; always aria-hidden with the name beside them."
+      },
+      {
+        "pattern": "Badges",
+        "rule": "Small 12px pills for states: Settled, Placeholder, Archived, You, Owner. Never the only carrier of a state that matters."
+      },
+      {
+        "pattern": "Dialogs and bottom sheets",
+        "rule": "Centred dialog on desktop, bottom sheet on phones; focus trapped and returned on close; destructive dialogs name the object and the consequence. Settle-up and confirms use this, not inline row forms."
+      },
+      {
+        "pattern": "Toasts and success notices",
+        "rule": "Mutations confirm with a toast bottom-centre on phones and bottom-right on desktop, auto-dismissed, aria-live polite, with the affected number updated in place. Success across navigation rides the ADR-0008 redirect notice param rendered in one role=status slot per panel; inline action state is for refusals only, rendered exactly once."
+      },
+      {
+        "pattern": "Skeletons",
+        "rule": "Loading shows grey blocks shaped like the real content; never a page-wide spinner and never layout shift when data arrives."
       },
       {
         "pattern": "Empty states",
-        "rule": "Every empty screen shows what it is for, what to do next, and the button that does it — never a blank page."
-      },
-      {
-        "pattern": "Loading states",
-        "rule": "Skeleton blocks matching the final layout; no spinners replacing whole pages and no layout shift when data arrives."
+        "rule": "A simple illustration or icon, one sentence on what goes here, and the primary action that starts it; never a blank page."
       },
       {
         "pattern": "Errors",
-        "rule": "User-safe message plus one recovery action (retry or back); technical detail goes to server logs, and 404 never distinguishes missing from forbidden."
+        "rule": "User-safe message plus one recovery action (retry or back); technical detail goes to server logs; 404 never distinguishes missing from forbidden. Failed saves never clear what the person typed."
+      },
+      {
+        "pattern": "Forms and validation",
+        "rule": "Ask for the important thing first with sensible defaults already chosen (paid by me, split equally); progressive disclosure reveals multi-payer parts and per-member inputs only when needed, with live computed shares. Validate on blur and on submit; the summary line names the shortfall and its size. Every form has a clear way out (Cancel/back, sticky bottom primary on phones) and submits with Enter where safe."
       },
       {
         "pattern": "Destructive actions",
-        "rule": "Delete expense, delete payment, remove member, rotate/disable invite and archive group all require an explicit confirm naming the object; removal blocked by non-zero balance says so and points at settle-up."
+        "rule": "Delete expense or payment, remove member, archive group, rotate or disable invite all confirm in a dialog or sheet naming the object and the consequence. Removal blocked by a non-zero balance says so and points at settle-up. Rename saves without a confirm."
       },
       {
-        "pattern": "Money display",
-        "rule": "All amounts render in the group's currency with correct symbol and separators from one formatter; minor units are never shown raw and floats never appear."
+        "pattern": "Money display and direction",
+        "rule": "All amounts render in the group currency with the correct symbol and separators from one formatter; raw minor units and floats never appear. Direction is words plus colour, never colour alone. Zero is neutral (All settled up), never debt red. Dates read as people say them; times render in the viewer zone."
       },
       {
-        "pattern": "Toasts and feedback",
-        "rule": "Mutations confirm with a toast bottom-center on mobile / bottom-right on desktop; the affected number updates in place with an aria-live announcement."
+        "pattern": "Icons",
+        "rule": "One set only: lucide-react (npm dependency), one stroke width, 16px inline and 20px in buttons, always aria-hidden next to text. No emoji as icons."
       }
     ],
     "theme": {
       "dark_mode": "No dedicated dark mode in v1; tokens are chosen to pass contrast on light surfaces, and a dark inversion is explicitly deferred so no ticket invents one ad hoc.",
-      "density": "Comfortable touch targets (min 44px) for mobile-first use; desktop caps content at 72ch/1024px with the same spacing scale.",
-      "motion": "Subtle only: 150ms ease on toasts and disclosures; honor prefers-reduced-motion by disabling all animation.",
+      "density": "Comfortable touch targets (minimum 44px) for mobile-first use. Page shell: slim top bar, content in a centred column — 640px for forms and detail pages, up to 1024px for lists with an optional side panel on desktop; on phones the column is full-width with a 16px gutter. Inside a component use the small spacing steps; between sections use the largest; consistent vertical rhythm matters more than any single value.",
+      "motion": "Subtle only: 150ms ease on toasts and disclosures; honour prefers-reduced-motion by disabling all animation.",
       "tokens": [
         {
+          "name": "--color-ink",
+          "use": "Primary text, amounts (neutral 900)",
+          "value": "#1A1D21"
+        },
+        {
+          "name": "--color-ink-muted",
+          "use": "Secondary text, metadata; must still meet 4.5:1 on its surface (neutral 600)",
+          "value": "#5F6570"
+        },
+        {
+          "name": "--color-ink-subtle",
+          "use": "Placeholders, disabled text, icons at rest (neutral 400)",
+          "value": "#8A919C"
+        },
+        {
+          "name": "--color-border",
+          "use": "Hairline borders, dividers (neutral 200)",
+          "value": "#E3E5E8"
+        },
+        {
           "name": "--color-bg",
-          "use": "Page background",
+          "use": "Page background (neutral 50)",
           "value": "#FAFAF8"
+        },
+        {
+          "name": "--color-surface-sunken",
+          "use": "Input fill, table stripes, recessed areas (neutral 100)",
+          "value": "#F1F2F4"
         },
         {
           "name": "--color-surface",
@@ -719,39 +847,129 @@
           "value": "#FFFFFF"
         },
         {
-          "name": "--color-ink",
-          "use": "Primary text",
-          "value": "#1A1D21"
-        },
-        {
-          "name": "--color-muted",
-          "use": "Secondary text, placeholders",
-          "value": "#5F6570"
-        },
-        {
           "name": "--color-accent",
-          "use": "Primary actions, links, focus ring",
+          "use": "Primary button fill, links, focus ring, selected tab — and almost nothing else",
           "value": "#0E6B4F"
         },
         {
-          "name": "--color-danger",
-          "use": "Destructive actions and errors",
-          "value": "#B3261E"
+          "name": "--color-accent-hover",
+          "use": "Primary button hover/active",
+          "value": "#0A5A42"
+        },
+        {
+          "name": "--color-accent-contrast",
+          "use": "Text and icons on the accent fill",
+          "value": "#FFFFFF"
+        },
+        {
+          "name": "--color-accent-tint",
+          "use": "Selected-tab and highlighted backgrounds (accent at 10%)",
+          "value": "rgba(14, 107, 79, 0.10)"
         },
         {
           "name": "--color-owed",
-          "use": "Amounts you owe (debt) indicators",
+          "use": "Debt amounts and owe indicators, always paired with words",
           "value": "#B3261E"
         },
         {
+          "name": "--color-owed-tint",
+          "use": "Debt banner backgrounds (owed at 10%) with full-colour text",
+          "value": "rgba(179, 38, 30, 0.10)"
+        },
+        {
           "name": "--color-lent",
-          "use": "Amounts owed to you (credit) indicators",
+          "use": "Credit amounts and owed-to-you indicators, always paired with words",
           "value": "#0E6B4F"
         },
         {
-          "name": "--space-1..6",
-          "use": "4/8/12/16/24/32 spacing scale; nothing else",
-          "value": "4px 8px 12px 16px 24px 32px"
+          "name": "--color-lent-tint",
+          "use": "Credit/settled banner backgrounds (lent at 10%) with full-colour text",
+          "value": "rgba(14, 107, 79, 0.10)"
+        },
+        {
+          "name": "--color-danger",
+          "use": "Destructive actions and errors only (shares its value with owed by role, never by alias)",
+          "value": "#B3261E"
+        },
+        {
+          "name": "--color-danger-tint",
+          "use": "Error banner backgrounds (danger at 10%) with full-colour text",
+          "value": "rgba(179, 38, 30, 0.10)"
+        },
+        {
+          "name": "--text-caption",
+          "use": "Eyebrow labels, badge text (uppercase only with tracking-wide, muted colour)",
+          "value": "12px / 16px"
+        },
+        {
+          "name": "--text-secondary",
+          "use": "Metadata, hints, secondary lines",
+          "value": "14px / 20px"
+        },
+        {
+          "name": "--text-body",
+          "use": "Body copy, form values",
+          "value": "16px / 24px"
+        },
+        {
+          "name": "--text-lead",
+          "use": "Lead paragraphs, emphasised lines",
+          "value": "18px / 28px"
+        },
+        {
+          "name": "--text-section",
+          "use": "Section titles (h2)",
+          "value": "20px / 28px"
+        },
+        {
+          "name": "--text-page",
+          "use": "Page titles (one h1 per page)",
+          "value": "24px / 32px"
+        },
+        {
+          "name": "--text-hero",
+          "use": "Key balance on a screen — the largest text on it",
+          "value": "30px / 36px"
+        },
+        {
+          "name": "--space-1",
+          "use": "Tightest inset gaps",
+          "value": "4px"
+        },
+        {
+          "name": "--space-2",
+          "use": "Inline gaps, icon padding",
+          "value": "8px"
+        },
+        {
+          "name": "--space-3",
+          "use": "Card padding tight, field gaps",
+          "value": "12px"
+        },
+        {
+          "name": "--space-4",
+          "use": "Card padding, gutters, row padding",
+          "value": "16px"
+        },
+        {
+          "name": "--space-5",
+          "use": "Section padding, card groups",
+          "value": "24px"
+        },
+        {
+          "name": "--space-6",
+          "use": "Between sections on a page",
+          "value": "32px"
+        },
+        {
+          "name": "--space-7",
+          "use": "Between major page blocks (extended for layouts)",
+          "value": "48px"
+        },
+        {
+          "name": "--space-8",
+          "use": "Page-level separation, hero breathing room (extended for layouts)",
+          "value": "64px"
         },
         {
           "name": "--radius",
@@ -759,12 +977,27 @@
           "value": "10px"
         },
         {
+          "name": "--radius-full",
+          "use": "Avatars, pills, badges",
+          "value": "9999px"
+        },
+        {
+          "name": "--shadow-sm",
+          "use": "Cards: hairline border plus this soft shadow; nothing else floats at this level",
+          "value": "0 1px 2px rgba(16, 24, 40, 0.06)"
+        },
+        {
+          "name": "--shadow-md",
+          "use": "Menus, dialogs, sheets, toasts",
+          "value": "0 8px 24px rgba(16, 24, 40, 0.12)"
+        },
+        {
           "name": "--font-body",
-          "use": "All UI text; tabular numerals for amounts",
+          "use": "All UI text: Inter loaded with next/font (system-ui fallback, no flash, no layout shift); tabular-nums for every amount; weights 400 body, 500 labels/buttons, 600 headings/amounts; currency symbol the same size as the number, never superscript",
           "value": "Inter, system-ui, sans-serif"
         }
       ],
-      "typography": "Inter (system fallback) with tabular-nums for every amount; one h1 per page, section headings hierarchical; amounts semibold, body regular."
+      "typography": "One scale used everywhere (12/16 caption, 14/20 secondary, 16/24 body, 18/28 lead, 20/28 section title, 24/32 page title, 30/36 hero number) with weights 400 body, 500 labels and buttons, 600 headings and amounts; never 300 for text. Page title is one h1 per page at 24/32 semibold, section titles h2 at 20/28, eyebrows 12/16 uppercase tracking-wide muted. Money is always tabular-nums with the key balance largest on screen; line length 60-75 characters for paragraphs; long names truncate with ellipsis and title, never wrapping a row into three lines."
     }
   }
 }

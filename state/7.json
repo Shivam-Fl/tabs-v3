@@ -410,5 +410,24 @@
   "work_order_posted_at": "2026-10-05T05:35:13.215Z",
   "work_order_from": "plan",
   "work_order_comment": "5988738000",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Five changed paths sit outside the work order's files[] (groups-panels exports, groups/queries membershipId, settle/queries, settle/summary + its test); each is a justified enabling change, so the work order should be amended, not the code.",
+        "detail": "Five changed paths sit outside the work order's files[] (groups-panels exports, groups/queries membershipId, settle/queries, settle/summary + its test); each is a justified enabling change, so the work order should be amended, not the code.\n\n`lib/settle/summary.ts:1`\n\nEvidence: gh pr view 22 files (22 paths) vs work-order.json files[]; diff sizes: groups-panels +18/-3 export-only, groups/queries +10, settle/queries +72 new, summary +135 new with +256 of tests\n\nFix: Amend work-order.json files[]/tests[] to list the five paths; leave code as is.",
+        "severity": "minor",
+        "category": "design",
+        "file": "lib/settle/summary.ts"
+      },
+      {
+        "title": "balances.test.ts:328 names the payment-direction convention backwards ('recipient up, payer down'); its own assertions prove sender-up/recipient-down, matching the code.",
+        "detail": "balances.test.ts:328 names the payment-direction convention backwards ('recipient up, payer down'); its own assertions prove sender-up/recipient-down, matching the code.\n\n`lib/settle/balances.test.ts:328`\n\nEvidence: PR ref balances.test.ts lines 328-352: Bo (sender) -1000 to 0, Ada (recipient) +2000 to 1000; code folds sent at +1, received at -1\n\nFix: Rename to 'moves the payer of a payment up and its recipient down, and settles the group'.",
+        "severity": "minor",
+        "category": "test",
+        "file": "lib/settle/balances.test.ts"
+      }
+    ],
+    "pr": "22"
+  }
 }

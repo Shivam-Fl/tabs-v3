@@ -452,6 +452,41 @@
         "detail": "A no-change edit tells the user 'Expense updated.' although nothing was written.\n\n`lib/expenses/actions.ts:400`\n\nEvidence: updateExpense returns redirectTo expenseNoticePath(..., EXPENSE_UPDATED) for both the 'updated' and 'unchanged' kinds (actions.ts:400-402); expenseNoticeText maps EXPENSE_UPDATED to 'Expense updated.', so the group page shows that for a no-op save while the 'Nothing to change.' state is discarded by the redirect.\n\nFix: When unchanged, return the success state with no redirectTo (the form is still on screen to show it), or add a distinct notice value for it.",
         "severity": "minor",
         "file": "lib/expenses/actions.ts"
+      },
+      {
+        "title": "Style constants are copy-pasted into a fourth module instead of shared: expense-editor.tsx re-declares INPUT_CLASSES, PRIMARY_BUTTON, QUIET_BUTTON and DANGER_BUTTON string-identical to groups-panels.tsx and auth-form.tsx, and the group page adds yet another INPUT_CLASSES/QUIET_BUTTON pair.",
+        "detail": "Style constants are copy-pasted into a fourth module instead of shared: expense-editor.tsx re-declares INPUT_CLASSES, PRIMARY_BUTTON, QUIET_BUTTON and DANGER_BUTTON string-identical to groups-panels.tsx and auth-form.tsx, and the group page adds yet another INPUT_CLASSES/QUIET_BUTTON pair.\n\n`components/expense-editor.tsx:51`\n\nEvidence: gh pr diff 20: expense-editor.tsx:51-57 declares INPUT_CLASSES and QUIET_BUTTON byte-identical to components/groups-panels.tsx:41-47 and components/auth-form.tsx:31-32 on main; app/groups/[id]/page.tsx adds the same two constants again. StateMessage/FieldError likewise redefined per-module (editor:63,77 vs groups-panels:49,63).\n\nFix: Export the existing constants from a shared component module and import them in all four places.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/expense-editor.tsx"
+      },
+      {
+        "title": "DeleteExpenseForm hand-rolls its own two-step confirm instead of reusing the existing ConfirmStep that groups-panels.tsx documents as the one every destructive action shares.",
+        "detail": "DeleteExpenseForm hand-rolls its own two-step confirm instead of reusing the existing ConfirmStep that groups-panels.tsx documents as the one every destructive action shares.\n\n`components/expense-editor.tsx:535`\n\nEvidence: components/groups-panels.tsx on main defines module-private ConfirmStep ('a question naming the object, then a pair'), used by ArchiveGroupForm; components/expense-editor.tsx:535-580 re-implements the same shape because the shared one cannot be imported.\n\nFix: Export ConfirmStep from groups-panels.tsx and render it inside DeleteExpenseForm.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/expense-editor.tsx"
+      },
+      {
+        "title": "The new-expense and edit-expense pages duplicate the same screen shell: identical main wrapper, header block, archived banner (differing only in copy) and Back link.",
+        "detail": "The new-expense and edit-expense pages duplicate the same screen shell: identical main wrapper, header block, archived banner (differing only in copy) and Back link.\n\n`app/groups/[id]/expenses/[expenseId]/edit/page.tsx:62`\n\nEvidence: gh pr diff 20: edit/page.tsx:62-99 vs new/page.tsx:51-81 — same main wrapper, header shape, archived role=status banner, Back link; only h1 copy, archived sentence and the edit page's delete section differ.\n\nFix: One shared expense-screen component taking expenseId: string | null, with a mode prop for the copy differences.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx"
+      },
+      {
+        "title": "The floorDivide comment states a false numeric justification: at the top of the admitted amount range total x basis points does not pass the point where a double stops counting one at a time.",
+        "detail": "The floorDivide comment states a false numeric justification: at the top of the admitted amount range total x basis points does not pass the point where a double stops counting one at a time.\n\n`lib/money/splits.ts:153`\n\nEvidence: lib/money/splits.ts:153-155. Max admitted product is 2147483647 x 10000 = 2.1e13 (percentage) and 2147483647 x 999999 = 2.1e15 (shares), both below 2^53 ~= 9.0e15.\n\nFix: Correct the comment or simplify to Math.floor with the bound documented.",
+        "severity": "minor",
+        "category": "other",
+        "file": "lib/money/splits.ts"
+      },
+      {
+        "title": "The splits suite proves sum preservation and remainder placement over nine fixed totals, not over generated splits as TR-4 (and AC-4 wording) describes.",
+        "detail": "The splits suite proves sum preservation and remainder placement over nine fixed totals, not over generated splits as TR-4 (and AC-4 wording) describes.\n\n`lib/money/splits.test.ts:264`\n\nEvidence: lib/money/splits.test.ts:264 loops const totals = [1, 2, 3, 7, 100, 999, 1000, 12345, 2147483] deterministically; no generative input in the file.\n\nFix: Randomize the sweep with a seeded PRNG, or soften the TR-4/AC-4 wording to fixed-case coverage.",
+        "severity": "minor",
+        "category": "test",
+        "file": "lib/money/splits.test.ts"
       }
     ],
     "pr": "20"

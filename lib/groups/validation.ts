@@ -67,6 +67,36 @@ export const INVITE_ROTATE_FAILED_MESSAGE =
   'The invite link could not be replaced. The current link still works.';
 
 /**
+ * The one sentence a non-zero balance refuses a removal or a leave with (TR-7, AC-2).
+ *
+ * It is built here rather than in `lib/groups/members.ts` because two sides have to agree on it:
+ * the guard that throws it on the server and the members panel — a `'use client'` island — that
+ * recognises it to put a settle-up link beside it. The panel cannot import the guard to compare
+ * against, because that module reaches the database and would drag the schema into the browser
+ * bundle; sharing the string is the one thing that lets both read the same sentence.
+ *
+ * The suffix is the load-bearing half: `isBalanceBlockedRefusal` matches on it, so the wording
+ * after the name can only change if it changes in both places at once.
+ */
+const BALANCE_BLOCK_SUFFIX = 'has a non-zero balance. Settle up first, then try again.';
+
+export function nonZeroBalanceMessage(displayName: string): string {
+  return `${displayName} ${BALANCE_BLOCK_SUFFIX}`;
+}
+
+/**
+ * Whether a refusal is the balance guard speaking (AC-2).
+ *
+ * The panel renders a settle-up link beside exactly this refusal and no other, so the test is a
+ * yes/no over the server's own words rather than a second rule that could disagree with it. A
+ * name is required in front of the suffix: an empty message, or a message that happens to end
+ * with the phrase without naming anybody, is not this guard's.
+ */
+export function isBalanceBlockedRefusal(message: string): boolean {
+  return message.length > BALANCE_BLOCK_SUFFIX.length && message.endsWith(BALANCE_BLOCK_SUFFIX);
+}
+
+/**
  * How a lost seat claim reaches the person who lost it (AC-9).
  *
  * The claim cannot answer in its own form state: the action's revalidation refreshes the join

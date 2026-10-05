@@ -115,3 +115,27 @@ export interface AuthFormState {
 }
 
 export const IDLE_AUTH_STATE: AuthFormState = { status: 'idle', message: '' };
+
+/**
+ * The sentence a refused profile save reads, in one place (AC-5).
+ *
+ * It is both what the island renders under the fields it refused and what the page still renders
+ * for a direct hit on `?error=invalid`, so the two cannot become two phrasings of the same
+ * refusal. Kept beside the schema for the reason the auth messages are.
+ */
+export const PROFILE_REFUSAL_MESSAGE = 'Check the highlighted fields and try again.';
+
+/**
+ * What `updateProfile` hands back to its island.
+ *
+ * Declared here rather than in the `'use server'` module beside it, for the same reason
+ * `AuthFormState` is: a server-action file may export only async functions, so the island and
+ * the action share the shape through this module.
+ */
+export interface ProfileFormState {
+  status: 'idle' | 'error' | 'success';
+  message: string;
+  fieldErrors?: FieldErrors;
+}
+
+export const IDLE_PROFILE_STATE: ProfileFormState = { status: 'idle', message: '' };

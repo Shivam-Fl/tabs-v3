@@ -20,6 +20,7 @@ import {
 import {
   FIELD_MESSAGE,
   NEUTRAL_CREDENTIALS_MESSAGE,
+  PROFILE_REFUSAL_MESSAGE,
   SIGNUP_SUCCESS_MESSAGE,
   THROTTLE_MESSAGE,
   fieldErrorsFrom,
@@ -27,6 +28,7 @@ import {
   signinSchema,
   signupSchema,
   type AuthFormState,
+  type ProfileFormState,
 } from './validation';
 
 /**
@@ -156,18 +158,33 @@ export async function signOut(): Promise<void> {
 
 /**
  * Profile edit. The session user comes from the request's own cookie, never from the form, so
- * a form cannot address a row it does not own. A failed save reports by redirect rather than
- * by state: the profile form stays server-rendered, with redirect-based saved/invalid notices,
- * and its only client code is the Save button island (components/profile-save-button.tsx),
- * which holds the in-flight pending state a server render cannot.
+ * a form cannot address a row it does not own.
+ *
+ * A refusal is returned as state, not as a redirect (ADR-0008, conventions): the profile form
+ * is a controlled island, and a redirect would remount it and throw away exactly the typed
+ * values a refused save has to keep (AC-5, ui.md "failed saves never clear what the person
+ * typed"). Success still changes the page, so success still redirects with its notice —
+ * `?saved=1` is untouched, and `?error=invalid` stays readable by the page for a direct hit.
+ *
+ * The `(previous, formData)` signature is what `useActionState` calls this with; nothing else
+ * in the app calls it.
  */
-export async function updateProfile(formData: FormData): Promise<void> {
+export async function updateProfile(
+  _previous: ProfileFormState,
+  formData: FormData,
+): Promise<ProfileFormState> {
   const parsed = profileSchema.safeParse({
     displayName: field(formData, 'displayName'),
     currency: field(formData, 'currency'),
   });
 
-  if (!parsed.success) redirect('/profile?error=invalid');
+  if (!parsed.success) {
+    return {
+      status: 'error',
+      message: PROFILE_REFUSAL_MESSAGE,
+      fieldErrors: fieldErrorsFrom(parsed.error),
+    };
+  }
 
   const saved = await withDb(async (handle) => {
     const current = await getSessionUser(handle.db);

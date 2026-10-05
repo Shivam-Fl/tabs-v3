@@ -337,5 +337,259 @@
   },
   "validated_from": "plan",
   "validated_at": "2026-10-05T05:32:30.997Z",
-  "validated_ac_changes": []
+  "validated_ac_changes": [],
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Group page shows every member's net balance and a simplified who-pays-whom list with at most N-1 transfers, a group with no debts shows an explicit settled all-zero state, and an archived group renders the reads with no settle-up or delete controls",
+        "how_to_verify": "QA creates a 3-member group, adds two expenses, and reads the debts card; then settles every suggested transfer and confirms the settled state appears; QA opens an archived group and sees balances with no settle controls",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Home shows the viewer's cross-group you-owe and you-are-owed totals plus per-person rows plus each group's per-group balance in its own currency, with a note naming excluded foreign-currency groups",
+        "how_to_verify": "QA with two groups (one owed, one owing) reads the totals cards, the per-person rows, and each group row on /; QA adds a group in a second currency and sees it as a per-group row only plus the exclusion note",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "A member records a full and a partial settle-up payment from the debts card behind a confirm, deletes a payment as an involved member behind a confirm, and a non-involved member's delete is refused; balances update in place with a polite live-region announcement",
+        "how_to_verify": "QA pays one suggested transfer in full and one partially, deletes the partial payment as the payer, then attempts a delete as a third member and is refused; each result is announced through the shared status message live region",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Every amount on both screens renders in group currency through formatMinorUnits with tabular numerals, and the debts card sits above the expense list on a narrow viewport",
+        "how_to_verify": "QA drives a 390px viewport: amounts carry currency symbols, numerals are tabular, debts card precedes expenses in tab/DOM order",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Signed-out and non-member reads and writes of balances and payments are indistinguishable missing-or-forbidden refusals with no data leak, including a payment naming a membership id from another group",
+        "how_to_verify": "Run lib/settle/actions.test.ts negative cases: stranger and signed-out callers get the same 404-shaped refusal on every payment action and balance read, and a cross-group endpoint id is refused the same way",
+        "id": "AC-5",
+        "source": "TR-3",
+        "verify": "test"
+      },
+      {
+        "check": "Unit tests fix net balances and greedy simplification outputs on fixtures covering all four split types, multi-payer expenses and payments, and assert at most N-1 transfers",
+        "how_to_verify": "Run lib/settle/balances.test.ts and lib/settle/simplify.test.ts in CI",
+        "id": "AC-6",
+        "source": "TR-9",
+        "verify": "test"
+      },
+      {
+        "check": "Payment activity rows carry a renderable snapshot (amount plus both endpoint ids and names) that survives the payment delete, so the later feed ticket can render payment-created and payment-deleted rows",
+        "how_to_verify": "Run lib/settle/actions.test.ts: created and deleted payment rows assert the snapshot payload and actor/timestamp, and the deleted row still reads after its payment row is gone",
+        "id": "AC-7",
+        "source": "TR-10",
+        "verify": "test"
+      },
+      {
+        "check": "A transfer involving a departed ledger participant (membership row deleted, seat still in the ledger) records through a current member and deletes through the involved current member, keeping the group settleable to all-zero",
+        "how_to_verify": "Run lib/settle/actions.test.ts departed-seat cases: payment to a departed seat succeeds, delete by the involved current member succeeds, delete by a third member is refused",
+        "id": "AC-8",
+        "source": "IAC-3",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Store a per-membership balance column updated on every expense/payment write",
+        "rejected_because": "Violates the project invariant that balances are derived by one recompute path and never stored; a stored column can drift from the ledger and needs its own locking, while recompute in-request is already budgeted for groups up to 200 members (TR-9 non-functional note)"
+      },
+      {
+        "approach": "Exact-minimum settlement search instead of greedy min-cash-flow",
+        "rejected_because": "Minimum-transfer settlement is NP-complete (subset-sum); ADR-0005 already decided greedy min-cash-flow with the at-most-N-1 guarantee, and the issue contract names that algorithm explicitly"
+      },
+      {
+        "approach": "Restrict settle-up endpoints to current members only and leave departed seats unsettleable",
+        "rejected_because": "A leave-at-zero followed by an expense edit or delete touching the departed seat strands a non-zero net no payment could ever clear, breaking the issue's own promise that the group reads all-zero; letting a current member record with a departed ledger participant of the same group keeps every net settleable without touching expense code"
+      },
+      {
+        "approach": "Null payload on payment activity rows like every other non-edit kind",
+        "rejected_because": "The schema comment's null-payload rule assumes the linked row survives, but payment-deleted rows outlive their payment through set-null, so with nothing stored the later feed ticket could never render them; a small amount/endpoints snapshot is the minimum that keeps TR-10 renderable"
+      }
+    ],
+    "approach": "Add migration 0005 with a payments ledger table plus a nullable payment_id on activity_event (mirroring expense_id's set-null pattern so payment-deleted rows outlive the delete), and give payment rows a small snapshot payload (amount plus both endpoint ids and display names) so the later feed ticket can render them. Add lib/settle/: balances.ts with computeNetBalances(db, groupId) as the single recompute path (paid parts minus computed shares plus payments received minus payments sent, integer minor units, keyed by membership id with snapshotted display names, including departed seats whose membership row is deleted so nets stay truthful and sum to zero), simplify.ts with the ADR-0005 greedy max-debtor-vs-max-creditor pass with deterministic displayName/membershipId tiebreaks, validation.ts with zod boundaries for create/delete payment input, and actions.ts with createPayment/deletePayment Server Actions through guardGroup (membership check first, archived groups refuse writes, inputs validated at the boundary, each write plus its activity row in one interactive transaction). createPayment requires both endpoints to belong to the guarded group — a current membership or a departed ledger participant of that group, never an id from another group — and from != to; deletePayment requires the acting current member to be the payer or the recipient. Replace the sync getMemberBalance stub in lib/groups/members.ts with an async db-backed read through computeNetBalances and update its four call sites plus the existing mocks. Render the group debts card with per-member nets (departed holders labelled), the simplified transfer list with Settle-up buttons hidden when archived, and the settled/owes-summary banner (debts card above expenses in DOM order so narrow screens stack correctly); render home viewer totals and per-person rows under the same-currency-sum rule with an exclusion note naming foreign-currency groups, plus per-group balances in group currency read sequentially in one request. Client islands (components/settle-panels.tsx) follow the groups-panels ConfirmStep plus StateMessage (role=status, aria-live=polite) pattern: settle-up and delete-payment forms with explicit confirms, input preserved on error, in-place updates announced through the live region — no new toast infrastructure. Payment activity rows use kinds payment-created/payment-deleted with the snapshot payload for the later activity-feed ticket to render; activity feed UI itself stays out of scope.",
+    "assumptions": [
+      "Issue #6's ledger (expenses, expense_payers, split_lines, activity_event with payload) is merged — verified present in lib/db/schema.ts, lib/expenses/actions.ts and migration 0004",
+      "CI and QA run on PGlite only, so no backend-specific code is needed anywhere in this plan (backend-invariant holds as long as only getDb branches)",
+      "The later activity-feed ticket will render payment-created/payment-deleted rows from the snapshot payload defined here; this plan only writes the rows",
+      "A payment needs only from, to and amount (created_at orders the feed); no per-payment date picker or note field in v1"
+    ],
+    "confidence": 78,
+    "confidence_rationale": "The ledger, guard, transaction, and confirm-step plus live-region patterns are all established code to copy, the root-cause stub is verified at lib/groups/members.ts:29, and ADR-0005 fixes the algorithm; the number stays below 90 because the departed-participant payment rule and the payment snapshot payload shape are arbiter judgment calls the maintainer has not reviewed, and the later feed ticket could still want a field the snapshot does not carry.",
+    "debate_summary": "The critique was a summary-only verdict of flawed with eight claims and I verified each against the code rather than applying them. Blocking (home per-person rows missing while AC-2 claims IAC-2): confirmed — the issue text, ui.md Home regions, spec tabs, TR-9 and IAC-2 all require per-person rows and the proposal's acceptance, files and qa_script omit them; fixed by extending AC-2, app/page.tsx and qa_script. Major (departed seat stranded non-zero after a later expense edit/delete, unreachable all-zero under a current-members-only rule): confirmed — removal deletes the membership row while ledger split lines keep the seat (the expense path's resolveNames previous-snapshot case proves it), so the state is reachable; fixed with the departed-ledger-participant rule plus AC-8 and tests, not by touching expense code. Major (null-payload payment rows can never render after set-null): confirmed as a specification gap — fixed by defining the snapshot payload plus AC-7 and tests, keeping feed UI out of scope. Major (endpoints not scoped to the guarded group, no cross-group test): confirmed as a precision gap against removeMember's own this-group scoping precedent — fixed in the actions rule, AC-5 and tests. Minor (cross-currency rule untested): confirmed — covered now in AC-2 and qa_script. Minor (toasts do not exist, aria-live unspecified): confirmed in the narrow sense — groups-panels has ConfirmStep plus a StateMessage live region but no toast component, so the plan now names that mechanism instead. Minor (debts card not conditioned on archived): confirmed omission — settle controls now hide when archived, matching the page's existing pattern. Minor (one computeNetBalances call per group on a single-connection backend): judged a non-defect — sequential reads in one request are correct on PGlite and within the TR-9 recompute budget, so it is recorded as a residual risk rather than a plan change. Nothing in the critique contradicts the brief's recorded decisions, so nothing was dismissed on those grounds.",
+    "evidence": [
+      "lib/groups/members.ts:29 sync getMemberBalance stub returning 0; no lib/settle directory; 0004 the last migration",
+      "lib/expenses/actions.ts resolveNames previous-snapshot case keeps departed seats in the ledger",
+      "lib/groups/actions.ts removeMember scopes the membership id to the group and deletes the row; leaveGroup deletes the row",
+      "components/groups-panels.tsx ConfirmStep plus StateMessage with aria-live=polite; no toast component exists",
+      "app/groups/[id]/page.tsx gates write UI on group.archived and reserves the debts slot for TR-9",
+      "docs/ui.md Home regions list per-person rows; issue Person-sees lists per-person rows; TR-9 requires per-person totals"
+    ],
+    "files": [
+      {
+        "action": "create",
+        "change": "payments table (id uuid, group_id FK cascade, from/to membership ids with no membership FK per ADR-0007 plus snapshotted display names, amount_minor integer, created_at) with (group_id, id) index; activity_event.payment_id nullable uuid with set-null FK mirroring expense_id, guarded catalogue-style like 0004",
+        "path": "lib/db/migrations/0005_payments.sql",
+        "why": "Ledger storage for settle-up payments and feed linkage that survives payment deletes"
+      },
+      {
+        "action": "edit",
+        "change": "Add payments pgTable and activityEvents.paymentId column matching 0005, plus the payment snapshot payload type (amount plus endpoint ids and names) that payment-deleted rows keep after set-null",
+        "path": "lib/db/schema.ts",
+        "why": "Schema is the single source of truth the migration must match"
+      },
+      {
+        "action": "create",
+        "change": "computeNetBalances(db, groupId) returning per-membership {membershipId, displayName, balanceMinor}; sums stored payer parts minus stored computed shares plus payments received minus payments sent; includes departed seats via snapshot names so nets stay truthful and sum to zero; zero rows for members untouched by the ledger; the one path every screen and guard reads",
+        "path": "lib/settle/balances.ts",
+        "why": "Single derived-balances path the invariant requires"
+      },
+      {
+        "action": "create",
+        "change": "simplifyDebts(balances) greedy max-debtor vs max-creditor over integer minor units with deterministic tiebreak, returning transfers that settle all nets with at most N-1 entries and none for the all-zero case; transfers may name departed holders",
+        "path": "lib/settle/simplify.ts",
+        "why": "The stated algorithm with its guarantee, per ADR-0005 and TR-9"
+      },
+      {
+        "action": "create",
+        "change": "zod paymentScope/paymentInput boundaries: amount as minor-unit integer 1..MAX_MINOR_UNITS, from/to membership ids, from != to; group scoping of endpoints is enforced in actions against the guarded group, not in zod; user-safe messages naming what is off",
+        "path": "lib/settle/validation.ts",
+        "why": "Server input validation at the action boundary per conventions"
+      },
+      {
+        "action": "create",
+        "change": "createPayment/deletePayment Server Actions: guardGroup first, archived refuses, zod input, endpoints must each be a current membership of the guarded group or a departed ledger participant of it (cross-group ids get the 404-shaped refusal), deleter must be payer or recipient as a current member (else 404-shaped refusal), each write plus its payment-created/payment-deleted activity row with snapshot payload in one interactive transaction, revalidate / and group paths",
+        "path": "lib/settle/actions.ts",
+        "why": "Payment writes with TR-3 authz and TR-8-style atomicity"
+      },
+      {
+        "action": "edit",
+        "change": "Replace sync stub with async getMemberBalance(db, groupId, membershipId) reading computeNetBalances; keep assertZeroBalance/NonZeroBalanceError unchanged",
+        "path": "lib/groups/members.ts",
+        "why": "The seam TR-9 was waiting for; callers already exist on both sides of it"
+      },
+      {
+        "action": "edit",
+        "change": "Await the new getMemberBalance(handle.db, ...) in removeMember and leaveGroup inside the existing withDb callbacks",
+        "path": "lib/groups/actions.ts",
+        "why": "Balance-blocked removal/leave must read the real ledger"
+      },
+      {
+        "action": "edit",
+        "change": "Replace the zero-balance shell with the balance banner (settled vs owes-summary), the simplified-debts card with per-member nets (departed holders labelled), transfer list and Settle-up buttons hidden when archived, keeping the debts card above expenses in DOM order; read through computeNetBalances/simplifyDebts after guardGroup",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "IAC-1 debts card and banner where the shell already reserves the slot"
+      },
+      {
+        "action": "edit",
+        "change": "Replace the zeroed totals slots with real viewer totals and per-person rows under the same-currency-sum rule with an exclusion note naming foreign-currency groups, plus per-group balances in group currency; sequential per-group reads in one request with no backend branching",
+        "path": "app/page.tsx",
+        "why": "IAC-2 cross-group totals, per-person rows and per-group balances"
+      },
+      {
+        "action": "edit",
+        "change": "Pass real per-member balances from computeNetBalances into MembersPanel instead of the stub",
+        "path": "app/groups/[id]/members/page.tsx",
+        "why": "Member list shows the same numbers as the debts card"
+      },
+      {
+        "action": "create",
+        "change": "SettleUpForm and DeletePaymentForm client islands using the shared ConfirmStep plus StateMessage (role=status, aria-live=polite) pattern, preserving input on error and announcing results through the live region; no new toast infrastructure",
+        "path": "components/settle-panels.tsx",
+        "why": "IAC-3 confirms and in-place feedback without inventing a new interaction pattern"
+      }
+    ],
+    "issue": 7,
+    "kind": "feature",
+    "out_of_scope": [
+      "Activity feed UI — payment rows are written now with a renderable snapshot, rendered by the later activity ticket",
+      "Seed fixtures and deploy guide (TR-12 ticket)",
+      "Moving money in the app: settle-up only records payments, per spec"
+    ],
+    "qa_script": [
+      "Sign up as Ada, create a group, add Bo and Cy as placeholders",
+      "Add an equal-split expense paid by Ada and an exact-split multi-payer expense",
+      "Open the group page: per-member nets plus a simplified transfer list with at most N-1 entries and Settle-up buttons",
+      "Open home: totals cards, per-person rows and per-group balances all agree with the group page",
+      "Add a group in a second currency: it appears as a per-group row only, plus the exclusion note on the totals",
+      "Pay one transfer in full and one partially through the debts card confirms; balances update in place with an announcement",
+      "Delete the partial payment as its payer through the confirm; attempt delete as Cy and see a refusal",
+      "Settle the group to zero; confirm the explicit settled state on the group page and totals on home",
+      "Open an archived group: balances read correctly with no settle-up or delete controls",
+      "Repeat the group read on a 390px viewport: debts card above expenses, currency-formatted tabular amounts"
+    ],
+    "residual_risks": [
+      "Home reads each group sequentially in one request; within the TR-9 recompute budget for typical homes, but a user in dozens of large groups may see a slow home — QA should try a multi-group home if fixtures allow",
+      "The departed-participant payment rule is new judgment: a current member recording with a departed seat has no maintainer precedent, and review may prefer to forbid it and accept the stranded state as a later ticket",
+      "The payment snapshot payload shape is chosen for the later feed ticket without its input; if that ticket wants more fields it will need a follow-up migration"
+    ],
+    "risks": [
+      "No docs/ or .sdlc/ files change in this plan: ADR-0005 already covers the algorithm and the payment activity kinds follow the existing expense-event pattern, so no new ADR is needed; if review disagrees, the activity ticket can carry the doc update",
+      "Cross-currency home totals and per-person rows exclude foreign-currency groups by the stated same-currency rule; a group in a second currency is the case that proves the note renders"
+    ],
+    "root_cause": "Balances are a sync stub returning 0 with no payments ledger and no lib/settle module, while both screens already render zeroed balance shells; the proposal fills exactly that seam, and the critique's gaps were missing per-person rows, underspecified endpoint scoping and payment-row contents, and the reachable departed-seat strand.",
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "equal/exact/percentage/shares fixtures with multi-payer expenses produce exact nets summing to zero",
+          "payments move nets payer-to-recipient and full settlement reads all-zero",
+          "members untouched by the ledger read zero",
+          "a departed seat (membership row deleted) still nets from its snapshot rows so group nets sum to zero"
+        ],
+        "path": "lib/settle/balances.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "three-member fixture simplifies to at most 2 transfers with exact amounts",
+          "all-zero input returns no transfers",
+          "tiebreak is deterministic across runs",
+          "at most N-1 transfers on a generated 8-member ledger"
+        ],
+        "path": "lib/settle/simplify.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "stranger and signed-out callers get identical 404-shaped refusals on create and delete",
+          "from == to and non-positive amounts refused with user-safe messages",
+          "an endpoint id from another group is refused with the 404-shaped refusal",
+          "a transfer involving a departed ledger participant of the same group succeeds; delete by the involved current member succeeds and by a third member is refused",
+          "delete by a non-involved member refused; delete by payer and by recipient both succeed",
+          "failing write leaves no payment and no activity row (transaction atomicity)",
+          "successful writes record payment-created/payment-deleted activity rows with actor, timestamp and snapshot payload; the deleted row still reads after its payment row is gone"
+        ],
+        "path": "lib/settle/actions.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "update getMemberBalance mock to the async db-backed signature; removal/leave still blocked on non-zero and allowed at zero"
+        ],
+        "path": "lib/groups/actions.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "replace stub-returns-zero expectations with ledger-backed reads (zero with no ledger rows, real nets with fixture rows)"
+        ],
+        "path": "lib/groups/members.test.ts"
+      }
+    ],
+    "understanding": "Issue #7 needs per-group net balances with greedy min-cash-flow simplified debts (at most N-1 transfers), cross-group you-owe/you-are-owed home totals with per-person rows, and full/partial settle-up payments recorded as ledger entries deletable only by involved members, all derived by one recompute path and never stored. Today the expense/payment ledger exists for expenses (migration 0004, lib/expenses) but there is no payments table, no lib/settle module, and balances are a sync getMemberBalance stub returning 0 with four call sites (removeMember, leaveGroup, group page, members page) plus mocks in groups tests; the group and home pages render zeroed balance shells where the debts card, banner, totals, per-person rows and per-group balances will go.",
+    "unknowns": [
+      "Whether the later activity-feed ticket wants more than amount plus endpoint ids and names on payment rows; the snapshot defined here is the minimum that renders them"
+    ],
+    "version": 1
+  },
+  "approved_too_high": false
 }

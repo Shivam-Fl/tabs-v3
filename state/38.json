@@ -32,5 +32,12 @@
       "action": "-> triage"
     }
   ],
-  "epic": 31
+  "epic": 31,
+  "issue_snapshot": {
+    "title": "No developer artefacts are linked or shown anywhere on landing, auth, shell, or footer: no /api/health link, no raw i...",
+    "body": "Deferred from #33 by its work order: activity-feed UTC-labelled timestamps visible behind the shell on /activity are outside landing/auth/shell/footer scope; their redesign belongs to the later activity slice.\n\n## Acceptance (from the split)\n\n- **IAC-1** No developer artefacts are linked or shown anywhere on landing, auth, shell, or footer: no /api/health link, no raw ids, no ISO dates, no UTC timestamps.\n\nPart of #31.\nDepends on #33.",
+    "sha256": "ce3b03c799bb2a873b2ff97cc91560dba4ab50de8e90852bbfac1ebef36700e2",
+    "by": "github-actions[bot]",
+    "at": "2026-10-05T22:25:54.205Z"
+  }
 }

@@ -98,7 +98,12 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/auth-form.tsx",
+    "app/signin/page.tsx",
+    "app/signup/page.tsx",
+    "lib/groups/validation.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

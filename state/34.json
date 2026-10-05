@@ -17,8 +17,13 @@
   "work_order": null,
   "touch_paths": [],
   "acceptance": [],
-  "planned_route": [],
-  "on_complete": null,
+  "planned_route": [
+    "plan",
+    "implement",
+    "review",
+    "qa"
+  ],
+  "on_complete": "merge",
   "artifacts": {},
   "failure_history": [],
   "review_history": [],
@@ -35,6 +40,11 @@
       "at": "2026-10-05T23:25:19.214Z",
       "agent": "intake",
       "action": "-> planning"
+    },
+    {
+      "at": "2026-10-05T23:38:09.265Z",
+      "agent": "router",
+      "action": "route plan -> implement -> review -> qa (model, confidence 96)"
     }
   ],
   "epic": 31,
@@ -44,5 +54,20 @@
     "sha256": "e7c01cf6303245407f488e6a6d603d8e81f6a0da40cad6c0f195a199adb758b9",
     "by": "github-actions[bot]",
     "at": "2026-10-05T23:25:16.550Z"
+  },
+  "resume_at": null,
+  "flow_plan": {
+    "kind": "feature",
+    "confidence": 96,
+    "matched_rule": null,
+    "gates": {
+      "plan_approval": false,
+      "merge_approval": false
+    },
+    "councils": {
+      "plan": "council",
+      "review": "council"
+    },
+    "decided_at": "2026-10-05T23:38:09.264Z"
   }
 }

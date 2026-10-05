@@ -272,7 +272,25 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/db/migrations/0005_payments.sql",
+    "lib/db/schema.ts",
+    "lib/settle/balances.ts",
+    "lib/settle/simplify.ts",
+    "lib/settle/validation.ts",
+    "lib/settle/actions.ts",
+    "lib/groups/members.ts",
+    "lib/groups/actions.ts",
+    "app/groups/[id]/page.tsx",
+    "app/page.tsx",
+    "app/groups/[id]/members/page.tsx",
+    "components/settle-panels.tsx",
+    "lib/settle/balances.test.ts",
+    "lib/settle/simplify.test.ts",
+    "lib/settle/actions.test.ts",
+    "lib/groups/actions.test.ts",
+    "lib/groups/members.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

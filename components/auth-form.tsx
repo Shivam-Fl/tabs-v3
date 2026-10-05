@@ -1,9 +1,10 @@
 'use client';
 
+import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
-import { IDLE_AUTH_STATE, type AuthFormState } from '../lib/auth/validation';
-import { INPUT_CLASSES, LABEL_CLASSES } from './ui';
+import { IDLE_AUTH_STATE, PASSWORD_MIN_LENGTH, type AuthFormState } from '../lib/auth/validation';
+import { Button, TextInput } from './ui';
 
 /**
  * The one client island in auth. It exists for exactly the things a server-rendered form
@@ -17,7 +18,9 @@ import { INPUT_CLASSES, LABEL_CLASSES } from './ui';
  * - **The show/hide password toggle**, which is a keystroke-level concern.
  *
  * Validation is not duplicated here: the server action owns it, and the errors it returns are
- * rendered inline under the field they came from.
+ * rendered inline under the field they came from. The password *hint* is not validation either —
+ * it states the rule before it is broken, which is the one thing ui.md asks a sign-up screen to
+ * say up front, and it reads the rule from lib/auth/validation rather than restating it.
  */
 
 export type AuthAction = (state: AuthFormState, formData: FormData) => Promise<AuthFormState>;
@@ -59,109 +62,77 @@ export function AuthForm({ mode, action, submitLabel, pendingLabel }: AuthFormPr
       onSubmit={(event) => {
         if (isPending) event.preventDefault();
       }}
-      className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-5"
+      className="flex flex-col gap-4 rounded-token border border-border bg-surface p-5 shadow-sm"
     >
       {state.status === 'error' && state.message !== '' && Object.keys(fieldErrors).length === 0 ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-secondary text-danger">
           {state.message}
         </p>
       ) : null}
 
       {state.status === 'success' ? (
-        <p role="status" className="text-sm text-lent">
+        <p role="status" className="text-secondary text-lent">
           {state.message}
         </p>
       ) : null}
 
       {mode === 'signup' ? (
-        <div className="flex flex-col gap-2">
-          <label className={LABEL_CLASSES} htmlFor={ids.displayName}>
-            Display name
-          </label>
-          <input
-            id={ids.displayName}
-            name="displayName"
-            type="text"
-            autoComplete="name"
-            maxLength={80}
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            aria-invalid={fieldErrors.displayName !== undefined}
-            aria-describedby={fieldErrors.displayName ? `${ids.displayName}-error` : undefined}
-            className={INPUT_CLASSES}
-          />
-          {fieldErrors.displayName ? (
-            <p id={`${ids.displayName}-error`} className="text-sm text-danger">
-              {fieldErrors.displayName}
-            </p>
-          ) : null}
-        </div>
+        <TextInput
+          id={ids.displayName}
+          name="displayName"
+          label="Display name"
+          type="text"
+          autoComplete="name"
+          maxLength={80}
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          error={fieldErrors.displayName}
+        />
       ) : null}
 
-      <div className="flex flex-col gap-2">
-        <label className={LABEL_CLASSES} htmlFor={ids.email}>
-          Email
-        </label>
-        <input
-          id={ids.email}
-          name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          aria-invalid={fieldErrors.email !== undefined}
-          aria-describedby={fieldErrors.email ? `${ids.email}-error` : undefined}
-          className={INPUT_CLASSES}
-        />
-        {fieldErrors.email ? (
-          <p id={`${ids.email}-error`} className="text-sm text-danger">
-            {fieldErrors.email}
-          </p>
-        ) : null}
-      </div>
+      <TextInput
+        id={ids.email}
+        name="email"
+        label="Email"
+        type="email"
+        autoComplete="email"
+        inputMode="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        error={fieldErrors.email}
+      />
 
-      <div className="flex flex-col gap-2">
-        <label className={LABEL_CLASSES} htmlFor={ids.password}>
-          Password
-        </label>
-        <div className="flex gap-2">
-          <input
-            id={ids.password}
-            name="password"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-invalid={fieldErrors.password !== undefined}
-            aria-describedby={fieldErrors.password ? `${ids.password}-error` : undefined}
-            className={INPUT_CLASSES}
-          />
+      <TextInput
+        id={ids.password}
+        name="password"
+        label="Password"
+        type={showPassword ? 'text' : 'password'}
+        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        error={fieldErrors.password}
+        hint={mode === 'signup' ? `At least ${PASSWORD_MIN_LENGTH} characters.` : undefined}
+        trailing={
           <button
             type="button"
             onClick={() => setShowPassword((shown) => !shown)}
             aria-pressed={showPassword}
             aria-controls={ids.password}
-            className="min-h-11 shrink-0 rounded-token border border-muted/40 px-3 text-sm font-medium"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-token border border-border bg-surface px-3 text-body font-medium text-ink hover:bg-surface-sunken"
           >
+            {showPassword ? (
+              <EyeOff aria-hidden="true" className="size-5" />
+            ) : (
+              <Eye aria-hidden="true" className="size-5" />
+            )}
             {showPassword ? 'Hide' : 'Show'}
           </button>
-        </div>
-        {fieldErrors.password ? (
-          <p id={`${ids.password}-error`} className="text-sm text-danger">
-            {fieldErrors.password}
-          </p>
-        ) : null}
-      </div>
+        }
+      />
 
-      <button
-        type="submit"
-        disabled={isPending}
-        aria-busy={isPending}
-        className="min-h-11 rounded-token bg-accent px-4 font-medium text-surface disabled:opacity-60"
-      >
-        {isPending ? pendingLabel : submitLabel}
-      </button>
+      <Button type="submit" pending={isPending} pendingLabel={pendingLabel}>
+        {submitLabel}
+      </Button>
     </form>
   );
 }

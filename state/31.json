@@ -233,7 +233,7 @@
         ],
         "title": "Group page with sections, expenses list and settings entry",
         "why": "A group member finds the balance, the expenses, and the next action without scrolling one long stack, with Add expense always one tap away.",
-        "issue": null
+        "issue": 35
       },
       {
         "acceptance": [
@@ -297,6 +297,7 @@
   },
   "children": [
     33,
-    34
+    34,
+    35
   ]
 }

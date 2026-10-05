@@ -82,14 +82,20 @@
   ],
   "brief_pr": 32,
   "resume_at": null,
-  "stopped_at": "project",
-  "replan_requested_at": "2026-10-05T17:32:45.640Z",
+  "stopped_at": null,
+  "replan_requested_at": "2026-10-05T17:45:31.201Z",
   "route_notes": [
     {
       "by": "Shivam-Fl",
       "at": "2026-10-05T17:32:45.640Z",
       "kind": "replan-project",
       "note": "Reviewed: the design system in #32 is approved as written — keep docs/ui.md, the screen structures, the component specs, the tokens and lucide-react exactly as they are, and keep every other decision unchanged. Two things in #32 came from the framework, which is now fixed: it re-recorded the eight existing decisions as ADR-0009 to ADR-0016, and it dropped the 'Added by review and QA' section of conventions.md. Regenerate the brief so the PR carries only the one new ADR for the redesign and keeps the learned conventions. In the brief, give each decision you keep its original title without an ADR number, so it is recognised as already recorded."
+    },
+    {
+      "by": "Shivam-Fl",
+      "at": "2026-10-05T17:45:31.201Z",
+      "kind": "replan-project",
+      "note": "Same as the last request: keep docs/ui.md and every decision exactly as they are; regenerate only, now that the framework also recognises a recorded decision by the title in its ADR heading, so the success-notices decision is not recorded twice."
     }
   ]
 }

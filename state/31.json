@@ -150,5 +150,150 @@
     "councils": {},
     "decided_at": "2026-10-05T17:54:19.744Z"
   },
-  "dispatched_stage": "maintainer"
+  "dispatched_stage": "maintainer",
+  "breakdown": {
+    "epic": 31,
+    "pieces": [
+      {
+        "acceptance": [
+          "Signed-out visitor loads a marketing landing page with header mark plus Sign in, hero headline with one-line product story, primary Create account and secondary Sign in, three-step how-it-works, trust line, and footer with product links only.",
+          "No developer artefacts are linked or shown anywhere on landing, auth, shell, or footer: no /api/health link, no raw ids, no ISO dates, no UTC timestamps.",
+          "Sign-up and sign-in render as a centred card (max 420px) with labelled email and password, show/hide toggle, password-rule hint on sign-up, clearly labelled submit, and links between the two screens.",
+          "Signing in lands on Home, never on Profile; every signed-in page shows the app shell top bar with Tabs mark linking Home, current place, and account menu opening Profile and Sign out.",
+          "Every nested page reached from this piece has a way back (back link or breadcrumb); there is no dead end.",
+          "Auth loading and error states hold: submit shows pending spinner with double-submit impossible, failed sign-in preserves input and shows one neutral message that never reveals whether an email is registered.",
+          "Landing and auth at 375px and 1280px stack correctly with 16px gutters and 44px targets, meet the ui.md accessibility rules (labels, visible focus, one h1, contrast), and follow docs/ui.md tokens with Inter and lucide-react only."
+        ],
+        "context": "UI face: visitor sees the new landing page and the centred auth cards; signed-in user sees the shell (mark to Home, current place, account menu) on every page this piece touches. Contract face: this slice DEFINES the theme tokens, Inter via next/font, lucide-react dependency, and the shared component set (buttons, inputs including money inputs, segmented control, list rows, cards, avatars, badges, dialogs/sheets, toasts, skeletons, empty states) per docs/ui.md sections Theme, Patterns and Accessibility; later slices consume them unchanged. Behaviour, data model, money rules, TRs and all other decisions stay exactly as they are.",
+        "covers": [
+          "TR-11",
+          "S-8"
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Any behaviour, data-model, money-math, or API change",
+          "Home, group, expense, settle-up, members, activity, and profile screen redesigns (later pieces)",
+          "Dark mode"
+        ],
+        "risk": "Touches the sign-in and sign-up screens; auth logic, hashing, sessions, and rate limiting are unchanged and review must reject any behaviour change there.",
+        "title": "Foundation, app shell, landing page and auth screens",
+        "why": "A visitor understands Tabs in seconds and reaches sign-up or sign-in in one click, and every signed-in page shares one navigable shell instead of orphan text links.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Home shows the app shell plus a balance summary card whose hero number is the net position, with you-are-owed and you-owe totals beside it.",
+          "Per-person rows show who the user owes and who owes the user, each with an avatar, name, and words-plus-colour direction; group list shows rich rows with name, member count, per-group balance, and chevron.",
+          "Zero balances read neutral (All settled up style), never debt red; every amount renders in group currency from one formatter with words plus colour, never colour alone.",
+          "Empty state shows an illustration or icon, one sentence on what Tabs does, and a Create-your-first-group button; loading shows skeleton summary card and group rows with no layout shift; failure shows retry and never presents cached balances as current.",
+          "Primary Create group action is obvious: header button on desktop and thumb-reachable fixed button on phones; cards stack vertically at 375px and lay out up to 1024px.",
+          "Row hit targets are 44px, keyboard path and visible focus hold, one h1 with heading hierarchy, icons are lucide-react aria-hidden next to text, and the ui.md checklists pass."
+        ],
+        "context": "UI face: signed-in user opens Home and sees net position, per-person owes/owed rows with avatars, and rich group rows with the create action always reachable. Contract face: consumes the shell, tokens, and shared rows/cards/avatars/badges/skeletons from piece 1 unchanged; reads the existing home balance and group queries through the current server path with no new endpoint or data shape. Follows docs/ui.md Home screen structure and states exactly.",
+        "covers": [
+          "TR-11",
+          "S-8"
+        ],
+        "depends_on": [
+          1
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Any balance-math, simplification, or query change; numbers come from the existing recompute path",
+          "Group page, expense editor, settle-up, members, activity, and profile screens",
+          "Dark mode"
+        ],
+        "title": "Home dashboard with balances, people and groups",
+        "why": "A signed-in user sees in one glance whether they owe or are owed, who with, and which group needs attention, with groups as rich rows.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "Group page shows shell with back-to-Home breadcrumb, group header (mark, name, currency badge, Settings entry), and a summary card with the user balance as hero number, who-owes-whom lines, primary Add expense and secondary Settle up.",
+          "Sections render as tabs or segmented control: Expenses, Balances and settle up, Activity excerpt linking to the full feed, Members excerpt linking to members; settings (rename, archive) live behind the Settings entry, never on the main scroll.",
+          "Expenses section shows newest-first rows (avatar left, title plus human-date metadata middle, amount right with words-plus-colour) with search plus member and category filters inside a disclosure on phones.",
+          "Row actions live in an overflow menu (edit, delete with confirm naming the expense); no inline Edit or red Delete buttons on rows; destructive choices confirm in a dialog or sheet.",
+          "Add expense is always reachable: header button on desktop and fixed bottom button on phones; empty group shows what-to-do-first with an Add-expense button and a settled banner when all balances are zero.",
+          "Loading shows skeleton summary card, section tabs, and three expense rows with no layout shift; a failed section shows inline retry inside its own panel; full failure shows a page error with retry, never a half-rendered ledger.",
+          "Dates read as people say them and times render in the viewer zone; works at 375px and 1280px (desktop may place summary in a side card); keyboard, focus, headings, and reduced-motion rules from ui.md hold."
+        ],
+        "context": "UI face: group member sees one organised page (summary plus tabbed Expenses, Balances and settle up, Activity, Members) with Add expense always reachable and settings tucked behind Settings. Contract face: consumes shell, tokens, rows, cards, segmented control, dialogs, and skeletons from piece 1; reuses existing group, expense-list, balance, and activity-excerpt reads with no endpoint or schema change. Follows docs/ui.md Group page structure and states exactly.",
+        "covers": [
+          "TR-11",
+          "S-8"
+        ],
+        "depends_on": [
+          1
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Expense editor form internals and settle-up sheet internals (next piece)",
+          "Balance-math, simplification, filter semantics, or activity-writing changes",
+          "Dark mode"
+        ],
+        "title": "Group page with sections, expenses list and settings entry",
+        "why": "A group member finds the balance, the expenses, and the next action without scrolling one long stack, with Add expense always one tap away.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "EXPENSE EDITOR: amount is first, large, autofocused money input with group currency prefix and decimal input mode, followed by description, styled date picker with human reading, and category plus note.",
+          "EXPENSE EDITOR: payer area defaults to me with a single payer; Paid by several people progressively reveals per-person parts; split-type segmented control (equal, exact, percentage, shares) shows only that type's per-member rows with avatar, name, and live computed share.",
+          "EXPENSE EDITOR: live sum and remainder line confirms parts equal the total; validation on blur and submit names the shortfall and its size; reopening shows the stored split type and each member input exactly as entered.",
+          "EXPENSE EDITOR: sticky bottom bar holds primary Save and Cancel with back-to-group; saving disables Save with Saving plus spinner, never unmounts mid-save, double submit is impossible, and failed save keeps all input with retry.",
+          "SETTLE-UP: per-transfer Settle up opens a centred dialog on desktop and bottom sheet on phones with the who-pays-whom line, suggested amount prefilled and editable for partial payment, optional date, one Record payment confirm plus cancel; no inline amount forms on rows.",
+          "SETTLE-UP: confirming records the payment and updates feed plus balances with a toast or redirect notice; after a partial payment the confirmation shows what remains owed; failed record keeps the sheet open with all input, names the problem, and offers retry.",
+          "Deleting a recorded expense or payment confirms in a dialog naming the object and its consequence; destructive pending and focus-trap plus focus-return hold; every control is keyboard reachable with visible focus at 375px and 1280px."
+        ],
+        "context": "UI face: payer records an expense amount-first with live per-member shares and a sticky save, and settles up through a prefilled sheet instead of inline row forms, with confirms on destructive choices. Contract face: consumes money inputs, segmented control, dialogs/sheets, toasts, and notice-param success treatment from piece 1; submits through the existing expense and payment Server Actions with identical payloads and validation, defining no new endpoint. Follows docs/ui.md Expense editor and Settle-up flow structures and states exactly.",
+        "covers": [
+          "TR-11",
+          "S-8"
+        ],
+        "depends_on": [
+          1
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Any split-math, remainder-rule, balance, simplification, or transaction change",
+          "Group page sections, members, activity, and profile screens (sibling pieces)",
+          "Dark mode"
+        ],
+        "risk": "Touches the two money-writing surfaces (expense amounts with live shares, settle-up prefilled amounts); money math and payloads are unchanged and review must reject any logic change.",
+        "title": "Expense editor and settle-up sheet with confirms and menus",
+        "why": "Recording an expense correctly the first time and settling a suggested transfer take seconds, with the amount prominent and destructive choices confirmed.",
+        "issue": null
+      },
+      {
+        "acceptance": [
+          "MEMBERS: roster rows show avatar, name, You, Owner, and Placeholder badges with per-member balance in words plus colour, overflow menus for owner actions, and an invite-link panel with copy button, disable and rotate behind confirms.",
+          "MEMBERS: claiming a matching placeholder on join prompts correctly; empty group prompts sharing the invite link with a copy button; invite rotation failure keeps the old link active and says so; balance-blocked removal names the blocker and points at settle-up.",
+          "ACTIVITY: feed shows chronological rows with actor avatar, plain-sentence action, relative-then-human timestamp in the viewer zone, and link-through; filter segmented control or scroll chip row covers all, expenses, payments, and members; expense-edited entries summarise exactly the changed fields.",
+          "ACTIVITY: empty feed explains it fills as the group acts; loading shows skeleton event rows; failed pages show load-more retry; feed error shows retry with filter selection preserved.",
+          "PROFILE: single settings card shows display name and styled default-currency select with Save and pending guard; sign-out lives in the account menu, never as a red button; failed save keeps input and offers retry.",
+          "GLOBAL SWEEP: zero balances are neutral everywhere, direction is always words plus colour, dates read as people say them with times in the viewer zone, and every screen in this piece has designed empty, loading, and error states at 375px and 1280px meeting the ui.md accessibility rules and checklists."
+        ],
+        "context": "UI face: owner manages roster and invites, everyone reads a filterable human-dated activity feed, and the user edits name plus default currency on one card, with consistent money, date, and state treatment everywhere. Contract face: consumes shell, rows, avatars, badges, dialogs, and skeletons from piece 1; uses the existing membership, invite, activity, and profile reads and actions unchanged. Follows docs/ui.md Members and invite, Activity, and Profile structures plus the Money display, Errors, Skeletons, Empty states, and Accessibility patterns exactly.",
+        "covers": [
+          "TR-11",
+          "S-8"
+        ],
+        "depends_on": [
+          1
+        ],
+        "kind": "feature",
+        "out_of_scope": [
+          "Any membership, invite-token, activity-writing, or profile logic change",
+          "Landing, home, group, expense, and settle-up screens (sibling pieces)",
+          "Dark mode, which ui.md explicitly defers"
+        ],
+        "title": "Members, activity and profile plus display and accessibility sweep",
+        "why": "Inviting, rostering, following what changed, and editing a profile all look like the same product, with money, dates, and states reading consistently everywhere.",
+        "issue": null
+      }
+    ],
+    "understanding": "Epic #31 is UI-only: docs/ui.md plus Inter via next/font and lucide-react were decided and approved in #32, and the three human decisions freeze stack, data model, money rules, TRs, and every other decision, so this split covers only TR-11/S-8 presentation with zero behaviour change. Clubbing test (budget: maintainer.club_if_under_files=6; high overlap + low standalone value + small combined size = club): pair 1-2 foundation/shell/landing/auth vs home -> split (low file overlap: layout plus components plus landing/auth routes vs home route; each demoable alone as first paint plus sign-in versus balance overview; combined far exceeds one reviewable PR). Pair 2-3 home vs group page -> split (different routes: home summary/people/groups rows vs group header/summary/tabs/expense rows/filters; each independently shippable overview versus detail; combined two full screens exceeds one work order). Pair 3-4 group page vs expense-editor-plus-settle-up -> split (moderate pattern overlap in dialogs and money inputs but distinct surfaces: section organisation and lists versus two interactive money forms with live shares, prefill, and validation; each demoable with the other on old styling; combined list restructure plus two forms exceeds one PR). Pair 4-5 money forms vs members/activity/profile-plus-sweep -> split (low overlap: expense and payment form files vs member, feed, and profile routes; core write loop versus roster/feed/settings plus formatting sweep; combined far too large). Clubbed inside the pieces rather than between them: expense editor with settle-up sheet is ONE issue (high overlap in money inputs, dialogs/sheets, validation and confirm patterns on adjacent group files; settle-up has no user meaning without the balances context; together still one form-focused work order, hence two AC groups); members with activity with profile is ONE issue (each alone is 2-4 files, together under the ~6-file budget in one reviewable PR; separate QA cycles for three thin screens would triple overhead for no separable user value, hence three AC groups plus the sweep). No other open sdlc:epic exists (issues.json holds only #31 plus coverage #24), so no epic_links; chain is kept to depends_on piece 1 only so slices 2-5 can build in parallel once the foundation lands.",
+    "deferred": []
+  },
+  "children": []
 }

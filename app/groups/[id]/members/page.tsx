@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { AddPlaceholderForm, InvitePanel, MembersPanel } from '../../../../components/groups-panels';
 import { withDb } from '../../../../lib/db/client';
 import { guardGroup, type GroupAccess } from '../../../../lib/groups/authz';
-import { getMemberBalance } from '../../../../lib/groups/members';
+import { computeNetBalances } from '../../../../lib/settle/balances';
 import { listMembers } from '../../../../lib/groups/queries';
 import {
   INVITE_NOTICE_PARAM,
@@ -48,6 +48,7 @@ export default async function MembersPage({
   if (access.status === 'not-found') notFound();
 
   const members = await withDb((handle) => listMembers(handle.db, access.group.id));
+  const balances = await withDb((handle) => computeNetBalances(handle.db, access.group.id));
   const removedName = parseNoticeName(query[REMOVED_NOTICE_PARAM]);
   const inviteNotice = inviteNoticeText(query[INVITE_NOTICE_PARAM]);
 
@@ -55,6 +56,7 @@ export default async function MembersPage({
     <MembersScreen
       access={access}
       members={members}
+      balances={balances}
       removedName={removedName}
       inviteNotice={inviteNotice}
     />
@@ -64,16 +66,20 @@ export default async function MembersPage({
 function MembersScreen({
   access,
   members,
+  balances,
   removedName,
   inviteNotice,
 }: {
   access: Extract<GroupAccess, { status: 'ok' }>;
   members: Awaited<ReturnType<typeof listMembers>>;
+  /** The one recompute path's output, keyed by membership, so no row does its own arithmetic. */
+  balances: Awaited<ReturnType<typeof computeNetBalances>>;
   removedName: string | null;
   inviteNotice: string | null;
 }) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
+  const balanceOf = new Map(balances.map((balance) => [balance.membershipId, balance.balanceMinor]));
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
@@ -106,7 +112,7 @@ function MembersScreen({
               userId: member.userId,
               displayName: member.displayName,
               role: member.role,
-              balanceMinor: getMemberBalance(group.id, member.id),
+              balanceMinor: balanceOf.get(member.id) ?? 0,
             }))}
             viewerMembershipId={membership.id}
             isOwner={isOwner}

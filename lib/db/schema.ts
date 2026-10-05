@@ -11,6 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import type { ExpenseEditPayload } from '../expenses/validation';
+import type { PaymentSnapshot } from '../settle/validation';
 
 /**
  * The migration ledger — operational bookkeeping, not a domain table. The migration runner
@@ -130,9 +131,15 @@ export const memberships = pgTable(
  * `set null` rather than cascading because an expense-deleted row must outlive the delete that
  * produced it: the feed is the record that the expense existed.
  *
+ * A payment event is the same shape as an expense one — it is about a thing — except that the
+ * thing is a payment, so `payment_id` is its link back (also `set null`, for the same reason)
+ * and `subject_name` carries a sentence naming the two endpoints. Its `payload` is the payment
+ * snapshot rather than an edit diff: because the link is nulled when the payment is deleted,
+ * the snapshot is the only thing left that can render a payment-deleted row (TR-9, TR-10).
+ *
  * `payload` is the structured half of TR-10's expense-edited row — the before and after of the
- * fields that changed — and stays null on every other kind, which needs no more than its actor,
- * subject and timestamp.
+ * fields that changed — and of the two payment kinds, which carry their snapshot; it stays null
+ * on every other kind, which needs no more than its actor, subject and timestamp.
  */
 export const activityEvents = pgTable(
   'activity_event',
@@ -148,7 +155,8 @@ export const activityEvents = pgTable(
     subjectName: text('subject_name').notNull(),
     kind: text('kind').notNull(),
     expenseId: uuid('expense_id').references(() => expenses.id, { onDelete: 'set null' }),
-    payload: jsonb('payload').$type<ExpenseEditPayload>(),
+    paymentId: uuid('payment_id').references(() => payments.id, { onDelete: 'set null' }),
+    payload: jsonb('payload').$type<ExpenseEditPayload | PaymentSnapshot>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('activity_event_group_id_created_at_idx').on(table.groupId, table.createdAt)],
@@ -258,4 +266,36 @@ export const splitLines = pgTable(
     index('split_lines_expense_id_idx').on(table.expenseId),
     index('split_lines_membership_id_idx').on(table.membershipId),
   ],
+);
+
+/**
+ * Settle-up payments (TR-9): the other half of the ledger balances derive from. A payment is a
+ * transfer of value between two seats — the payer's balance rises by the amount, the
+ * recipient's falls by it — and it is a *ledger entry*, never an edit to a balance, which is
+ * what keeps "balances are derived and never stored" true (TR-9, invariants).
+ *
+ * Neither endpoint carries a foreign key to `memberships`, for the reason `expense_payers`
+ * has none (ADR-0007): a group that removes a member must not erase what was paid, and the
+ * stranded net a departed seat can carry is exactly what a payment to that seat exists to
+ * clear. Each id is validated inside the write's own transaction against the guarded group's
+ * ledger, and the display name is snapshotted beside it so a row outlives the seat it names.
+ *
+ * `created_at` is the order the feed reads them in, and the only date a payment has — the spec
+ * gives a payment no date picker, so when it was recorded is when it happened.
+ */
+export const payments = pgTable(
+  'payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    fromMembershipId: uuid('from_membership_id').notNull(),
+    fromDisplayName: text('from_display_name').notNull(),
+    toMembershipId: uuid('to_membership_id').notNull(),
+    toDisplayName: text('to_display_name').notNull(),
+    amountMinor: integer('amount_minor').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('payments_group_id_id_idx').on(table.groupId, table.id)],
 );

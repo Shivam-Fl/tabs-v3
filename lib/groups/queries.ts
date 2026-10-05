@@ -19,12 +19,21 @@ export interface GroupSummary {
   currency: string;
   type: string;
   joinedAt: Date;
+  /**
+   * The caller's own seat in this group. Home needs it to work out which side of each of the
+   * group's transfers is theirs: the group's net balances are keyed by membership, and "me" in
+   * a group is a membership rather than a user, because a user can hold several.
+   */
+  membershipId: string;
 }
 
 /**
  * The signed-in home list: the groups this user holds a membership in, newest membership first.
  * Archived groups are left out — archiving is what takes a group off this screen — but they
  * are still readable at their own URL, which is why the guard does not filter them.
+ *
+ * The listing is per membership, so the seat id comes back with each group: a group and the
+ * caller's place in it are one row here, and no screen has to look the seat up again to get it.
  */
 export async function listGroupsForUser(db: Db, userId: string): Promise<GroupSummary[]> {
   return db
@@ -34,6 +43,7 @@ export async function listGroupsForUser(db: Db, userId: string): Promise<GroupSu
       currency: groups.currency,
       type: groups.type,
       joinedAt: memberships.createdAt,
+      membershipId: memberships.id,
     })
     .from(memberships)
     .innerJoin(groups, eq(groups.id, memberships.groupId))

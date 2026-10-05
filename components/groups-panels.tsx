@@ -46,7 +46,17 @@ const PRIMARY_BUTTON =
 const QUIET_BUTTON = 'min-h-11 rounded-token border border-muted/40 px-4 font-medium';
 const DANGER_BUTTON = 'min-h-11 rounded-token border border-danger/50 px-4 font-medium text-danger';
 
-function StateMessage({ state }: { state: GroupActionState }) {
+/**
+ * What a live region needs from an action state: a status and the sentence to announce. Typed
+ * structurally rather than as `GroupActionState` so the settle-up islands — whose state is
+ * declared beside their own boundary — can share this one region instead of a second copy of it.
+ */
+export interface StatusMessageState {
+  status: 'idle' | 'error' | 'success';
+  message: string;
+}
+
+export function StateMessage({ state }: { state: StatusMessageState }) {
   if (state.status === 'idle' || state.message === '') return null;
 
   return (
@@ -69,8 +79,13 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-/** The confirm step every destructive action shares: a question naming the object, then a pair. */
-function ConfirmStep({
+/**
+ * The confirm step every destructive action shares: a question naming the object, then a pair.
+ *
+ * Exported because the settle-up islands need the same step and the same reasoning (AC-3): one
+ * confirm implementation, so a delete cannot be the one action that forgot to ask.
+ */
+export function ConfirmStep({
   question,
   confirmLabel,
   pendingLabel,

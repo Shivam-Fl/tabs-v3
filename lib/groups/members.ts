@@ -1,5 +1,8 @@
+import type { Db } from '../db/client';
+import { memberBalanceMinor } from '../settle/balances';
+
 /**
- * The membership rules that need no database (TR-7's non-zero-balance block).
+ * The membership rules that need a balance (TR-7's non-zero-balance block, TR-9's derivation).
  *
  * The rule itself is a pure function of a balance and a name, so it is proved without a
  * fixture and both callers — removal and leave — go through the same one rather than each
@@ -18,16 +21,22 @@ export class NonZeroBalanceError extends Error {
 }
 
 /**
- * The balance seam. Balances are derived from the expense and payment ledger, which does not
- * exist yet (TR-8, TR-9), so every membership is zero until it does — which is the truthful
- * answer, not a placeholder: with no expenses recorded, nobody owes anybody.
+ * What one membership's seat in its group's ledger is worth right now, in minor units.
  *
- * TR-9 replaces the body with a read of the ledger for this membership's group. Everything on
- * both sides of it already exists: the callers below check the result, and the actions call
- * through here, so the guard starts doing real work the day the number does.
+ * The number is derived, never stored, and it comes from the same recompute path every screen
+ * reads (TR-9), so "settled up" here means exactly what the balance shown beside the member
+ * means — a guard that had its own arithmetic would be free to disagree with the page it is
+ * protecting, which is the one thing a guard must never do.
+ *
+ * A membership this group's ledger has never mentioned is zero: a member with no expenses and
+ * no payments is settled up, and removing them strands nothing.
  */
-export function getMemberBalance(_groupId: string, _membershipId: string): number {
-  return 0;
+export async function getMemberBalance(
+  db: Db,
+  groupId: string,
+  membershipId: string,
+): Promise<number> {
+  return memberBalanceMinor(db, groupId, membershipId);
 }
 
 /** Throws when the membership carries a balance; a no-op at zero. */

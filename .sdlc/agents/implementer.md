@@ -121,7 +121,11 @@ the PR from a job that runs none of it.
    npm run typecheck && npm test && npm run lint
    ```
 
-5. **Check your fix in a browser, if the app has one.** `$PREVIEW_URL` is running your code.
+5. **Check your fix in a browser, if the app has one.** `$PREVIEW_URL` serves the branch as it was
+   when your session started: your changes are not in it, it does not reload, and it runs outside
+   your shell, so you cannot restart it. To see your change, build and start the app from your
+   working tree on a spare port — 3100 — the way the project serves it (`.sdlc/memory/project.md`
+   names the command), and walk that. `$PREVIEW_URL` is still where the branch's old behaviour is.
 
    This is not QA. You are not hunting for edge cases, trying to break it, or testing adjacent
    features — an adversarial agent does that later, and doing it here wastes turns and finds
@@ -131,7 +135,7 @@ the PR from a job that runs none of it.
    work order's `qa_script` once, or the acceptance criteria if there is none:
 
    ```bash
-   npx playwright open $PREVIEW_URL
+   npx playwright open http://localhost:3100
    ```
 
    Watch the console while you do it. A change that "works" while throwing errors is not done.

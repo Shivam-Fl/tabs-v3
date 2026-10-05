@@ -439,7 +439,9 @@ jobs:
             instead of guessing; the pipeline has a stage whose whole job is re-deciding that,
             and guessing here is how three attempts get spent on one bad premise.
 
-            If $PREVIEW_URL is set, walk the work order's qa_script once in a browser before
+            If $PREVIEW_URL is set, it serves the branch as it was before your changes, and you
+            cannot restart it from your shell. Build and start your working tree on port 3100 the
+            way the project serves it, and walk the work order's qa_script there once before
             you finish, watching the console. You are answering one question — does the change
             work — not hunting edge cases; an adversarial agent does that later. If it does not
             work, fix it within scope or stop and say so. Do not commit and hope QA sorts it out.

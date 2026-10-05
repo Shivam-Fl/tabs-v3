@@ -213,7 +213,21 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/db/schema.ts",
+    "lib/db/migrations/0004_expenses.sql",
+    "lib/money/splits.ts",
+    "lib/expenses/validation.ts",
+    "lib/expenses/queries.ts",
+    "lib/expenses/actions.ts",
+    "components/expense-editor.tsx",
+    "app/groups/[id]/expenses/new/page.tsx",
+    "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
+    "app/groups/[id]/page.tsx",
+    "lib/money/splits.test.ts",
+    "lib/expenses/validation.test.ts",
+    "lib/expenses/actions.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

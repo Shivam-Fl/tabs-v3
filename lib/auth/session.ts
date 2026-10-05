@@ -1,9 +1,10 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import type { Db } from '../db/client';
 import { sessions, users } from '../db/schema';
 import { getEnv, isProduction } from '../env';
+import { randomToken } from '../random';
 
 /**
  * Opaque, server-side sessions (ADR-0003). The browser holds a random token; the database
@@ -24,6 +25,11 @@ export const SESSION_TTL_SECONDS = SESSION_TTL_MS / 1000;
 /** 32 bytes of CSPRNG output, base64url — 256 bits, no padding for a cookie value. */
 export const SESSION_TOKEN_BYTES = 32;
 
+/** The session token, minted by the shared generator so invites and sessions cannot drift. */
+export function mintToken(): string {
+  return randomToken(SESSION_TOKEN_BYTES);
+}
+
 /** The signed-in identity every later scope reads. Never carries the password or the token. */
 export interface SessionUser {
   id: string;
@@ -35,10 +41,6 @@ export interface SessionUser {
 export interface MintedSession {
   token: string;
   expiresAt: Date;
-}
-
-export function mintToken(): string {
-  return randomBytes(SESSION_TOKEN_BYTES).toString('base64url');
 }
 
 /**

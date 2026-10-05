@@ -26,6 +26,13 @@ export interface AuthFormProps {
   action: AuthAction;
   submitLabel: string;
   pendingLabel: string;
+  /**
+   * Where the visitor was going before they were asked to sign in — an invite link, today. The
+   * page validates it and drops anything that is not a same-origin path before it gets here,
+   * so the form carries a value that is already known to be safe, and a tampered one changes
+   * nothing: the action ignores it and the page redirects from its own query string.
+   */
+  next?: string;
 }
 
 const INPUT_CLASSES =
@@ -33,7 +40,7 @@ const INPUT_CLASSES =
 
 const LABEL_CLASSES = 'text-sm font-medium';
 
-export function AuthForm({ mode, action, submitLabel, pendingLabel }: AuthFormProps) {
+export function AuthForm({ mode, action, submitLabel, pendingLabel, next }: AuthFormProps) {
   const [state, formAction, isPending] = useActionState(action, IDLE_AUTH_STATE);
   const router = useRouter();
 
@@ -65,6 +72,8 @@ export function AuthForm({ mode, action, submitLabel, pendingLabel }: AuthFormPr
       }}
       className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-5"
     >
+      {next ? <input type="hidden" name="next" value={next} /> : null}
+
       {state.status === 'error' && state.message !== '' && Object.keys(fieldErrors).length === 0 ? (
         <p role="alert" className="text-sm text-danger">
           {state.message}

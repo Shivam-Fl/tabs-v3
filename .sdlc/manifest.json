@@ -1,5 +1,5 @@
 {
-  "source_sha": "b7c878e1aaaab77a55904a6712dead31b547f08d",
+  "source_sha": "4167626eae9ade135422e499be82bab39e70a288",
   "source_repo": "Shivam-Fl/automated-ai-sdlc",
   "files": {
     ".github/workflows/ci-verify.yml": "18fb181e5e566cd5cff134f670b6a0d5b5b62d1acc475de9003ffd421619a4a7",
@@ -80,7 +80,7 @@
     ".sdlc/bin/check-split-criteria.mjs": "787a055692e5cdbff82a6829183841435c99c666ef8460d57d3178adb2683395",
     ".sdlc/bin/check-split.mjs": "adc178c1e2848fabe6b2cdbae4408d4308fa1fc541448b380188e82755dd7248",
     ".sdlc/bin/check-url.mjs": "a7ed71906edc91fae6a6a530740720dc15825fdf738e1b6846c33eb159bc5e69",
-    ".sdlc/bin/claude-args.mjs": "06409ce1fcb8a16e3a0e04e2b929945a3899e98e93fc52686af597951de7306c",
+    ".sdlc/bin/claude-args.mjs": "28baebd8d9220a17107e8376cab64d905b547517dfe4bcfd3ba8c1a96f7c6e0c",
     ".sdlc/bin/contribute.mjs": "c42aec66fee094f45bf228df5e5614ae93dc95cc9706864cba11302f6b652b14",
     ".sdlc/bin/dispatch-fix.mjs": "afbe67f1c4f900121eb62bc57b1fbc7a212544a04121c4b84ce0beeed20c47c9",
     ".sdlc/bin/dispatch.mjs": "2af240f8eb68b04340e37fae68ba15e82ad29f2cca891b9946cc50529cfab9f5",
@@ -103,7 +103,7 @@
     ".sdlc/bin/lib/ceiling.js": "3cc35056f2fe3dfde473bc2d9031924dccc4413ec5cb727cd4400fceeedc5979",
     ".sdlc/bin/lib/checks.js": "3f7ee5fa23b48a7db7ee3886c39511c1a40b3e25d765a2577193787d8a385263",
     ".sdlc/bin/lib/commands.js": "ad18ce2051f706f56baeedf50dd3a9b838afb587207421693dc59da3756eaeb1",
-    ".sdlc/bin/lib/config-schema.js": "a605489f600a8967274be3dc797f503fa6395b733df8b7e061117d06cb184288",
+    ".sdlc/bin/lib/config-schema.js": "57935a706fdf6aced5d5445d3d9875567c136ea4a51dd30b5c63c8a82ea68ae4",
     ".sdlc/bin/lib/deps.js": "e00a450c3fd4cf58ceb8862b328c2816170f048bd01ed20a7f1838caf3c3aef9",
     ".sdlc/bin/lib/detect.js": "857e05ebe208ec3813a27bc02cfed7aa0e66673076c6e37511846a949a10ddf1",
     ".sdlc/bin/lib/digest.js": "2dbd3361ad422a59ceb2b26b40d957855f77546c28e1b702fcf7211959e610a2",
@@ -195,6 +195,6 @@
     ".sdlc/bin/wake-dependents.mjs": "2d97cfa649c75256f105a3e0c50c8e9b351e37ab614bf11e36ad2408b1167db1",
     ".sdlc/bin/watchdog-report.mjs": "28c36e3a877cd02f18e52425267f9d88de7ef33f83bf003936dc61f1902b0adf",
     ".sdlc/flow-graph.json": "bb0ce998b904bf37b8065d8cf5a542bbb995fd86ad39c6fbb4ac4a2d86ad9570",
-    "bin/sdlc": "fb9d8cbacab35992571a3ef62c72a8cc3d6c117dc2ec05a3f32540b0136e1c96"
+    "bin/sdlc": "33bc4da477cbfbd55d387b1f5c3e96cd84a548af16558e6accf619231ff94afa"
   }
 }

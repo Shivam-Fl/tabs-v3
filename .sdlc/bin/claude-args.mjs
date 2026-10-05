@@ -8,7 +8,8 @@
 // ones or underpowered on the hard ones. Council members are steps like any other, so the
 // proposer and the arbiter can run at different weights.
 
-import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { openaiApis } from './model-bridge.mjs';
 import { fileURLToPath } from 'node:url';
 import { GATED_ROLES, outputSpec } from './lib/gate-checks.js';
@@ -126,6 +127,40 @@ function setting(map, role, fallbacks) {
 
 /** The model a step runs on; '' means the action's own default, which is a Claude model. */
 export const modelFor = (cfg, role) => setting(cfg.runtime?.model, role, '') ?? '';
+
+/**
+ * The repository's skills: .claude/skills/<name>/SKILL.md, a reserved path no agent may change.
+ * Claude Code lists them to the session itself, name and description read from the files, and
+ * loads one in full only when the session asks for it, so adding a skill needs no config. What
+ * it needs is the Skill tool, which no step was allowed.
+ */
+export function projectSkills(root = '.') {
+  const dir = join(root, '.claude/skills');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(dir, d.name, 'SKILL.md'))).map((d) => d.name).sort();
+}
+
+/**
+ * The skills a step must load: `skills.<role>`, a council member inheriting its stage's as a model
+ * does. Optional: every step may load any skill it finds useful; this is for the ones a step should
+ * not go without. A name that is not there stops the run, because a typo silently skipped is a
+ * rule nobody applied.
+ */
+export function skillsFor(cfg, role, root = '.') {
+  const names = setting(cfg.skills, role, []) ?? [];
+  if (!Array.isArray(names)) return [];
+  const have = projectSkills(root);
+  for (const name of names) {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(String(name))) throw new Error(`skills.${role}: "${name}" is not a skill name (lowercase letters, digits and hyphens)`);
+    if (!have.includes(name)) throw new Error(`skills.${role} names ${name}, and there is no ${join(root, '.claude/skills', name, 'SKILL.md')}`);
+  }
+  return names;
+}
+
+/** What a step is told about skills. They are the owner's instructions, not repository data. */
+export const skillsNote = (available, required) => available.length ? `This repository's owner keeps skills in .claude/skills, where no agent can change them: they are instructions, not data. Load one with the Skill tool when your work reaches what it covers, and follow it; where it conflicts with your agent pack, the work order or this task's prompt, those win.${
+  required.length ? ` For this step, load ${required.join(' and ')} before you start.` : ''}` : '';
 
 /**
  * Why this step cannot run against the configured provider, or null when it can.
@@ -322,13 +357,16 @@ if (isMain && process.argv[2] === '--probe') {
   // runs it), so a capped run fails its step and is answered as a failure. It is the CLI's own
   // estimate, priced for Claude models: behind a gateway serving others, it is not the bill.
   const usd = Number(cfg.limits?.max_usd_per_run);
+  const available = projectSkills();
+  let required = [];
+  try { required = skillsFor(cfg, role); } catch (e) { die(e.message); }
 
   const args = [
     turns ? `--max-turns ${turns}` : '',
     usd > 0 ? `--max-budget-usd ${usd}` : '',
-    `--allowedTools ${TOOLS[role]}`,
+    `--allowedTools ${TOOLS[role]}${available.length ? ',Skill' : ''}`,
     model ? `--model ${model}` : '',
-    `--append-system-prompt ${trustArg([GATED_ROLES.includes(role) ? preflightNote(process.env.ISSUE) : '', resultNote].filter(Boolean).join(' '))}`,
+    `--append-system-prompt ${trustArg([GATED_ROLES.includes(role) ? preflightNote(process.env.ISSUE) : '', skillsNote(available, required), resultNote].filter(Boolean).join(' '))}`,
     schemaArg,
   ].filter(Boolean).join(' ');
 

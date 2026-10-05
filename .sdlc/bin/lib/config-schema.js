@@ -28,6 +28,8 @@ export const CONFIG_SCHEMA = {
     max_turns: each(ROLES, ['number', 'string']),
   },
   councils: { plan: oneOf('single', 'council'), review: oneOf('single', 'council') },
+  // Project skills a step must load (.claude/skills/<name>); any step may load any of them anyway.
+  skills: each(ROLES, 'strings'),
   base_branch: 'string',
   route_bugs_to_debugger: 'boolean',
   intake: { risk_areas: each(enabledRiskAreas({}), 'boolean') },

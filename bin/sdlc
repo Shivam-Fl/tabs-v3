@@ -27,7 +27,7 @@ import { createHash } from 'node:crypto';
 import { load as parseYaml } from '../.sdlc/bin/lib/js-yaml.mjs';
 import { expectedChecks, expectsCi } from '../.sdlc/bin/lib/checks.js';
 import { switchedOff, triggersOf } from '../.sdlc/bin/lib/actions.js';
-import { ROLES, modelFor, providerProblem } from '../.sdlc/bin/claude-args.mjs';
+import { ROLES, modelFor, providerProblem, skillsFor, projectSkills } from '../.sdlc/bin/claude-args.mjs';
 import { checkConfig } from '../.sdlc/bin/lib/config-schema.js';
 import { openIssues } from '../.sdlc/bin/lib/open-issues.js';
 import { IN_FLIGHT } from '../.sdlc/bin/lib/deps.js';
@@ -121,6 +121,18 @@ async function doctor() {
     // A reviewer on the implementer's model shares its blind spots — it reads the change the way
     // the change was written. Resolved as claude-args resolves them, the council's two members
     // on their own.
+    // Every skill a step names is there to load: the run would stop on one that is not.
+    const skillProblems = [];
+    const withSkills = [];
+    for (const r of ROLES) {
+      try { if (skillsFor(cfg, r, ROOT).length) withSkills.push(r); } catch (e) { skillProblems.push(e.message); }
+    }
+    for (const p of skillProblems) fail(p, 'add .claude/skills/<name>/SKILL.md, or take the name out of skills.<step>');
+    const found = projectSkills(ROOT);
+    if (!skillProblems.length && found.length) {
+      pass('skills', `${found.join(', ')} — every step may load them${withSkills.length ? `; ${withSkills.join(', ')} must` : ''}`);
+    }
+
     const reviewers = cfg.councils?.review === 'council' ? ['review_correctness', 'review_design'] : ['review'];
     const builder = modelFor(cfg, 'implement');
     const same = reviewers.filter((r) => modelFor(cfg, r) === builder);

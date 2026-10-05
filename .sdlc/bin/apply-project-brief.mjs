@@ -142,8 +142,13 @@ writeFileSync(indexPath, indexWithDocs(existsSync(indexPath) ? readFileSync(inde
 // ADR: tabs-v3's UI redesign arrived with eight copies of its stack beside the one new decision.
 const adrTitle = (t) => String(t).replace(/^\s*ADR[-\s]?\d+\s*[:—–-]\s*/i, '').trim();
 const adrSlug = (t) => adrTitle(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
-const recorded = new Set(readdirSync('.sdlc/memory/decisions')
-  .map((f) => f.match(/^ADR-\d+-(.+)\.md$/)?.[1]).filter(Boolean).map((s) => s.replace(/^adr-\d+-/, '')));
+// Known by its file name and by the title in its own heading: an ADR the librarian filed can name
+// its file shorter than its title (ADR-0008-success-notices-ride-redirect-params.md is "Success
+// notices ride redirect query params"), and the restated decision matched neither on the name.
+const recorded = new Set(readdirSync('.sdlc/memory/decisions').filter((f) => /^ADR-\d+-.+\.md$/.test(f)).flatMap((f) => [
+  f.match(/^ADR-\d+-(.+)\.md$/)[1].replace(/^adr-\d+-/, ''),
+  adrSlug(readFileSync(`.sdlc/memory/decisions/${f}`, 'utf8').match(/^# (.+)$/m)?.[1] ?? ''),
+].filter(Boolean)));
 const adrs = [];
 for (const d of brief.decisions ?? []) {
   if (recorded.has(adrSlug(d.title))) continue;

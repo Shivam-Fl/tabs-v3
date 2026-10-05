@@ -59,5 +59,7 @@
       "plan": "single"
     },
     "decided_at": "2026-10-05T01:24:06.391Z"
-  }
+  },
+  "stopped_at": null,
+  "dispatched_stage": "plan"
 }

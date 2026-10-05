@@ -471,5 +471,11 @@
     "work_order_version": 1,
     "at": "2026-10-05T12:30:40.517Z"
   },
-  "qa_open_bugs": []
+  "qa_open_bugs": [],
+  "merge_approval": {
+    "by": "Shivam-Fl",
+    "at": "2026-10-05T12:35:17.704Z",
+    "sha": "97cb440a8f285838b289a47088e8f191097e38b5",
+    "qa_run": "37307819061"
+  }
 }

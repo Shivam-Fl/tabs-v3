@@ -278,7 +278,25 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/activity/queries.ts",
+    "components/activity-feed.tsx",
+    "app/groups/[id]/page.tsx",
+    "app/activity/page.tsx",
+    "app/activity/loading.tsx",
+    "app/page.tsx",
+    "lib/groups/actions.ts",
+    "lib/expenses/actions.ts",
+    "lib/settle/actions.ts",
+    "lib/seed/fixtures.ts",
+    "app/api/seed/route.ts",
+    "scripts/seed.ts",
+    "README.md",
+    "lib/activity/queries.test.ts",
+    "app/api/seed/route.test.ts",
+    "scripts/seed.test.ts",
+    "lib/groups/actions.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

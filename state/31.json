@@ -205,7 +205,7 @@
         ],
         "title": "Home dashboard with balances, people and groups",
         "why": "A signed-in user sees in one glance whether they owe or are owed, who with, and which group needs attention, with groups as rich rows.",
-        "issue": null
+        "issue": 34
       },
       {
         "acceptance": [
@@ -296,6 +296,7 @@
     "deferred": []
   },
   "children": [
-    33
+    33,
+    34
   ]
 }

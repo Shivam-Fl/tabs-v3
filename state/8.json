@@ -417,5 +417,24 @@
   "work_order_posted_at": "2026-10-05T11:27:59.364Z",
   "work_order_from": "plan",
   "work_order_comment": "5993516204",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Split-input before/after rows render with the wrong unit ('N shares') whenever the edit did not also change the split type: expenseChanges carries only changed fields, so half.splitType is undefined and inputValueText falls through to `${value} shares`. A percentage 60/40-to-70/30 edit renders 'Ada 6000 shares -> Ada 7000 shares' instead of 'Ada 60% -> Ada 70%', and an exact-split edit shows raw minor units as shares.",
+        "detail": "Split-input before/after rows render with the wrong unit ('N shares') whenever the edit did not also change the split type: expenseChanges carries only changed fields, so half.splitType is undefined and inputValueText falls through to `${value} shares`. A percentage 60/40-to-70/30 edit renders 'Ada 6000 shares -> Ada 7000 shares' instead of 'Ada 60% -> Ada 70%', and an exact-split edit shows raw minor units as shares.\n\n`components/activity-feed.tsx:340`\n\nEvidence: lib/expenses/validation.ts:220-239 expenseChanges copies only fields whose JSON differs; the PR's own new test in lib/expenses/actions.test.ts ('names the split inputs it carries') pins a percentage-edit payload of exactly {before:{inputs},after:{inputs}} with no splitType; components/activity-feed.tsx:340 passes half.splitType (undefined there) into inputValueText (:346-355) whose last branch returns `${value} shares` instead of formatMinorUnits/formatBasisPoints. Seed fixtures include exact and percentage expenses (lib/seed/fixtures.ts:449,463), so the qa_script step 'edit a seeded expense's description and one split input' reproduces this.\n\nFix: Carry the unit context with the inputs: in expenseChanges also copy splitType into both halves when inputs changed and teach EditDetail to render only fields whose before/after values differ, or add the expense's splitType to ActivityRow and prefer it in snapshotValue when half.splitType is undefined.",
+        "severity": "major",
+        "category": "data-correctness",
+        "file": "components/activity-feed.tsx"
+      },
+      {
+        "title": "seedThroughApp treats a wedged app (10s timeout) the same as no app: AbortSignal.timeout throws inside the try, the catch-all returns null, and runSeed takes the direct path, seeding a private in-process database while reporting success — while the comment directly above states a timeout 'is a reason to stop rather than to take the other path'.",
+        "detail": "seedThroughApp treats a wedged app (10s timeout) the same as no app: AbortSignal.timeout throws inside the try, the catch-all returns null, and runSeed takes the direct path, seeding a private in-process database while reporting success — while the comment directly above states a timeout 'is a reason to stop rather than to take the other path'.\n\n`scripts/seed.ts:126`\n\nEvidence: scripts/seed.ts:117-129 — fetch with signal AbortSignal.timeout(SEED_TIMEOUT_MS) inside try, catch { return null }; runSeed (:143-157) falls back to direct loadFixtures on null and report() prints 'no app answered ... wrote the fixtures itself'. A timed-out serving app therefore yields exit 0 with fixtures invisible to any browser.\n\nFix: Only return null for connection-refused (fetch TypeError); let timeout/abort errors throw so runSeed fails loudly instead of seeding a database no browser reads.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "scripts/seed.ts"
+      }
+    ],
+    "pr": "28"
+  }
 }

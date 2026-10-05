@@ -679,7 +679,8 @@
         "severity": "trivial",
         "title": "Missing favicon logs 404 console noise on every page"
       }
-    ]
+    ],
+    "filed": 18
   },
   "qa": {
     "verdict": "pass",

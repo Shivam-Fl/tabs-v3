@@ -367,5 +367,293 @@
   },
   "validated_from": "plan",
   "validated_at": "2026-10-05T18:29:04.118Z",
-  "validated_ac_changes": []
+  "validated_ac_changes": [],
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Signed-out visitor at / sees the ui.md landing page: minimal header with Tabs mark plus Sign in; hero with headline (the page h1), one-line product story, primary Create account and secondary Sign in; three-step how-it-works; trust line; footer carrying only the Sign in and Create account product links (no invented Privacy/Terms/About links that would 404).",
+        "how_to_verify": "Load / signed out at 375px and 1280px; read each region in order; click every footer link and confirm none 404s.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "No developer artefacts are linked or shown on landing, auth, shell, or footer: no /api/health link (route still answers for sdlc:ready), no raw ids, no ISO dates, no UTC timestamps.",
+        "how_to_verify": "Grep built pages for 'api/health' links; visually inspect landing, /signin, /signup, shell, footer.",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Sign-up and sign-in render as a centred card (max 420px) with labelled email and password, show/hide toggle, password-rule hint on sign-up, clearly labelled submit, and links between the two screens that preserve ?next=.",
+        "how_to_verify": "Load /signup and /signin at 375px and 1280px; toggle Show/Hide; follow the cross-links both directions with ?next= set.",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Signing in (or signing up, or loading an auth page while signed in) with no ?next= lands on Home (/), never on Profile; ?next= invite links are still honoured; every signed-in page including /join/<token> and both route loading boundaries shows the app shell top bar (Tabs mark linking Home, current place, account menu opening Profile and Sign out).",
+        "how_to_verify": "Sign in via UI with and without ?next=; visit /, /profile, group, members, activity, expense new/edit, /join/<token> signed in and read the top bar on each; cold-navigate to members and activity and confirm the shell chrome paints with the skeleton.",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Every nested page reached from this piece has a way back: Profile back to Home, group pages carry a Home breadcrumb, expense screens keep Back to group, join keeps its way back, auth pages link back to the landing page; there is no dead end.",
+        "how_to_verify": "Walk Home -> group -> members, Home -> activity, Home -> profile, landing -> auth, join flow; activate each back link.",
+        "id": "AC-5",
+        "source": "IAC-5",
+        "verify": "browser"
+      },
+      {
+        "check": "Auth submit shows a pending spinner with the button disabled so double-submit is impossible, and the pending state also reads as text (Saving/Signing in) so it survives reduced-motion renders; failed sign-in preserves the typed input and shows one neutral message that never reveals whether an email is registered.",
+        "how_to_verify": "Submit /signin with a wrong password twice quickly; submit with unknown address vs wrong password and compare messages; render with prefers-reduced-motion and confirm the pending text.",
+        "id": "AC-6",
+        "source": "IAC-6",
+        "verify": "browser"
+      },
+      {
+        "check": "Landing and auth at 375px and 1280px stack with 16px gutters and 44px targets, carry one h1 per page (AppShell emits no heading; the signed-in Home branch gains exactly one h1), show visible labels and focus rings, truncate a 40-character group name in the shell with an ellipsis and title instead of wrapping, and use only docs/ui.md tokens with Inter and lucide-react icons.",
+        "how_to_verify": "Screenshot both viewports incl. a long group name; keyboard-walk both pages; check computed font-family and icon SVGs; assert one h1 per page.",
+        "id": "AC-7",
+        "source": "IAC-7",
+        "verify": "browser"
+      },
+      {
+        "check": "The contract face holds: full ui.md token set in the theme, Inter loaded with next/font, lucide-react as the only icon set, and the shared component set defined once with existing ui.tsx exports and StateMessage live-region semantics unchanged; auth logic, hashing, sessions, rate limiting, data model, money math and APIs are byte-identical in behaviour.",
+        "how_to_verify": "Run npm run sdlc:verify (npm ci && typecheck && test:ci && build); run the new unit tests; diff lib/auth and lib/money behaviour.",
+        "id": "AC-8",
+        "source": "TR-11",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Render the app shell from the root layout by reading the session there",
+        "rejected_because": "Per-page composition is the right call because the shell needs the group name, which a layout does not have; it also leaves later slices free to rearrange page bodies. (An earlier draft claimed a layout shell would destroy a static landing page; the landing is dynamic today via the session read, so that rationale was dropped.)"
+      },
+      {
+        "approach": "Redesign Home/group/expense content now so the shell has finished pages to sit on",
+        "rejected_because": "Explicitly out of scope: later pieces own those redesigns and consume this slice's tokens and components unchanged; redesigning them here would collide with those tickets and balloon review."
+      },
+      {
+        "approach": "Drop the display-name field from sign-up so the card matches IAC-3's 'email and password' literally",
+        "rejected_because": "That is a behaviour change: displayName is required by signupSchema and TR-6's profile, and the Risk section forbids auth behaviour change; IAC-3 names the minimum, not the maximum, and the field stays."
+      }
+    ],
+    "approach": "Define the contract face first, then hang the three surfaces on it. Extend app/globals.css to the full docs/ui.md token set additively (new ink-muted/ink-subtle/border, accent/owed/lent/danger tints, space-7/8, text scale, shadows, radius-full; keep --color-muted and every existing utility name resolving so current screens and the pinned loading-skeleton classes do not break), wire Inter through next/font in app/layout.tsx with the system stack as fallback, and add lucide-react as the single icon dependency. Grow components/ui.tsx additively with presentational markup only (Button variants and heights plus pending treatment, TextInput/MoneyInput, Card, Avatar, Badge, Skeleton, EmptyState, Spinner) while keeping every existing export (INPUT_CLASSES, LABEL_CLASSES, PRIMARY_BUTTON, QUIET_BUTTON, DANGER_BUTTON, StateMessage, FieldError, ConfirmStep) and StateMessage's always-mounted live-region semantics exactly as the debts-live-region test pins them; stateful pieces (Toast auto-dismiss, Dialog/Sheet focus trap, SegmentedControl arrow-key movement) live in a new 'use client' components/ui-interactive.tsx island that imports the class strings from ui.tsx, so the server-rendered group page keeps consuming plain strings. Add components/app-shell.tsx: chrome only (emits no heading), a server-rendered top bar (Tabs mark linking Home, current place truncated with ellipsis and title, account menu) with one small client island for the menu (aria-haspopup/expanded, Escape to close, focus return; Profile link plus a sign-out form posting to the existing signOut action). Rebuild app/page.tsx's signed-out branch into the ui.md landing page (hero headline is the landing h1; signed-in Home branch gains exactly one h1) and wrap the signed-in branch in the shell, deleting the /api/health product link. Restyle auth pages/cards and components/auth-form.tsx on the new set (password-rule hint on sign-up, spinner plus disabled submit with text that survives reduced motion, lucide Eye/EyeOff toggle, preserved input and neutral error untouched) and flip the signed-in bounce in signin/signup pages from next ?? '/profile' to next ?? '/' while still honouring ?next=. Apply AppShell plus a back link/breadcrumb to profile, group detail, members, activity, groups/new, the signed-in join render, and the expense screens via components/expense-screen.tsx (which owns the <main>, h1 and back link the two expense pages share, so the shell lands there, not in the page files); both loading.tsx boundaries render the shell chrome above the existing skeletons keeping data-skeleton names and motion-safe classes. lib/auth, lib/money, lib/settle, lib/db and all validations stay byte-identical in behaviour.",
+    "assumptions": [
+      "No test pins the auth pages' signed-in bounce target: lib/auth/actions.test.ts pins only action results and the profile form's own /profile?error=invalid redirect, which is untouched.",
+      "CI and build runners have network for npm install lucide-react and next/font/google's build-time font fetch; a failed font fetch fails the build (the system-ui fallback only helps post-build clients missing the self-hosted file), and npm run build is the check that proves it.",
+      "The join page's signed-in 'join' render is a signed-in page under IAC-4 and gets the shell here; invite-claim behaviour, guards and redirects are untouched.",
+      "Expense new/edit share components/expense-screen.tsx as their <main>/h1/back-link owner, so AppShell composes there once rather than in each page file. The join page is invite flow, not auth flow: shell applies to its signed-in renders, and invite-claim behaviour is untouched."
+    ],
+    "confidence": 78,
+    "confidence_rationale": "Every file the plan touches was read and the critique's evidence re-checked line by line: the vitest include gap, the lockfile gap, the ExpenseScreen wrapper, the join render, both loading boundaries, the ui.tsx client boundary, and the h1 ownership were all confirmed in the source. What would move the number up is a green npm run sdlc:verify on the branch (proving the lucide-react lockfile and the next/font build-time fetch on CI); what would move it down is discovering further shared wrappers like ExpenseScreen that own landmarks the plan assumes live in page files.",
+    "debate_summary": "The critique returned 'flawed' with 9 findings and I verified each against the source instead of applying them blindly. All 9 held up and were folded in, none dismissed: (1) blocking test-path gap confirmed in vitest.config.ts, suites moved to app/; (2) blocking lockfile gap confirmed via the sdlc:verify chain, package-lock.json added to files[] and AC-8 now runs sdlc:verify; (3) ExpenseScreen owns the expense <main>/h1/back link, so the shell lands there; (4) the signed-in join render had shell coverage asserted with no mechanism, now an explicit file entry; (5) both loading boundaries painted shell-less skeletons, now shell chrome above pinned skeletons; (6) ui.tsx's no-client contract is real and consumed by a server page, so stateful pieces move to a new ui-interactive.tsx island; (7) the h1 accounting was broken (shared header h1, h2-only SignedInHome), now decided: shell emits no heading, landing hero and a new Home h1 carry it; (8)-(9) two minor rationale falsehoods corrected (landing is dynamic via the session read; the font fallback does not survive a failed build fetch). The brief's binding decisions (keep docs/ui.md, screens, tokens, lucide-react; no other changes) were not contradicted by any finding. Edge cases adopted: ?next= both-path QA, shell-less 404 and activity UTC timestamps scoped to out_of_scope, long-name truncation in AC-7, enumerated footer links in AC-1, astral-plane avatar cases in tests, reduced-motion pending text in AC-6, second-tab sign-out in qa_script.",
+    "evidence": [
+      "app/page.tsx renders orphan text links plus an /api/health product link and no landing page; signin/signup pages bounce signed-in users to /profile; the shared header h1 serves both branches while SignedInHome renders h2 only.",
+      "package.json has no lucide-react; app/layout.tsx never imports next/font; globals.css @theme covers a fraction of the ui.md token table.",
+      "components/ui.tsx forbids 'use client' and its string exports are consumed by server-rendered app/groups/[id]/page.tsx; components/expense-screen.tsx owns the expense <main>, h1 and back link both expense pages share.",
+      "vitest.config.ts includes lib/**, app/**, scripts/** only; app/join/[token]/page.tsx renders a signed-in join state with its own main/h1; both loading.tsx files render shell-less header-shaped skeletons; sdlc:verify starts with npm ci."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add lucide-react to dependencies via npm install so the lockfile updates in the same step; no other dependency changes.",
+        "path": "package.json",
+        "why": "Contract face: the single named icon set every screen uses."
+      },
+      {
+        "action": "edit",
+        "change": "Regenerated by npm install lucide-react so npm ci passes; the plan fails its own verify gate without it.",
+        "path": "package-lock.json",
+        "why": "sdlc:verify starts with npm ci, which refuses a package.json the lock does not match."
+      },
+      {
+        "action": "edit",
+        "change": "Load Inter with next/font (display=swap, system-ui fallback, CSS variable) and apply it on <body>; keep lang and metadata.",
+        "path": "app/layout.tsx",
+        "why": "Contract face: Inter via next/font with no flash or layout shift."
+      },
+      {
+        "action": "edit",
+        "change": "Extend @theme to the full docs/ui.md token table additively: ink-muted/ink-subtle/border, accent-hover/contrast/tint, owed/lent/danger tints, text scale, space-7/8, shadow-sm/md, radius-full, font-body var; keep --color-muted and all current utility names resolving so existing screens and pinned skeleton classes keep working.",
+        "path": "app/globals.css",
+        "why": "Contract face: the one token set every screen builds from; existing pages must not break."
+      },
+      {
+        "action": "edit",
+        "change": "Additively define presentational Button (4 variants, 36/44px, hover/focus-visible/active/disabled/pending), Spinner, TextInput/MoneyInput markup, ListRow, Card, Avatar (initials incl. non-Latin/astral-plane, id-stable colour, 32/40px), Badge, Skeleton, EmptyState; no hooks, no 'use client'; keep all existing exports and StateMessage live-region semantics byte-identical.",
+        "path": "components/ui.tsx",
+        "why": "Contract face presentational half; six consumers plus a pinning test forbid breaking changes or a client directive here."
+      },
+      {
+        "action": "create",
+        "change": "New 'use client' island importing class strings from ui.tsx: SegmentedControl with arrow-key movement, Dialog/Sheet shells with focus trap and return, Toast with auto-dismiss; keeps ui.tsx hook-free for its server consumers.",
+        "path": "components/ui-interactive.tsx",
+        "why": "Stateful shared pieces need hooks, which ui.tsx's contract forbids."
+      },
+      {
+        "action": "create",
+        "change": "AppShell chrome (emits no heading) plus AccountMenu client island (menu button with aria-haspopup/expanded, Escape close, focus return; Profile link; sign-out form posting to existing signOut action); current place truncates with ellipsis and title at 375px; lucide icons only, aria-hidden next to text.",
+        "path": "components/app-shell.tsx",
+        "why": "The one navigable shell every signed-in page shares instead of orphan text links."
+      },
+      {
+        "action": "edit",
+        "change": "Signed-out branch becomes the ui.md landing page (marketing header, hero headline as the page h1, how-it-works, trust line, footer with Sign in and Create account links only); signed-in branch renders AppShell, gains exactly one h1, keeps SignedInHome numbers and content untouched, deletes the /api/health product link.",
+        "path": "app/page.tsx",
+        "why": "IAC-1 landing plus IAC-2 artefact removal plus IAC-4 shell on Home with the h1 decided."
+      },
+      {
+        "action": "edit",
+        "change": "Flip the signed-in bounce from next ?? '/profile' to next ?? '/' while still honouring ?next=; restyle on the shared card; add a back-to-landing mark link.",
+        "path": "app/signin/page.tsx",
+        "why": "IAC-4: signing in lands on Home, never Profile; IAC-5 way back."
+      },
+      {
+        "action": "edit",
+        "change": "Same bounce flip and card restyle as sign-in; keep cross-link carrying ?next= so invite links survive.",
+        "path": "app/signup/page.tsx",
+        "why": "Same IAC-4/IAC-5 obligations on the sibling screen."
+      },
+      {
+        "action": "edit",
+        "change": "Add password-rule hint on sign-up, pending spinner plus disabled submit with text (keep isPending double-submit guard), lucide Eye/EyeOff show/hide toggle, token card styling; keep controlled-input preservation, neutral error rendering, validation ownership and router.refresh success flow exactly as they are.",
+        "path": "components/auth-form.tsx",
+        "why": "IAC-3 hint plus IAC-6 pending/error states with zero auth-logic change."
+      },
+      {
+        "action": "edit",
+        "change": "Wrap in AppShell (place 'Profile') and add a back-to-Home link; form, ProfileSaveButton island, sign-out form, and saved/invalid notice handling untouched.",
+        "path": "app/profile/page.tsx",
+        "why": "IAC-4 shell plus IAC-5 way back on the account page with no behaviour change."
+      },
+      {
+        "action": "edit",
+        "change": "Wrap in AppShell (place = group name) and add a Home breadcrumb above the existing header; banner, debts, expenses, activity excerpt, settings and all reads/actions untouched.",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "IAC-4 shell plus IAC-5 breadcrumb on the most-visited nested page; content redesign stays with its later slice."
+      },
+      {
+        "action": "edit",
+        "change": "Wrap in AppShell (place = group name) and add a back-to-group link; panels, notices and guards untouched.",
+        "path": "app/groups/[id]/members/page.tsx",
+        "why": "Same shell plus way back; members redesign is a later piece."
+      },
+      {
+        "action": "edit",
+        "change": "Wrap in AppShell (place 'Activity') and convert the existing Home text link into a proper back link; feed, filter and failure handling untouched.",
+        "path": "app/activity/page.tsx",
+        "why": "Same shell plus way back; activity redesign is a later piece."
+      },
+      {
+        "action": "edit",
+        "change": "Wrap in AppShell and keep the existing back-to-groups link; CreateGroupForm untouched.",
+        "path": "app/groups/new/page.tsx",
+        "why": "Shell on a signed-in form page with no behaviour change."
+      },
+      {
+        "action": "edit",
+        "change": "Render AppShell here (place = group name) outside the single <main>, keeping the archived banner and the back-to-group link; exactly one <main> remains per expense page.",
+        "path": "components/expense-screen.tsx",
+        "why": "The shell's true composition point for both expense screens, which share this wrapper, heading and way back."
+      },
+      {
+        "action": "edit",
+        "change": "Shell now composes via ExpenseScreen (place = group name); guard, reads and editor usage untouched.",
+        "path": "app/groups/[id]/expenses/new/page.tsx",
+        "why": "Shell on the editor entry with no form change and no duplicate landmark."
+      },
+      {
+        "action": "edit",
+        "change": "Same ExpenseScreen-composed shell treatment as the new-expense page; edit/delete flows untouched.",
+        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
+        "why": "Shell on the editor with no form change and no duplicate landmark."
+      },
+      {
+        "action": "edit",
+        "change": "Wrap the signed-in join render in AppShell (place = group name), keeping the claim/join panels, guards, redirects and back-to-groups link; signed-out and invalid states untouched.",
+        "path": "app/join/[token]/page.tsx",
+        "why": "IAC-4 covers this signed-in page too; per-page composition gives it no shell otherwise."
+      },
+      {
+        "action": "edit",
+        "change": "Render the shell chrome above the existing skeletons; keep data-skeleton names, the title/nav block shapes and motion-safe:animate-pulse classes.",
+        "path": "app/activity/loading.tsx",
+        "why": "Cold navigation must paint the shell with the skeleton, not jump when content arrives."
+      },
+      {
+        "action": "edit",
+        "change": "Render the shell chrome above the existing skeletons; keep every data-skeleton name and the bg-muted/20 plus motion-safe:animate-pulse classes the loading test pins.",
+        "path": "app/groups/[id]/members/loading.tsx",
+        "why": "Same no-jump contract on the members boundary without breaking its pinned test."
+      }
+    ],
+    "issue": 33,
+    "kind": "feature",
+    "mode": "committed",
+    "out_of_scope": [
+      "Auth logic, hashing, sessions, rate limiting and all error-message wording in lib/auth (review must reject any behaviour change there).",
+      "Content redesigns of Home, group, expense, settle-up, members, activity and profile screens (later pieces); this slice adds shell chrome and back links only.",
+      "Dark mode; any behaviour, data-model, money-math or API change.",
+      "Approved docs (docs/ui.md, docs/prd.md, docs/trd.md), .sdlc/** and .github/**: untouched; the redesign ADR is already recorded.",
+      "The /api/health route itself, which sdlc:ready polls; only its product-surface link is removed.",
+      "IAC-4: the shared 404 (app/not-found.tsx) stays shell-less and session-blind by TR-3 design, so forbidden and missing reads stay indistinguishable.",
+      "IAC-2: activity-feed UTC-labelled timestamps visible behind the shell on /activity are outside landing/auth/shell/footer scope; their redesign belongs to the later activity slice."
+    ],
+    "qa_script": [
+      "Boot the branch (sdlc:serve) and load / signed out at 375px and 1280px: header mark + Sign in, hero with Create account + Sign in, three steps, trust line, footer with only Sign in and Create account links; confirm no /api/health link, ids, or timestamps.",
+      "Create an account, then sign out and sign in: each lands on / (never /profile); loading /signin or /signup while signed in also lands on /; repeat sign-in via a /join/<token> ?next= link and confirm the invite survives.",
+      "On /signup confirm the password-rule hint; on /signin submit a wrong password: input preserved, one neutral message, identical message for an unknown address; double-click submit and confirm a single request with spinner plus text, including under prefers-reduced-motion.",
+      "Signed in, visit /, /profile, a group, its members, /activity, expense new/edit, and /join/<token> as a non-member: each shows the shell (mark -> /, truncated current place, account menu); open the menu by keyboard, go to Profile, sign out from the menu; in a second tab confirm the stale render signs out on next navigation.",
+      "Cold-navigate to members and activity and confirm shell chrome paints with the skeletons; from each nested page activate its back link/breadcrumb; confirm no dead end, one h1 per page, a 40-character group name truncates in the shell, and focus stays visible throughout."
+    ],
+    "residual_risks": [
+      "Group, members, activity, join and expense pages are touched for shell chrome now and redesigned by later slices: those tickets merge on top of the shell lines (especially the 'current place' element above each page's h1), not around them.",
+      "components/ui.tsx class strings are shared by six consumers, so any restyle of INPUT_CLASSES or button strings reaches the expense editor, group panels and settle-up panels in one commit, including islands pinned by the debts-live-region and settle-row-identity tests.",
+      "If CI has no network for the next/font/google build-time fetch or the lucide-react install, npm run sdlc:verify fails rather than degrading; the system-ui fallback only helps post-build clients.",
+      "The account-menu island is the first client component in the shell path: keep it tiny (menu toggle only) so server-rendered speed and the 1s main-screen budget are unaffected."
+    ],
+    "reproduced": false,
+    "risks": [
+      "A failed next/font/google build-time fetch fails the build outright (the fallback stack cannot mitigate it); npm run build inside sdlc:verify is the check that proves network is fine.",
+      "The account-menu island is the first client component in the shell path: keep it tiny (menu toggle only) so server-rendered speed and the 1s main-screen budget are unaffected.",
+      "Renaming nothing but adding similarly-named tokens (--color-muted stays as alias beside --color-ink-muted) risks later confusion; the duplication is deliberate until the redesign slices migrate old screens, and is called out in a code comment.",
+      "A malformed @theme entry fails the CSS build for the whole app, not just the new screens; keep additions strictly additive and let sdlc:verify prove it."
+    ],
+    "root_cause": "This slice has no bug to fix: the foundation, shell, landing and auth screens it defines do not exist yet (orphan text links and a /profile bounce stand where they belong), while the auth logic underneath is correct and must not change.",
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "Initials from display name (single name, empty name, Devanagari name, emoji/astral-plane name with no split surrogate)",
+          "Stable avatar colour derived from member id across renders",
+          "Renders name beside avatar with icon aria-hidden",
+          "Button pending state disables submit and announces text (double-submit impossible, survives reduced motion)",
+          "MoneyInput carries currency prefix, right alignment, inputmode=decimal",
+          "SegmentedControl marks exactly one option selected and moves with arrow keys"
+        ],
+        "path": "app/ui-set.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "Mark links Home (/)",
+          "Renders current place label truncated with ellipsis and title for long names",
+          "Account menu exposes Profile and Sign out actions with Escape close and focus return",
+          "Shell emits no h1 element"
+        ],
+        "path": "app/app-shell.test.ts"
+      }
+    ],
+    "understanding": "Issue #33 is the foundation slice of the approved UI-only redesign (#31): a visitor-facing landing page, centred auth cards, and one shared app shell on every signed-in page, plus the contract face later slices consume unchanged (full ui.md token set, Inter via next/font, lucide-react, the shared component set). Behaviour, data model, money rules, TRs and every other decision stay exactly as they are, and auth logic/hashing/sessions/rate-limiting must not change. There is no prior rejection for this issue, so this plan answers the ticket and its seven IACs directly.",
+    "unknowns": [
+      "The exact lucide-react version npm resolves at implement time (pinned then).",
+      "Whether the CI and QA runners have network for the next/font build-time fetch and the lucide-react install (sdlc:verify proves it either way)."
+    ],
+    "version": 1
+  },
+  "approved_too_high": false
 }

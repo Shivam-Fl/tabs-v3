@@ -63,23 +63,16 @@ what deliberately is not, in `docs/prd.md`; how every screen looks and behaves, 
 - **TR-12** Health endpoint proving database reachability, a seed with known-password users plus every split type, a multi-payer expense, payments and a placeholder, and a README covering one-command local run and from-scratch Vercel deploy (database, env vars, migrations).
 
 ## Commands
-Nothing here runs yet: the repository has no code, so every verb is a stub in `package.json`, and the command beside it is its TARGET. The first ticket whose code a verb runs makes it real (the reserved-path guard allows exactly that once), and ci-verify fails any branch that has code while `sdlc:verify` is still a stub.
-
-- `sdlc:verify` — stub now; target `npm ci && npm run typecheck && npm run test:ci && npm run build`
-- `sdlc:serve` — stub now; target `npm run build && npm run start -- --port 3000`
-- `sdlc:seed` — stub now; target `npm run db:seed`
-- `sdlc:ready` — stub now; target `curl -fsS http://localhost:3000/api/health`
-
-Stubbed for now:
-- sdlc:verify is a stub until the skeleton ticket adds typecheck, the Vitest suite and a Next.js build for it to run
-- sdlc:serve is a stub until the skeleton ticket adds the Next.js app for build/start to boot
-- sdlc:seed is a stub until the seed ticket adds scripts/seed for it to execute
-- sdlc:ready is a stub until the skeleton ticket adds the /api/health endpoint for it to poll
+All four pipeline verbs are real (made so by the skeleton ticket, #3):
+- `sdlc:verify` — `npm ci && npm run typecheck && npm run test:ci && npm run build`; there is no `lint` script and the repo deliberately has no ESLint config
+- `sdlc:serve` — builds and starts on port 3000, which is the compose boot QA drives
+- `sdlc:seed` — applies the migrations and exits 0; writes no fixture rows yet (fixtures belong to the seed ticket, TR-12)
+- `sdlc:ready` — polls `/api/health` for `{status, db, latencyMs}`
 
 ## Deploy
 Vercel, Git-connected: pushes to main deploy to production with Neon Postgres added from the project's Storage tab (pooled DATABASE_URL for runtime, direct URL for migrations); every pull request gets an automatic Vercel preview deployment. The pipeline's own QA does not drive those previews — env.mode is compose with a localhost-only allowlist — it boots the PR branch locally via npm run sdlc:serve and drives http://localhost:3000. First production deploy needs a person to connect Vercel, add Neon, and set the required secrets per the README guide.
 
 ## Open questions
-- qa_auth.mode is currently none, but every group flow requires a signed-in user. Change it to derived (QA signs itself up via /signup, passwords derived from QA_FIXTURE_SEED) or fixture (QA logs in as seeded users)? Derived exercises signup on every run; fixture is simpler. Which do you want?
+- qa_auth.mode is currently none, but every group flow requires a signed-in user. Change it to derived (QA signs itself up via /signup, passwords derived from QA_FIXTURE_SEED) or fixture (QA logs in as seeded users)? Derived exercises signup on every run; fixture is simpler. Which do you want? — Status: still `none`; in practice every QA run signs its own timestamped accounts up through /signup (see memory/qa/environment.md), so the derived behaviour exists without the config or seed.
 - The first production deploy and every Vercel preview need a person to connect the repo to Vercel, add Neon from the Storage tab, and set the required secrets. Who does that, and is it done before or after the skeleton ticket lands?
-- What is the default currency for new profiles and groups (spec mentions paisa, suggesting INR)? Confirm INR as the default so seed data, formatting tests and QA share one expectation.
+- ~~What is the default currency for new profiles and groups~~ — answered in code: new profiles default to INR (DEFAULT_CURRENCY in lib/auth/validation.ts; supported set INR, USD, EUR, GBP), the expense editor labels amounts in the group's currency, and QA walks assume it.

@@ -623,8 +623,8 @@
     "pr": "22"
   },
   "qa": {
-    "verdict": "fail",
-    "introduced_bugs": 1,
+    "verdict": "pass",
+    "introduced_bugs": 0,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -634,19 +634,15 @@
       "AC-6",
       "AC-7",
       "AC-8",
-      "AC-9"
+      "AC-9",
+      "AC-10"
     ],
-    "sha": "7a8caf23a4213d622c331723790c5fad94424b7b",
-    "run_id": "37286692154",
-    "work_order_version": 2,
-    "at": "2026-10-05T09:47:02.640Z"
+    "sha": "77b84e539467714b95f5414f9a12d36a587913ce",
+    "run_id": "37295774512",
+    "work_order_version": 3,
+    "at": "2026-10-05T11:04:20.671Z"
   },
-  "qa_open_bugs": [
-    {
-      "id": "BUG-2",
-      "title": "Partial settle-up leaves the paid fragment in the row amount field instead of the remainder"
-    }
-  ],
+  "qa_open_bugs": [],
   "rejected_artifacts": {
     "work-order": {
       "text": "{\n  \"acceptance\": [\n    {\n      \"check\": \"Group page shows every member's net balance and a simplified who-pays-whom list with at most N-1 transfers, a group with no debts shows an explicit settled all-zero state, and an archived group renders the reads with no settle-up or delete controls\",\n      \"id\": \"AC-1\"\n    },\n    {\n      \"check\": \"Home shows the viewer's cross-group you-owe and you-are-owed totals plus per-person rows plus each group's per-group balance in its own currency, with a note naming excluded foreign-currency groups\",\n      \"id\": \"AC-2\"\n    },\n    {\n      \"check\": \"A member records a full and a partial settle-up payment from the debts card behind a confirm, deletes a payment as an involved member behind a confirm, and a non-involved member's delete is refused; balances update in place with a polite live-region announcement\",\n      \"id\": \"AC-3\"\n    },\n    {\n      \"check\": \"Every amount on both screens renders in group currency through formatMinorUnits with tabular numerals, and the debts card sits above the expense list on a narrow viewport\",\n      \"id\": \"AC-4\"\n    },\n    {\n      \"check\": \"The debts card renders a persistent polite live region (role=status) from first paint, so the first settle-up and delete results are announced as updates to an already-present region rather than as a region inserted together with its message\",\n      \"id\": \"AC-9\"\n    }\n  ],\n  \"approach\": \"Fix the shared contract the previous plan miscopied instead of reworking payments: drop the idle early-return in components/ui.tsx StateMessage so it always renders its region — idle renders an empty <p role=status aria-live=polite>, success renders the message in that same node, error keeps role=alert unchanged. No logic change in components/settle-panels.tsx is needed: both panels already mount StateMessage unconditionally at panel level, so their regions become persistent automatically. Add components/ui.test.tsx with the idle-renders-empty-region repro plus success/error cases. Append AC-9 plus a qa_script step so QA asserts pre-submit region presence on every future run.\",\n  \"files\": [\n    {\n      \"action\": \"edit\",\n      \"change\": \"Drop the idle/message-empty early null return in StateMessage so it always renders its region: idle yields an empty <p role=status aria-live=polite>, success renders the message in that same node, error keeps role=alert unchanged\",\n      \"path\": \"components/ui.tsx\",\n      \"why\": \"The shared live-region contract every panel mounts\"\n    }\n  ],\n  \"issue\": 7,\n  \"kind\": \"bug\",\n  \"mode\": \"committed\",\n  \"reproduced\": true,\n  \"root_cause\": \"components/ui.tsx StateMessage returns null while idle, so both settle panels mount with zero live regions from first paint; the first result inserts the [aria-live] node together with its message, which screen readers announce unreliably. The previous work order assumed the ConfirmStep-plus-StateMessage pattern is a persistent live region; it never was.\",\n  \"understanding\": \"PR #22 implemented the previous plan faithfully and still failed QA because the plan's premise was wrong, not its execution. The plan treated ConfirmStep-plus-StateMessage as a persistent live region, but StateMessage returns null while idle (components/ui.tsx:34), so the debts card mounts zero [aria-live] nodes until the first submit — exactly what T-12 asserts against (BUG-1). The ledger, balances, simplification, authz, payments and responsive work all passed (12/13). My previous revision was additionally refused by the validator for dropping IAC/TR sources; this revision restores AC-1 through AC-8 verbatim with sources and appends AC-9.\",\n  \"version\": 2\n}\n",

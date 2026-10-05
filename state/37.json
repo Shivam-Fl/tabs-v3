@@ -354,5 +354,278 @@
   },
   "validated_from": "plan",
   "validated_at": "2026-10-05T22:54:19.896Z",
-  "validated_ac_changes": []
+  "validated_ac_changes": [],
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Owner sees every roster row as avatar plus name with You, Owner and Placeholder badges and the member balance in words plus colour; owner row actions sit behind an overflow disclosure; the invite panel has a working link with copy button and rotate/disable each confirm before acting.",
+        "how_to_verify": "Sign in as owner at /groups/<id>/members on phone and desktop widths: badges on the right rows, nonzero balances read 'is owed' in lent colour or 'owes' in owed colour, overflow disclosure opens by keyboard and its Remove asks for confirm.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Joining with a matching placeholder offers the claim prompt; a group with only its owner shows an invite-sharing empty state with a copy button only while the invite link is live (archived groups show the read-only note, a disabled link offers create-new instead of copy, non-owners never get the copy prompt); a failed rotation keeps the old link working and says so; removing a member with a balance names the blocker and links to settle-up.",
+        "how_to_verify": "Drive /join/<token> claim flow, fresh-group members page, archived-group members page, disabled-link members page, rotate failure path, and a blocked removal: each message and link as stated, old link value unchanged after the failed rotation.",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Activity feed rows show actor avatar, a plain-sentence action, a relative-then-human timestamp rendered in the viewer zone, and link-through where a destination exists; the filter chip row covers all, expenses, payments and members; expense-edited entries list exactly the changed fields before and after.",
+        "how_to_verify": "Seeded group with all event kinds at /activity and the group excerpt: filter each chip, open an edited entry, check timestamps read like '2h ago · 14:30' in the local zone and rows link to the expense editor or group as appropriate.",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Empty feed explains it fills as the group acts while a filtered-empty feed keeps its own 'No events match this filter.' sentence; loading paints skeleton event rows; a failed cross-group load shows an error card whose retry preserves the ?activity= filter and a failed group excerpt shows its own section retry (failed pages = a failed feed read, satisfied by these two retries, not by a paginated load-more control).",
+        "how_to_verify": "New group feed, filtered-to-empty feed, throttled/failed load, and error card: retry href carries the active ?activity= value and the chips still render; group page excerpt failure shows its section retry.",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Profile is one settings card with display name, a styled default-currency select (appearance-none with a lucide indicator, never the browser arrow), Save with a pending guard and confirmation; sign-out appears only in the account menu, reachable by keyboard at 375px; a failed save keeps the typed input and offers retry inline.",
+        "how_to_verify": "Edit name and currency at /profile, save, submit empty name: input preserved, inline error shown, Save disables with progress while pending, select shows the custom indicator, no sign-out control on the page and sign-out works from the account menu by keyboard.",
+        "id": "AC-5",
+        "source": "IAC-5",
+        "verify": "browser"
+      },
+      {
+        "check": "Zero balances read neutral everywhere in this piece, nonzero direction is always words plus colour, dates read as people say them with times in the viewer zone, and the members, activity and profile screens each show designed empty, loading and error states at 375px and 1280px.",
+        "how_to_verify": "Walk all three screens at both widths with keyboard only: settle a group to zero, check no red zero, long names truncate, touch targets and focus ring hold, skeletons match layout, reduced-motion kills animation.",
+        "id": "AC-6",
+        "source": "IAC-6",
+        "verify": "browser"
+      },
+      {
+        "check": "Every screen in this piece keeps one h1 with heading order, labelled controls, visible focus, full keyboard path with arrow-key chips where used, 4.5:1 body text contrast on all surfaces including tints, and 44px targets; main screens stay interactive under 1s on an ordinary connection.",
+        "how_to_verify": "Keyboard-only pass plus contrast spot-checks on tinted banners and a load-time check of the three screens against the local production build.",
+        "id": "AC-7",
+        "source": "TR-11",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Drive the activity filter with the client SegmentedControl island instead of the server GET chip form.",
+        "rejected_because": "The filter must live in the URL so it survives reload, shared links and the retry after a failed load; the GET form works before JavaScript arrives and already carries the sibling expense filter through hidden inputs, which a client control would have to reimplement."
+      },
+      {
+        "approach": "Keep updateProfile's redirect-on-refusal and preserve failed profile input with a sessionStorage draft restore in the new island.",
+        "rejected_because": "It preserves a transport that contradicts the house rule (conventions.md: refusals go inline; redirects are for success) and trades a documented pattern for per-page storage cleverness; the inline refusal keeps the typed state naturally because the form never unmounts."
+      },
+      {
+        "approach": "Add feed pagination with a load-more button to satisfy 'failed pages show load-more retry' literally.",
+        "rejected_because": "The contract face of this issue fixes the activity reads as unchanged, and paging would change the readers both feeds share; the existing section-level retry with the filter preserved is what 'failed pages' maps to without touching the reads."
+      },
+      {
+        "approach": "Put the viewer-zone timestamp and its formatter in a new components/timestamp.tsx plus lib/dates/format.ts.",
+        "rejected_because": "One caller does not earn two modules; components/ui-interactive.tsx is already the shared home for stateful presentational pieces and its pure helpers are already unit-tested from app/ui-set.test.ts, so the island and its formatter belong there."
+      },
+      {
+        "approach": "Key the members roster avatars on displayName so roster and feed tints always agree.",
+        "rejected_because": "It would break the shared set's documented contract (same member, same colour on every screen and render) and the app/ui-set.test.ts pin that renaming must not recolour; the feed can only be name-keyed because ActivityRow carries no actor id, so the mismatch is disclosed instead of spreading it to the roster."
+      }
+    ],
+    "approach": "Restyle the three screens onto the shared set that piece 1 already merged (Button, Card, Avatar, Badge, TextInput, Skeleton, EmptyState, ConfirmStep, Dialog patterns, design tokens) without touching any read or write logic: the members roster becomes composed avatar rows (not ListRow, which cannot hold a badge cluster plus an inline form inside an anchor) with words-plus-colour balances from a new directionWords helper and owner actions behind a no-JS details disclosure; the invite panel keeps its copy island and single-notice confirm flow; the activity feed keeps its URL-chip GET form with hidden preserved inputs and exact-changed-fields edit detail, owns its EmptyState through the unchanged emptyText string plus an optional action, and gains a viewer-zone Timestamp island; profile becomes one card with a controlled island whose refusals go inline per ADR-0008 and conventions while success keeps the ?saved=1 redirect. The balance-blocked predicate and its sentence live in client-safe lib/groups/validation.ts with NonZeroBalanceError built from the same constant so the sentence cannot drift; no client island imports the drizzle-backed members module. Server text for rotation failure, balance-blocked removal and claim-taken stays byte-identical; only its presentation changes, plus a settle-up link beside balance-blocked refusals and a legacy reader for ?error=invalid so the pinned selector surface keeps rendering.",
+    "assumptions": [
+      "Piece for #33 (or the #40 foundation work on main) has merged the shared set, AppShell, tokens and Inter/lucide-react this plan builds on; no new design-system component or token is introduced — ProfileForm, CopyLinkButton and the Timestamp island are app-level compositions over the existing set.",
+      "The contract face fixes reads and actions, so listMembers, listGroupActivity, listUserActivity, computeNetBalances and all group/auth actions keep their signatures, schemas, messages and success transports; the single exception is updateProfile's failure transport, which moves from redirect to the inline-refusal state the house rule (ADR-0008, conventions.md) already prescribes for refusals — a presentation transport, not a rule change.",
+      "With no actor id on ActivityRow the feed avatar tint can only derive from the actor name while the roster stays id-keyed per the avatar contract, so the same person may tint differently between roster and feed and a rename recolours their feed avatar; the roster is deliberately not re-keyed.",
+      "'Failed pages show load-more retry' (IAC-4, ui.md Activity partial) is read as 'a failed feed read shows its retry': the cross-group error card with the filter preserved plus the group excerpt's section retry; no pagination is added because the reads are fixed.",
+      "Timestamps are stored UTC and the viewer zone is only knowable on the client, so the server renders a UTC-labelled fallback and the island replaces it in an effect (never during render), falling back to the UTC label when the time zone is unavailable and clamping future values instead of printing 'in 3 hours'.",
+      "PGlite serves one connection, so the sequential withDb reads stay sequential; no read is parallelised.",
+      "sdlc:verify here is typecheck plus test:ci plus build; the work-order lint step does not apply because the repo has no lint script by decision.",
+      "The members loading fallback markers (#invite-url, notice params, data-skeleton names, bg-muted/20 with motion-safe:animate-pulse, aria-busy) stay stable because qa/selectors.md and the loading test pin them.",
+      "lib/auth/actions.test.ts pins updateProfile redirecting on invalid input and will be updated to the inline-refusal contract in this change."
+    ],
+    "confidence": 80,
+    "confidence_rationale": "Every function to change has been read, every caller of the shared pieces is listed in the file reasons, and the critique's one genuine bundle-layer defect (drizzle pulled into the client) is designed out by hoisting the predicate into validation.ts; the remaining risk is QA selector churn on the profile error path plus the disclosed avatar-tint mismatch, both flagged rather than hidden. What would move the number down is discovering a second client import of a db-backed module; what would move it up is a passing preflight plus the pinned loading/marker tests staying green.",
+    "debate_summary": "The critique was right three times and manufacturing noise twice. Accepted outright: (1) the isBalanceBlockedRefusal bundle defect — value-importing lib/groups/members.ts from a 'use client' island would drag drizzle-orm and the db schema into the browser bundle, so the predicate and sentence now live in client-safe validation.ts with NonZeroBalanceError built from the same constant; (2) the double-owned empty state — EmptyState now has one owner (inside ActivityFeed behind the unchanged emptyText string, new props optional so the group excerpt inherits without an edit); (3) the Card/panel double-h2 — Cards wrap without titles and keep the panels' aria-labelledby h2s. Accepted as disclosure, rejected as a change: the name-keyed feed avatars cannot match the id-keyed roster (ActivityRow carries no actor id and the contract face forbids adding one), so the mismatch is stated in assumptions and the roster is deliberately not re-keyed. Rejected: the blocking demand to escalate the profile transport — redirect-on-refusal contradicts the binding house rule that refusals go inline (ADR-0008, conventions.md) and ui.md's 'failed saves never clear input', while schemas, messages and both success redirects stay byte-identical, so the transport move is inside the ticket, not an amendment of it; the sessionStorage-restore alternative stays rejected. Minor findings (ListRow fit, directionWords helper, styled select, load-more interpretation, assumption wording) were all folded into the work order, and the load-bearing edge cases (archived/disabled invite gating, viewer-perspective wording, hydration/timezone/future-time behaviour, pending guard after refusal, pinned skeleton/notice/selector markers, filtered-vs-truly-empty) are now explicit file constraints or acceptance text.",
+    "files": [
+      {
+        "action": "edit",
+        "change": "Migrate MembersPanel to composed Avatar plus Badge (You, Owner, Placeholder) rows — a composed row, not ListRow, because the badge cluster plus an inline Remove form cannot sit inside ListRow's anchor; balances via the directionWords helper in words plus colour (lent/owed, zero neutral 'All settled up' from the viewer's side), move owner Remove into a per-row details overflow disclosure keeping ConfirmStep with refusals rendering inline while the disclosure stays open, render a settle-up link beside balance-blocked refusals via isBalanceBlockedRefusal imported from lib/groups/validation (never from the db-backed members module), restyle InvitePanel on shared Button keeping #invite-url, data-amount, the copy island, rotate/disable confirms and the single role=status notice slot, convert AddPlaceholderForm to TextInput plus Button keeping placeholder-name-error, restyle JoinPanel claim seats with Badge and keep the panel-level claim notice, add a CopyLinkButton used only for the live-link solo-owner empty state; placeholder seats with no account keep the Avatar fallback icon plus the Placeholder badge; long names truncate with title and the badge cluster never wraps a row into three lines.",
+        "path": "components/groups-panels.tsx",
+        "why": "All four member/invite/claim forms live here; one edit converts them to the shared set without touching the actions they call."
+      },
+      {
+        "action": "edit",
+        "change": "Own the empty state inside the feed: wrap the emptyText string in an EmptyState (title derived, new optional emptyAction prop for the cross-group page's links) while keeping the filtered-empty 'No events match this filter.' sentence distinct; render feed rows with name-keyed actor Avatar, keep rowHref/link-through rules and the exact-changed-fields EditDetail untouched, keep the GET chip form with its hidden preserved inputs and aria-pressed (never links or a client control, so the sibling expense filter survives), show payment snapshots as from-to words with a neutral tabular amount keeping data-amount, use the Timestamp island for dates.",
+        "path": "components/activity-feed.tsx",
+        "why": "The one feed both the group excerpt and the cross-group page render, so both screens inherit the redesign from this file with no group-page edit (new props are optional)."
+      },
+      {
+        "action": "edit",
+        "change": "Add a Timestamp client island (relative-then-human time in the viewer zone) plus its pure formatter beside stepSegment: server and first client render emit the identical UTC-labelled time element, the human string replaces it only in an effect, unknown time zones fall back to the UTC label, and future values clamp to 'just now'; follows the file's rule that stateful shared pieces live here and not in ui.tsx.",
+        "path": "components/ui-interactive.tsx",
+        "why": "This is the established home for hook-backed shared components; the feed, and later the expense screens, need exactly one timestamp island."
+      },
+      {
+        "action": "edit",
+        "change": "Compose the screen from Card sections without Card titles (the panels keep their own aria-labelledby h2s, so no heading renders twice), add a solo-owner EmptyState whose copy action renders only while the invite link is live — archived groups show the read-only note, a disabled link offers create-new, non-owners get no copy prompt — wrap the member/balance reads in a try/catch that renders an error Card with a retry link, keep the breadcrumb, single h1, removed/invite single-slot notices and the archived read-only note.",
+        "path": "app/groups/[id]/members/page.tsx",
+        "why": "Page owns layout, empty and error states; the panels own rows, so the IAC-1/IAC-2 screen requirements land here."
+      },
+      {
+        "action": "edit",
+        "change": "Rebuild the fallback from the shared Skeleton on the new tokens with identical data-skeleton names, sr-only status text and aria-busy, keeping bg-muted/20 with motion-safe:animate-pulse in the same tags so the streamed-flight assertions keep passing.",
+        "path": "app/groups/[id]/members/loading.tsx",
+        "why": "Loading boundary must match the redesigned layout or data arrival jumps; attribute names are pinned by QA."
+      },
+      {
+        "action": "edit",
+        "change": "Render the three empty cases through the feed's EmptyState with distinct copy and per-case actions (not collapsed into one), the failure through an error Card whose retry preserves the ?activity= filter, and keep the h1, back-to-Home link and AppShell.",
+        "path": "app/activity/page.tsx",
+        "why": "Page owns the empty/error states the feed component deliberately does not."
+      },
+      {
+        "action": "edit",
+        "change": "Migrate the boundary to the new border/surface tokens while keeping its structure (title/nav skeletons plus ActivityFeedSkeleton) and aria-busy so it still matches the feed shape.",
+        "path": "app/activity/loading.tsx",
+        "why": "Token-only pass; structure already mirrors the feed via the shared skeleton."
+      },
+      {
+        "action": "create",
+        "change": "New controlled ProfileForm island: TextInput for display name, styled select for default currency (appearance-none FIELD_CLASSES plus a lucide ChevronDown indicator positioned inside the field, never the browser arrow) reusing FIELD_CLASSES, ProfileSaveButton for the pending guard (double-submit stays impossible including a slow second submit after a refusal), inline FieldError nodes on refusal with the typed values preserved in state; success keeps flowing through the ?saved=1 redirect.",
+        "path": "components/profile-form.tsx",
+        "why": "A server form cannot keep typed input across the redirect that reports its own failure; the island holds it, matching every other form in the app."
+      },
+      {
+        "action": "edit",
+        "change": "Render the single settings Card with the new form, remove the page-level sign-out button (sign-out lives in the account menu), keep the ?saved=1 status slot with exactly one status node and keep reading ?error=invalid so direct hits still render the same sentence.",
+        "path": "app/profile/page.tsx",
+        "why": "IAC-5 puts sign-out exclusively in the account menu and the card layout here."
+      },
+      {
+        "action": "edit",
+        "change": "Change updateProfile to the (previous, formData) island signature returning fieldErrors state on invalid input instead of redirecting, keeping the validation schema, messages, ?saved=1 success redirect and the signin redirect byte-identical; this is the ADR-0008 refusal transport, not a logic change.",
+        "path": "lib/auth/actions.ts",
+        "why": "Inline refusals are the ADR-0008/conventions pattern; the redirect-on-refusal is what destroys the typed input IAC-5 requires."
+      },
+      {
+        "action": "edit",
+        "change": "Add ProfileFormState and IDLE_PROFILE_STATE beside the auth form state so the server-action file, which may export only async functions, and the island share one type.",
+        "path": "lib/auth/validation.ts",
+        "why": "Same colocation rule the auth island state already follows."
+      },
+      {
+        "action": "edit",
+        "change": "Reimplement on top of the shared Button with pending and pendingLabel so the guard keeps its markup contract while gaining the redesigned states.",
+        "path": "components/profile-save-button.tsx",
+        "why": "Conventions cite this button as the double-submit guard pattern; delegation keeps the reference valid."
+      },
+      {
+        "action": "create",
+        "change": "Skeleton settings card under AppShell with sr-only status and aria-busy, mirroring the members/activity boundaries.",
+        "path": "app/profile/loading.tsx",
+        "why": "Profile currently has no loading boundary; the global sweep requires designed loading states on every screen in this piece."
+      },
+      {
+        "action": "edit",
+        "change": "Migrate the join card to the new tokens so the claim prompt matches the redesigned JoinPanel it contains; claim-taken notice reading unchanged.",
+        "path": "app/join/[token]/page.tsx",
+        "why": "IAC-2's claim prompt is this page plus JoinPanel; leaving its card on old tokens would split the flow across two designs."
+      },
+      {
+        "action": "edit",
+        "change": "Add the NonZeroBalanceError sentence builder plus the pure isBalanceBlockedRefusal predicate (client-safe: zod and auth validation only, no db imports) so a client island can classify a refusal without importing the database layer.",
+        "path": "lib/groups/validation.ts",
+        "why": "Client-safe home the members panel already imports; keeps the sentence and its classifier in one place so they cannot drift."
+      },
+      {
+        "action": "edit",
+        "change": "Build NonZeroBalanceError's message from the shared builder in validation.ts; no signature, rule or balance-arithmetic change — server-only wiring so the sentence the panel classifies is the sentence the guard throws.",
+        "path": "lib/groups/members.ts",
+        "why": "Single source for the refusal sentence now that both the thrower and the client-side classifier must agree on it."
+      },
+      {
+        "action": "edit",
+        "change": "Add a small pure directionWords(balanceMinor, viewerIsSubject) helper beside formatMinorUnits returning words-plus-tone (zero neutral, positive/negative from the viewer's side); sibling pages are deliberately not refactored to it in this ticket.",
+        "path": "lib/money/format.ts",
+        "why": "The members panel needs the words-plus-colour rule without writing a third inline copy of the branching the home and group pages already carry; format.ts is dependency-free so the client island can import it."
+      }
+    ],
+    "issue": 37,
+    "kind": "feature",
+    "out_of_scope": [
+      "Landing, home, group, expense and settle-up screen markup except what they inherit automatically through the shared ActivityFeed and ui components (new feed props are optional, so app/groups/[id]/page.tsx needs no edit).",
+      "Dark mode, explicitly deferred by ui.md.",
+      "Any money, authorization, balance, activity or membership rule change: splits, recompute, simplification, guards, feed writers and validation schemas stay as they are.",
+      "Feed pagination or load-more: reads stay unchanged per the contract face, so failed loads map to section-level retry.",
+      "docs/ui.md, docs/prd.md, docs/trd.md, .sdlc/memory/**, .github/** and .sdlc/** framework paths.",
+      "New dependencies: lucide-react and next/font already cover icons and type."
+    ],
+    "qa_script": [
+      "Boot the branch build and sign up two users A (owner) and B, plus create a group with expenses, a payment and a placeholder seat.",
+      "As A at /groups/<id>/members at 375px and 1280px: roster shows avatars, You/Owner/Placeholder badges, balances in words plus colour, keyboard opens the row overflow disclosure and Remove confirms by naming the member.",
+      "Invite panel: copy the link via #invite-url, rotate behind its confirm (new link works, notice shows), disable behind its confirm, then create a fresh link.",
+      "Blocked removal: attempt to remove a member with a nonzero balance, read the refusal naming the blocker with a settle-up link; settle up, then remove successfully and read the single status notice.",
+      "Claim flow: as B open the invite link, claim the matching placeholder seat, land in the group; open the same seat link again in a second tab and read the taken notice.",
+      "Activity at /activity and the group excerpt: all four chips filter correctly, timestamps read relative-then-human in the local zone, expense-edited entries show exactly the changed fields, empty group feed explains itself, filtered-empty keeps its own sentence, failed load keeps the filter on retry.",
+      "Profile at /profile: save a new name and currency and read the saved notice; submit an empty name and confirm the input is kept with an inline error; confirm no sign-out control on the page and sign-out works from the account menu by keyboard at 375px.",
+      "Keyboard and contrast pass at both widths over all three screens, including the chip row, disclosure, dialogs and the styled currency select; reduced-motion shows no animation."
+    ],
+    "residual_risks": [
+      "The group page excerpt inherits the feed redesign without its owning ticket reviewing it; visually intended, but its QA belongs to the sibling piece.",
+      "The details-based overflow disclosure is keyboard-accessible without JavaScript but is not a true ARIA menu; a strict menu-pattern review may ask for a menu island later.",
+      "Two identically named placeholder seats are matched by name in the claim flow (existing logic, untouched here): one person must not be able to claim both, and the roster must not read them as one person — flagged for the owning ticket's QA."
+    ],
+    "risks": [
+      "Moving the profile failure from ?error=invalid to inline state changes the QA walk pinned in selectors.md; the page keeps rendering ?error=invalid for direct hits and ?saved=1 is untouched, but the replay walk for a failed save must assert the inline node instead.",
+      "updateProfile becomes an island-style (previous, formData) action; any caller outside the profile form would need the same update, and the grep shows only the profile page and its tests call it.",
+      "Payment rows render amounts in neutral ink with from-to words; if reviewers expect lent/owed colouring on payments, that is a one-line tone decision inside ActivityRowItem.",
+      "Client islands in this change may only import client-safe modules (validation, money/format, ui); the db-backed members module stays server-only, which the validation.ts hoist enforces structurally."
+    ],
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "relative thresholds: just now, minutes, hours, days, then human-only",
+          "human shapes: same-day time, Yesterday, weekday, dated with viewer timeZone",
+          "future timestamps clamp to just now instead of printing 'in N hours'",
+          "Timestamp SSR fallback renders time with dateTime and UTC-labelled text"
+        ],
+        "path": "app/ui-set.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "invalid profile input returns error state with fieldErrors instead of redirecting",
+          "valid save still redirects to /profile?saved=1",
+          "signed-out save still redirects to /signin"
+        ],
+        "path": "lib/auth/actions.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "matches the NonZeroBalanceError sentence",
+          "ignores unrelated refusal messages",
+          "empty message is not a balance block"
+        ],
+        "path": "lib/groups/validation.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "zero reads neutral with no direction",
+          "positive balance reads as the viewer being owed when the viewer is the subject",
+          "negative balance reads as the viewer owing when the viewer is the subject",
+          "perspective flips for other members"
+        ],
+        "path": "lib/money/format.test.ts"
+      }
+    ],
+    "understanding": "Issue #37 is the members/activity/profile slice of the #31 UI redesign (covers TR-11 mobile-first accessible UI and the S-8 Experience spec): owner roster and invites, the human-dated filterable activity feed, and the single-card profile, plus a display/accessibility sweep over exactly these screens. The binding constraints keep docs/ui.md, tokens, lucide-react and every other decision as they are, so this is a pure restyle onto the piece-1 shared set with reads, actions, schemas and success transports unchanged. What exists today: functional but un-redesigned members panels on old class strings with plain role tags and raw amounts, an activity feed with UTC-labelled timestamps and unstyled chips, and a server profile form whose redirect-on-refusal wipes typed input and whose page carries its own sign-out button. No plan for this issue has been rejected, and no issue comment binds anything.",
+    "unknowns": [
+      "Whether QA wants the selectors.md profile-error walk rewritten to the inline node or kept against the legacy ?error=invalid reader, which this plan keeps rendering.",
+      "Whether the sibling group-page ticket wants its own pass over the excerpt once it inherits the redesigned feed rows.",
+      "The exact S-8 Experience acceptance wording beyond TR-11, which is not in the work-order source vocabulary and is covered here through the TR-11 criterion."
+    ],
+    "version": 1
+  },
+  "approved_too_high": false
 }

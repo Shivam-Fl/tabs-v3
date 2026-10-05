@@ -307,9 +307,13 @@ if (isMain && process.argv[2] === '--probe') {
   // A model behind the translator can end its turn without the result, and the SDK cannot stop it:
   // Muse Spark ran 40 turns and ended "successfully" with nothing returned. Said in the system prompt
   // as well as by the schema, so the first attempt rarely needs the resume after it.
-  const resultNote = spec ? 'Your result is returned by calling the structured output tool (StructuredOutput), ' +
-    'once, as the last thing you do — writing a file is not returning it. A session that ends without that call has ' +
-    'produced nothing, whatever it did.' : '';
+  // The file the instructions name is the result, and the call returns the same thing: the job keeps
+  // a file that parses over what the call carried. Saying a written file counted for nothing was false,
+  // and a model retyping a long artifact into the call kept only its required keys (tabs-v3 #7).
+  const resultNote = spec ? 'Your result is the file your instructions tell you to write: keep it final and ' +
+    'checked, because a file you wrote that parses is what the pipeline uses. When it is done, also call the ' +
+    'structured output tool (StructuredOutput) once with the same content, as the last thing you do. A session ' +
+    'that ends with neither has produced nothing, whatever it did.' : '';
 
   // A dollar cap per session, only when `limits.max_usd_per_run` is set to a positive number.
   // The audit's only dollar figures were $5.59 for a root-cause run that wrote nothing and $20.19

@@ -309,5 +309,21 @@
   "follow_ups": {
     "review": [],
     "pr": "19"
-  }
+  },
+  "qa": {
+    "verdict": "pass",
+    "introduced_bugs": 0,
+    "ac_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5"
+    ],
+    "sha": "0310622dac56d212600aa5c853243242eb60f4c6",
+    "run_id": "37252571960",
+    "work_order_version": 1,
+    "at": "2026-10-05T01:57:00.468Z"
+  },
+  "qa_open_bugs": []
 }

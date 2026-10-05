@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { withDb } from '../db/client';
+import { isUniqueViolation } from '../db/errors';
 import { users } from '../db/schema';
 import { hashPassword, verifyPasswordOrDummy } from './password';
 import { checkRateLimit, clearRateLimit, clientIp, recordFailure } from './rate-limit';
@@ -33,31 +34,6 @@ import {
  * through `withDb`, so the Neon Pool a request opens is closed before the request ends
  * (ADR-0002) — nothing here holds a client between requests.
  */
-
-const UNIQUE_VIOLATION = '23505';
-const DUPLICATE_KEY_MESSAGE = /duplicate key value|unique constraint/i;
-const MAX_ERROR_CAUSES = 5;
-
-/**
- * Postgres's unique violation, however the driver in front of it chose to wrap it. Drizzle
- * wraps a failed statement in its own error and hangs the driver's on `.cause`, so the code
- * and the constraint name are one or two links down the chain rather than on the error that
- * reaches us — checking only the top-level error would make the duplicate-email path throw
- * instead of answering neutrally.
- */
-function isUniqueViolation(error: unknown): boolean {
-  let current: unknown = error;
-
-  for (let depth = 0; depth < MAX_ERROR_CAUSES; depth += 1) {
-    if (typeof current !== 'object' || current === null) return false;
-    if ((current as { code?: unknown }).code === UNIQUE_VIOLATION) return true;
-    const message = (current as { message?: unknown }).message;
-    if (typeof message === 'string' && DUPLICATE_KEY_MESSAGE.test(message)) return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-
-  return false;
-}
 
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);

@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { getSessionUser } from '../auth/session';
 import { fieldErrorsFrom } from '../auth/validation';
 import { withDb } from '../db/client';
+import { isUniqueViolation } from '../db/errors';
 import { activityEvents, groups, memberships } from '../db/schema';
 import { guardGroup, requireOwner, type GroupAccess } from './authz';
 import { NonZeroBalanceError, assertZeroBalance, getMemberBalance } from './members';
@@ -69,29 +70,6 @@ import {
  * left to render. Refusals still return state and stay inline everywhere, because the form that
  * shows them is never the thing the refusal unmounts.
  */
-
-const UNIQUE_VIOLATION = '23505';
-const DUPLICATE_KEY_MESSAGE = /duplicate key value|unique constraint/i;
-const MAX_ERROR_CAUSES = 5;
-
-/**
- * Postgres's unique violation, however the driver wrapped it. The same walk as
- * `lib/auth/actions.ts` — the code and the constraint name sit one or two `.cause` links below
- * the error that reaches us, and checking only the top level would turn a lost race into a 500.
- */
-function isUniqueViolation(error: unknown): boolean {
-  let current: unknown = error;
-
-  for (let depth = 0; depth < MAX_ERROR_CAUSES; depth += 1) {
-    if (typeof current !== 'object' || current === null) return false;
-    if ((current as { code?: unknown }).code === UNIQUE_VIOLATION) return true;
-    const message = (current as { message?: unknown }).message;
-    if (typeof message === 'string' && DUPLICATE_KEY_MESSAGE.test(message)) return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-
-  return false;
-}
 
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);

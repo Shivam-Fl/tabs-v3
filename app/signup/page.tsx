@@ -39,7 +39,6 @@ export default async function SignUpPage({
         action={signup}
         submitLabel="Create account"
         pendingLabel="Creating account…"
-        next={next ?? undefined}
       />
       <p className="text-muted">
         Already have an account?{' '}

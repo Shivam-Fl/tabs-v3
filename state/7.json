@@ -1,21 +1,17 @@
 {
   "issue": 7,
   "pr": 22,
-  "state": "needs-human",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
   "attempts": {
-    "plan": 3,
-    "ci": 2,
-    "review": 2,
-    "qa": 2
+    "plan": 0,
+    "ci": 0,
+    "review": 0,
+    "qa": 0
   },
-  "attempt_run": {
-    "counter": "plan",
-    "n": 3,
-    "run": "37280801241"
-  },
+  "attempt_run": null,
   "halted": null,
   "pending": {
     "stage": "root-cause",
@@ -330,7 +326,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-04T16:43:37.614Z",
-  "updated_at": "2026-10-05T08:10:47.578Z",
+  "updated_at": "2026-10-05T08:28:25.089Z",
   "history": [
     {
       "at": "2026-10-05T05:18:54.690Z",
@@ -501,6 +497,21 @@
       "at": "2026-10-05T08:10:47.578Z",
       "agent": "triage",
       "action": "-> needs-human"
+    },
+    {
+      "at": "2026-10-05T08:28:25.088Z",
+      "agent": "human",
+      "action": "lock released"
+    },
+    {
+      "at": "2026-10-05T08:28:25.089Z",
+      "agent": "human",
+      "action": "budget reset (was {\"plan\":3,\"ci\":2,\"review\":2,\"qa\":2})"
+    },
+    {
+      "at": "2026-10-05T08:28:25.089Z",
+      "agent": "human",
+      "action": "-> planning"
     }
   ],
   "epic": 1,

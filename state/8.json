@@ -82,5 +82,267 @@
     "decided_at": "2026-10-05T11:13:34.667Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "Per-group feed on the group page and cross-group feed at /activity list expense added/edited/deleted, payment and member events with actor, action and timestamp; chips all/expenses/payments/members filter the rows, the selected filter survives a failed-load retry via the URL, and an unknown ?activity= value falls back to all with chips still rendering",
+        "how_to_verify": "Seed, sign in, open a group page and /activity, click each chip, hand-edit the URL to ?activity=banana, force a failure (offline) and retry",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Editing an expense produces a feed entry in the same transaction carrying the structured before/after of exactly the changed fields (description, amount, date, payers, participants, split type and inputs, category, note), visible in both the group and cross-group feeds",
+        "how_to_verify": "QA edits a seeded expense's description and one split input, then asserts the new feed row in both feeds carries the before/after of exactly those fields",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Fresh boot plus sdlc:seed yields known-password users, one expense per split type, a multi-payer expense, payments and a placeholder with non-empty feeds in chronological order; running the seed twice leaves one copy of each fixture event; QA signs in as a seeded README user in the browser",
+        "how_to_verify": "Boot sdlc:serve, run npm run sdlc:seed twice, sign in as a seeded user and open home, a group page and /activity",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "README covers one-command local run and from-scratch Vercel deploy (Neon database, env vars, migrations, seed path); main screens stay interactive under 1s with skeleton, empty and error states keyboard-accessible on phone and laptop viewports",
+        "how_to_verify": "Follow the README on a fresh clone; drive home, group and activity pages on phone and laptop viewports with keyboard only",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Cross-group feed returns events only from groups the caller belongs to, including archived ones; signed-out and non-member reads get the same 404/sign-in answer as every other group route",
+        "how_to_verify": "Vitest cases in lib/activity/queries.test.ts plus QA cross-user probe in qa_script",
+        "id": "AC-5",
+        "source": "TR-3",
+        "verify": "test"
+      },
+      {
+        "check": "GET /api/health proves database reachability and is documented as the deploy health proof in the README",
+        "how_to_verify": "curl /api/health against sdlc:serve and read the README Health section",
+        "id": "AC-6",
+        "source": "TR-12",
+        "verify": "api"
+      },
+      {
+        "check": "Adding a placeholder writes a member-added feed row in the same transaction, and it appears under the members chip in both feeds",
+        "how_to_verify": "Vitest case in lib/groups/actions.test.ts plus QA adds a placeholder and checks both feeds",
+        "id": "AC-7",
+        "source": "IAC-1",
+        "verify": "test"
+      },
+      {
+        "check": "On the group page the expense filter and the feed chips coexist: clicking a chip preserves member/category/search, submitting the expense filter preserves the chip, and each Clear only resets its own form",
+        "how_to_verify": "QA clicks a chip with an expense filter set and submits the expense filter with a chip set, asserting the URL carries both both times",
+        "id": "AC-8",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Feed rows link by rule: a live expense links to its editor, an expense-deleted or payment-deleted row with a nulled link renders as plain text, and rows in an archived group link to the group page (never to the editor)",
+        "how_to_verify": "QA walks a live expense row, a deleted-expense row and an archived-group row in /activity",
+        "id": "AC-9",
+        "source": "IAC-1",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Client-side feed fetching (API route + useEffect) with skeleton spinners",
+        "rejected_because": "Every existing screen server-renders its list so it is interactive under 1s with no JS and filter state lives in the URL; a client island would add a second loading path, break the no-JS filter sharing the expense list relies on, and duplicate the authz the server pages already get from guardGroup."
+      },
+      {
+        "approach": "Seed through the public Server Actions (signup/createGroup/createExpense) instead of direct inserts",
+        "rejected_because": "Actions need request cookies/sessions and redirect on success, making them unusable from a script and untestable under Vitest; direct inserts reusing hashPassword, splitAmount and the same activity-row shapes are deterministic, run in transactions, and are what the seed tests can assert on."
+      },
+      {
+        "approach": "Share one file-backed PGlite database between the seed and serve processes via PGLITE_DATA_DIR",
+        "rejected_because": "TR-1 forbids any local disk that outlives a request and its proof rejects disk-persisting code; the README's memory-only local story is load-bearing, so the seeded rows must reach the serving process through the app itself, not through disk."
+      }
+    ],
+    "approach": "CONSUME the activity rows the expense/payment/member slices already write, and close the gaps the critique proved: add lib/activity/queries.ts readers as ONE inArray query over the caller's membership group ids (archived included, so per-group and cross-group agree), with the all/expenses/payments/members kind sets extended for the new member-added kind, total newest-first ordering, LEFT JOIN actor/subject resolution so placeholder rows with null subjectUserId never vanish, and group name plus per-row currency on cross-group rows. Render with one shared server component (tokens only, no aria-live claim: in-place announcements stay with the mutation islands that own them) whose chips use a distinct activity= param and hidden inputs so the group page's two GET forms preserve each other, with distinct empty vs filtered-empty sentences, skeleton, and error-with-retry that keeps the filter in the URL; mount an excerpt on the group page and a full page at /activity (session-guarded, unknown filter values fall back to all, unknown kinds fold into all). Fix the write side in the same change: addPlaceholder inserts its member-added row in the same transaction, and all three write modules revalidate /activity alongside the paths they already revalidate. Fix seed delivery without disk and without touching reserved pipeline config: move fixture loading into lib/seed/fixtures.ts (wipe-and-reload with staggered created_at so the feed reads chronologically), expose it in-process behind a dev-only isProduction-guarded POST /api/seed route, and make scripts/seed.ts write through the serving app when it is up (CI/Neon keep the direct path through the same loader). Update the README seed + from-scratch Vercel deploy sections. Sequential reads per page (PGlite single connection); feeds load in one bounded query, so ui.md's paged-days partial cannot occur and is recorded as N/A with per-section/full-page error+retry instead.",
+    "assumptions": [
+      "QA serves the app on localhost:3000, so scripts/seed.ts can reach POST /api/seed on the serving instance; CI with no server uses the direct withDb path through the same loader.",
+      "Seed known-password users can be created by direct insert with hashPassword rather than the signup action (signup needs cookies; hashPassword is the same function it uses).",
+      "A cross-group page at /activity is an acceptable new route (no route exists yet; ui.md Activity screen describes filter plus rows but names no URL).",
+      "The expense-edited payload writer (expenseChanges plus same-transaction insert) is already proved by lib/expenses/actions.test.ts, so this ticket surfaces it rather than re-proving the write."
+    ],
+    "confidence": 76,
+    "confidence_rationale": "Writers, schema, guard and UI tokens all exist and the critique's evidence for each gap was re-checked against the code, so the diagnosis is sound; the load-bearing uncertainty is the new dual-path seed (through-app when serving, direct otherwise) behaving identically in CI and in QA boot, which the route-guard test and the idempotence cases pin down but only a real boot proves. Fixture click-through details are the other unknown.",
+    "debate_summary": "All ten critique findings were re-checked against the code and accepted; none was dismissed as unfounded and none contradicts a decision in plan/brief.md (those settle the Neon driver, stored split rule, before/after payload and Pool lifecycle, which this plan keeps). Accepted with plan changes: blocking seed-delivery flaw (rewrote delivery around a dev-only in-process POST /api/seed plus a shared loader, instead of leaving AC-3 asserting what the architecture forbids); missing addPlaceholder feed row (new member-added kind in the same transaction); N-query cross-group read (one inArray query with global ordering); missing /activity revalidation (added to all three write modules); same-transaction seed timestamps (staggered created_at); link-through with no destination (explicit rule per row state); second-GET-form clash (distinct param plus hidden inputs both directions); unimplementable aria-live in a server component (claim dropped, announcements stay with mutation islands); archived-group scoping split (rule stated: archived history stays visible in both feeds); dropped partial state (recorded as N/A for a single-query feed with error+retry instead). Rejected one proposed fix, not the finding: the file-backed PGlite data dir would violate TR-1's no-local-disk constraint, and editing .sdlc/config.yml boot is a reserved path, so delivery goes through the app itself.",
+    "evidence": [
+      "lib/db/client.ts:81 new PGlite() with no dataDir plus README 29-33 memory-only, vs package.json sdlc:seed/sdlc:serve as sibling processes and .sdlc/config.yml:109 boot pinned to sdlc:serve alone",
+      "lib/groups/actions.ts:265-301 addPlaceholder inserts membership with no activityEvents insert, unlike remove/leave/join/claim in the same file",
+      "app/groups/[id]/page.tsx:299-365 single GET form rebuilding the whole query string; plan adds a second GET form on the same route",
+      "components/ui.tsx:32-43 live region must pre-exist its text; feed specified as server component while client islands were rejected",
+      "lib/groups/queries.ts:50 listGroupsForUser filters archived=false while guardGroup allows archived reads",
+      "lib/expenses/queries.ts:107-122 inArray-plus-fold precedent vs plan's one-query-per-group with no global ordering",
+      "lib/expenses/actions.ts:97-103, lib/groups/actions.ts:139-145, lib/settle/actions.ts:71-76 revalidate three paths, none /activity",
+      "lib/expenses/queries.ts:58-66 transaction-clock ties plus plan seeding activity rows in the same transactions as fixtures",
+      "no expense detail route exists (only edit page, suppressed for archived groups) while schema sets expense_id/payment_id set-null so deleted rows outlive their subject"
+    ],
+    "files": [
+      {
+        "action": "create",
+        "change": "Feed readers: listGroupActivity(db, groupId, filter) and listUserActivity(db, userId, filter) as one inArray query over membership group ids (archived included), all/expenses/payments/members kind sets including member-added with unknown kinds folded into all, newest-first total order desc(createdAt),desc(id), actor/subject names via LEFT JOIN so null-subject placeholder rows survive, group name and per-row currency on cross-group rows; no authz inside (callers pass guard-authorized ids).",
+        "path": "lib/activity/queries.ts",
+        "why": "TR-10 readers this ticket DEFINES; single query keeps global ordering correct."
+      },
+      {
+        "action": "create",
+        "change": "Shared server component: chip row as GET form on a distinct activity= param with hidden inputs preserving the expense-filter params, chronological rows (actor, action sentence, timestamp) with the link rule (live expense to editor, nulled-link rows as plain text, archived rows to the group), distinct empty vs filtered-empty sentences, skeleton, error-with-retry preserving the filter via URL, tokens only, no aria-live claim.",
+        "path": "components/activity-feed.tsx",
+        "why": "One rendering for per-group and cross-group feeds so the two cannot diverge."
+      },
+      {
+        "action": "edit",
+        "change": "Add the recent-activity section reading listGroupActivity with the URL filter (empty and error-with-retry states via try/catch; page-level load covers loading), and give the expense filter form a hidden activity input so the two GET forms preserve each other, with each Clear resetting only its own form.",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "IAC-1 per-group feed on the group screen; fixes the second-form clash."
+      },
+      {
+        "action": "create",
+        "change": "Cross-group feed page: require session (redirect to signin), scope by the caller's memberships including archived groups, shared feed component with the URL filter falling back to all on unknown values, distinct empty states for no-groups, only-archived and filtered-empty.",
+        "path": "app/activity/page.tsx",
+        "why": "IAC-1 cross-group feed with TR-3 membership scoping."
+      },
+      {
+        "action": "create",
+        "change": "Skeleton event rows matching the feed layout for the /activity loading state.",
+        "path": "app/activity/loading.tsx",
+        "why": "TR-11 loading state for the new screen."
+      },
+      {
+        "action": "edit",
+        "change": "Link the cross-group feed from home (signed-in view) so it is reachable; no other home change.",
+        "path": "app/page.tsx",
+        "why": "Discoverability of the new /activity route from the screen that lists all groups."
+      },
+      {
+        "action": "edit",
+        "change": "addPlaceholder inserts a member-added activity row in the same transaction as the membership insert; revalidateGroup also revalidates /activity.",
+        "path": "lib/groups/actions.ts",
+        "why": "Every membership change is recorded (project invariant); feeds stay fresh after member writes."
+      },
+      {
+        "action": "edit",
+        "change": "Revalidate /activity alongside the existing paths after expense writes.",
+        "path": "lib/expenses/actions.ts",
+        "why": "Group-page mutations must refresh what the feed reader sees."
+      },
+      {
+        "action": "edit",
+        "change": "Revalidate /activity alongside the existing paths after payment writes.",
+        "path": "lib/settle/actions.ts",
+        "why": "Settle-up mutations must refresh what the feed reader sees."
+      },
+      {
+        "action": "create",
+        "change": "Shared fixture loader: FK-safe wipe, known-password users via hashPassword, groups, one expense per split type plus a multi-payer expense (shares via splitAmount, inputs stored per ADR-0007), payments, a placeholder membership, and matching activity rows with staggered created_at oldest-first so the seeded feed reads chronologically.",
+        "path": "lib/seed/fixtures.ts",
+        "why": "One loader for both seed paths so CI-direct and through-app fixtures cannot diverge."
+      },
+      {
+        "action": "create",
+        "change": "Dev-only POST /api/seed route: refuses when isProduction(), otherwise runs the shared loader in-process via withDb and returns the fixture summary; the in-process path that puts rows in the database the browser is served from.",
+        "path": "app/api/seed/route.ts",
+        "why": "Makes IAC-3 achievable on the memory-only embedded backend without disk or reserved-path edits."
+      },
+      {
+        "action": "edit",
+        "change": "Dual-mode seed: refuse when production is indicated; when the serving app answers POST /api/seed, seed through it (browser-visible rows); otherwise load the shared fixtures directly (CI/Neon); idempotent wipe-and-reload either way with seeded credentials logged.",
+        "path": "scripts/seed.ts",
+        "why": "IAC-3 verb contract kept on both the serving-process and standalone paths."
+      },
+      {
+        "action": "edit",
+        "change": "Seed section: fixture list, known passwords, dev-only wipe-and-reload warning (feed and sessions go with the wipe); Deploying to Vercel: from-scratch checklist (import repo, add Neon pooled URL, set SESSION_SECRET, first-boot migrations, /api/health 200, neon:smoke note); Health section: name it the sdlc:ready deploy proof.",
+        "path": "README.md",
+        "why": "IAC-4 and TR-12 deploy guide a person can follow from scratch."
+      }
+    ],
+    "issue": 8,
+    "kind": "feature",
+    "out_of_scope": [
+      "IAC-2 write path (same-transaction expense-edited payload): already implemented in lib/expenses/actions.ts updateExpense and covered there; this ticket surfaces it in the feeds.",
+      "Password reset, native apps, receipts, recurring expenses, multi-currency, charts, notifications (spec S-10 deferrals).",
+      "Dark mode (explicitly deferred in the UI tokens).",
+      "Paged activity pagination with load-more retry (ui.md Activity partial as literally specified): feeds load in one bounded query so there are no failed pages; partial is covered as a per-section error with retry on the group page and a full error with retry on /activity."
+    ],
+    "qa_script": [
+      "Boot sdlc:serve, run npm run sdlc:seed twice; assert the second run exits 0 with one copy of each fixture event and staggered timestamps down the feed.",
+      "Sign in as a seeded README user; open home, a group page, and /activity; assert balances, expenses and feed rows render.",
+      "Click each filter chip on both feeds; assert only matching kinds show, the URL carries both activity and expense-filter params, each form preserves the other's params on submit, and an offline reload offers retry that preserves the filter.",
+      "Edit a seeded expense (description plus one split input); assert a new feed row in both feeds carries the before/after of exactly those fields, then open /activity immediately to prove revalidation.",
+      "Add a placeholder member; assert a member event appears in both feeds under the members chip.",
+      "Archive a group; assert its history stays in both feeds with rows linking to the group page, and walk a live-expense row, a deleted-expense row and an archived row for the three link cases.",
+      "As a second user, open the first user's group URL and /activity; assert 404/sign-in with no data leak and that /activity shows only own groups.",
+      "Phone plus laptop viewports, keyboard only: tab order, visible focus, one h1, labelled chips; time main screens under 1s."
+    ],
+    "residual_risks": [
+      "Feeds load in one bounded query with no pagination: fine for v1 group counts, past dozens of groups per user the cross-group feed will need a cursor and the paged-partial state becomes real.",
+      "Two tabs: an expense added in one tab while the feed is open in the other shows on next navigation only; nothing refreshes an open feed in place.",
+      "Deleting a user cascades their activity rows (actorUserId on delete cascade): the audit trail loses that actor's rows, which the schema chose and this ticket does not change."
+    ],
+    "risks": [
+      "POST /api/seed is a dev-only wipe endpoint: guarded by isProduction() refusal plus tests, but a mis-set VERCEL_ENV on a real database would still wipe it including the feed and sessions — README marks it dev-only.",
+      "The group page gains a fifth sequential withDb read; on Neon each render opens and closes its own Pool per read, and IAC-4/TR-11 measure main screens under 1s on exactly this screen.",
+      "The seed wipe cascades users, groups and their feed rows; expected in dev, but the README warning must say the feed goes too, not just the fixtures.",
+      "New non-test files (lib/activity/queries.ts, components/activity-feed.tsx, app/activity/page.tsx, lib/seed/fixtures.ts, app/api/seed/route.ts) sit under the backend-invariant scan, where even the bare token ws fails CI — no such identifier may appear.",
+      "A renamed user renders member events under the snapshot name, differing from the members page current name: audit-correct, flagged so QA does not file it as a bug."
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "kind filter mapping: all returns every kind including member-added; expenses/payments/members return exactly their kind sets; unknown kinds fold into all",
+          "cross-group scoping: events from non-member groups never appear; archived member groups stay visible",
+          "ordering: newest first with total order on createdAt ties",
+          "actor/subject resolution: expense-deleted rows survive their expense; placeholder rows with null subjectUserId resolve via snapshot names, never an inner join",
+          "unknown filter value falls back to all with chips still rendering"
+        ],
+        "path": "lib/activity/queries.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "refuses with a production-indicating environment before touching the database",
+          "loads the full fixture set in-process so the serving instance's feeds are non-empty",
+          "second call reloads to the same fixture set with distinct staggered timestamps in fixture order"
+        ],
+        "path": "app/api/seed/route.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "seed writes known users, every split type, a multi-payer expense, payments and a placeholder",
+          "second run reloads to the same fixture set (no duplicates)",
+          "seed refuses when production is indicated",
+          "seeded user can verify password against the stored hash (QA can log in)",
+          "seeded feed rows exist for expenses/payments/joins with distinct staggered timestamps in fixture order so both feeds are non-empty on first boot"
+        ],
+        "path": "scripts/seed.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "addPlaceholder writes a member-added activity row in the same transaction as the membership",
+          "group, expense and payment writes revalidate /activity alongside the existing paths"
+        ],
+        "path": "lib/groups/actions.test.ts"
+      }
+    ],
+    "understanding": "Issue #8 is the last ticket: a trustworthy audit trail (per-group plus cross-group feeds over the activity rows the expense/payment/member slices already write, including the same-transaction expense-edited before/after), reproducible QA data (dev-only seed with known-password users, every split type, multi-payer expense, payments, placeholder), and a from-scratch README deploy guide with the health endpoint as proof. No plan for this issue has been rejected, so there are no objections to answer; the council's critique made ten findings against the proposal, each re-checked below.",
+    "unknowns": [
+      "Exact seeded credential values (emails/passwords) — conventional values documented in README and the seed log.",
+      "Whether QA prefers seeded login (fixture) or derived signup — project open question; the seed supports fixture login while signup still works, so either recipe passes."
+    ],
+    "version": 2
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-05T11:24:41.106Z",
+  "validated_ac_changes": []
 }

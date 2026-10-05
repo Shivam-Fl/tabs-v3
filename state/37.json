@@ -431,5 +431,24 @@
   "work_order_posted_at": "2026-10-05T22:57:03.075Z",
   "work_order_from": "plan",
   "work_order_comment": "6004896598",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "A leave blocked by a non-zero balance names the blocker but offers no settle-up link, while the identical refusal on remove does.",
+        "detail": "A leave blocked by a non-zero balance names the blocker but offers no settle-up link, while the identical refusal on remove does.\n\n`components/groups-panels.tsx`\n\nEvidence: leaveGroup returns the same NonZeroBalanceError sentence as removeMember (lib/groups/actions.ts:405 vs :355), but MembersPanel renders only `<StateMessage state={leaveState} />` (components/groups-panels.tsx:707) with no isBalanceBlockedRefusal check, while RemoveMemberForm checks it (:468) and renders the Settle up link to /groups/<id>#debts-heading (:491; anchor exists at app/groups/[id]/page.tsx:320). Repro: carry a balance, press Leave group and confirm: the refusal names the blocker with no way onward.\n\nFix: Mirror the remove path beside leaveState: const leaveBlocked = isBalanceBlockedRefusal(leaveState.message) and render the same Settle up link when true.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "components/groups-panels.tsx"
+      },
+      {
+        "title": "An archived solo-owner group shows invite-sharing empty-state copy for a link that cannot work.",
+        "detail": "An archived solo-owner group shows invite-sharing empty-state copy for a link that cannot work.\n\n`app/groups/[id]/members/page.tsx`\n\nEvidence: SoloOwnerAction returns null when group.archived (app/groups/[id]/members/page.tsx:234), so the EmptyState renders with no action, yet its body (:191) still says 'Share the invite link and the rest can join — or add somebody by name below if they have not signed up'. Archived groups refuse join/rotate/disable writes (ARCHIVED_STATE in lib/groups/actions.ts) and the same screen says seats cannot be added (:200), so both suggested actions fail and the read-only wording AC-2 requires is not what the empty state says.\n\nFix: When group.archived, give the solo-owner EmptyState read-only copy instead of the invite-sharing sentence (or suppress the EmptyState for archived groups, since the seats note already covers it).",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/groups/[id]/members/page.tsx"
+      }
+    ],
+    "pr": "44"
+  }
 }

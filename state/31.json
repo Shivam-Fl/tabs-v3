@@ -45,5 +45,6 @@
       "agent": "project-planner",
       "action": "-> planning"
     }
-  ]
+  ],
+  "brief_pr": 32
 }

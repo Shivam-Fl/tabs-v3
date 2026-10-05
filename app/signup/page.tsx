@@ -55,6 +55,7 @@ export default async function SignUpPage({
         <AuthForm
           mode="signup"
           action={signup}
+          next={next}
           submitLabel="Create account"
           pendingLabel="Creating account…"
         />

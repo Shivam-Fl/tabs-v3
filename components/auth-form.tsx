@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
 import { IDLE_AUTH_STATE, type AuthFormState } from '../lib/auth/validation';
+import { INPUT_CLASSES, LABEL_CLASSES } from './ui';
 
 /**
  * The one client island in auth. It exists for exactly the things a server-rendered form
@@ -27,11 +28,6 @@ export interface AuthFormProps {
   submitLabel: string;
   pendingLabel: string;
 }
-
-const INPUT_CLASSES =
-  'min-h-11 w-full rounded-token border border-muted/40 bg-surface px-3 text-ink placeholder:text-muted';
-
-const LABEL_CLASSES = 'text-sm font-medium';
 
 export function AuthForm({ mode, action, submitLabel, pendingLabel }: AuthFormProps) {
   const [state, formAction, isPending] = useActionState(action, IDLE_AUTH_STATE);

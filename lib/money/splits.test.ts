@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_MINOR_UNITS,
   PERCENT_SCALE,
+  SPLIT_TYPES,
   basisPointsText,
   minorUnitsText,
   parseBasisPoints,
@@ -11,6 +13,7 @@ import {
   splitAmount,
   splitValueText,
   type SplitInput,
+  type SplitShare,
   type SplitType,
 } from './splits';
 
@@ -292,6 +295,180 @@ describe('splitAmount', () => {
     );
 
     expect(shares).toEqual([{ membershipId: 'a', shareMinor: total }]);
+  });
+});
+
+/**
+ * The same two properties, over inputs nobody chose (AC-7).
+ *
+ * The cases above prove the rule at the edges a person thought of. TR-4 is a claim about every
+ * split the boundary can produce, and the totals that divide badly are not only the round ones —
+ * so this sweeps totals drawn across the whole storable range, one to six members, and values
+ * that are valid for the type. `Math.random` would make a failure unreproducible, so the draws
+ * come from a seeded PRNG: a red test here names the seed and the iteration to look at.
+ */
+
+/** A generated expense: a total, the members as the editor would submit them, and who paid. */
+interface GeneratedSplit {
+  total: number;
+  inputs: SplitInput[];
+  payerOrder: string[];
+}
+
+/** A tiny deterministic PRNG (mulberry32), so a failure is reproducible from its seed alone. */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = state;
+    mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A whole number in [min, max], inclusive. */
+function randomInt(random: () => number, min: number, max: number): number {
+  return min + Math.floor(random() * (max - min + 1));
+}
+
+/**
+ * One case, built the way the boundary would have built it: a total inside the amount range, one
+ * to six members of whom at least one is in the split, and values that are valid for the type —
+ * exact parts that add up, basis points that make a whole hundred, share counts of at least one.
+ * Some members pay and some are left out, because both decide where a remainder lands.
+ */
+function generatedSplit(type: SplitType, random: () => number): GeneratedSplit {
+  const total = randomInt(random, 1, MAX_MINOR_UNITS);
+  const members = Array.from({ length: randomInt(random, 1, 6) }, (_, index) => `member-${index}`);
+
+  const included = members.map(() => random() < 0.75);
+  if (!included.some(Boolean)) included[0] = true;
+  const inSplit = included.flatMap((memberIsIn, index) => (memberIsIn ? [index] : []));
+
+  const values = members.map((): number | null => null);
+  if (type === 'exact' || type === 'percentage') {
+    // Exact parts and basis points both have to add up to a stated whole, so the last member in
+    // the split takes what is left rather than the generator inventing a total.
+    const whole = type === 'exact' ? total : PERCENT_SCALE;
+    let left = whole;
+    inSplit.forEach((index, position) => {
+      values[index] = position === inSplit.length - 1 ? left : randomInt(random, 0, left);
+      left -= values[index] ?? 0;
+    });
+  } else if (type === 'shares') {
+    for (const index of inSplit) values[index] = randomInt(random, 1, 999999);
+  }
+
+  // A payer who is not in the split is legal, and is the one case where the remainder falls to
+  // somebody other than the first payer.
+  const payerOrder = members.filter(() => random() < 0.6);
+  if (payerOrder.length === 0) payerOrder.push(members[randomInt(random, 0, members.length - 1)]);
+
+  return {
+    total,
+    inputs: members.map((membershipId, index) => ({
+      membershipId,
+      included: included[index],
+      value: values[index],
+    })),
+    payerOrder,
+  };
+}
+
+/**
+ * The spec's answer, computed here independently of the implementation: every part is its share
+ * of the whole truncated towards zero, and whatever the truncation leaves over goes to one member
+ * — the first payer who is in the split, or the first member who is when the payer is not. The
+ * truncation is done in BigInt so this is exact for every generated magnitude, which is the point
+ * of checking it rather than trusting the arithmetic beside it.
+ */
+function specShares(
+  generated: GeneratedSplit,
+  type: SplitType,
+): { shares: SplitShare[]; remainder: number } {
+  const { total, inputs, payerOrder } = generated;
+  const included = inputs.filter((input) => input.included);
+  const shareOf = new Map<string, number>();
+
+  if (type === 'equal') {
+    const base = Math.floor(total / included.length);
+    for (const input of included) shareOf.set(input.membershipId, base);
+  } else {
+    const denominator =
+      type === 'exact'
+        ? null
+        : type === 'percentage'
+          ? PERCENT_SCALE
+          : included.reduce((sum, input) => sum + (input.value ?? 0), 0);
+    for (const input of included) {
+      shareOf.set(
+        input.membershipId,
+        denominator === null
+          ? (input.value ?? 0)
+          : Number((BigInt(total) * BigInt(input.value ?? 0)) / BigInt(denominator)),
+      );
+    }
+  }
+
+  const assigned = included.reduce((sum, input) => sum + (shareOf.get(input.membershipId) ?? 0), 0);
+  const remainder = total - assigned;
+  if (remainder !== 0) {
+    const recipient =
+      payerOrder.find((payer) => included.some((input) => input.membershipId === payer)) ??
+      included[0].membershipId;
+    shareOf.set(recipient, (shareOf.get(recipient) ?? 0) + remainder);
+  }
+
+  return {
+    shares: inputs.map((input) => ({
+      membershipId: input.membershipId,
+      shareMinor: shareOf.get(input.membershipId) ?? 0,
+    })),
+    remainder,
+  };
+}
+
+/** Four types × this many iterations, from one seed — the corpus every case below draws from. */
+const SWEEP_ITERATIONS = 200;
+const SWEEP_SEED = 0x5eed;
+
+function sweep(
+  check: (generated: GeneratedSplit, type: SplitType, shares: SplitShare[]) => void,
+): void {
+  const random = seededRandom(SWEEP_SEED);
+
+  for (let iteration = 0; iteration < SWEEP_ITERATIONS; iteration++) {
+    for (const type of SPLIT_TYPES) {
+      const generated = generatedSplit(type, random);
+      check(
+        generated,
+        type,
+        splitAmount(generated.total, type, generated.inputs, generated.payerOrder),
+      );
+    }
+  }
+}
+
+describe('splitAmount, over generated inputs', () => {
+  it('gives back parts that sum to the whole, whatever the total and the members', () => {
+    sweep((generated, _type, shares) => {
+      expect(sum(shares)).toBe(generated.total);
+    });
+  });
+
+  it('puts the truncation remainder on the first payer in the split, else the first included member', () => {
+    let placed = 0;
+
+    sweep((generated, type, shares) => {
+      const expected = specShares(generated, type);
+      expect(shares).toEqual(expected.shares);
+      if (expected.remainder !== 0) placed += 1;
+    });
+
+    // A corpus that never had a remainder to place would prove nothing about where one goes.
+    expect(placed).toBeGreaterThan(0);
   });
 });
 

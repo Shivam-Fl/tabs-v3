@@ -1,7 +1,7 @@
 {
   "issue": 41,
   "pr": null,
-  "state": "triage",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -24,8 +24,14 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-05T22:25:29.557Z",
-  "updated_at": "2026-10-05T22:25:29.557Z",
-  "history": [],
+  "updated_at": "2026-10-05T22:25:59.983Z",
+  "history": [
+    {
+      "at": "2026-10-05T22:25:59.983Z",
+      "agent": "intake",
+      "action": "-> planning"
+    }
+  ],
   "issue_snapshot": {
     "title": "Follow-ups from #33: 1 from the review",
     "body": "What the review and QA of PR #40 (for #33) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### Scope: components/account-menu.tsx is a new file not listed in work-order.json files[], which plans the AccountMenu island inside the single components/app-shell.tsx entry.\n\n> Scope: components/account-menu.tsx is a new file not listed in work-order.json files[], which plans the AccountMenu island inside the single components/app-shell.tsx entry.\n> \n> `components/account-menu.tsx:1`\n> \n> Evidence: gh pr diff 40 --name-only lists 25 files including components/account-menu.tsx; work-order.json files[] (22 entries) plus tests[] (app/ui-set.test.ts, app/app-shell.test.ts) contain no account-menu entry. The file's own header (components/account-menu.tsx:2371-2375 in the diff) states the split is structural: a 'use client' directive applies to its whole module, so the menu island and the server-rendered top bar cannot share one file.\n> \n> Fix: No code change needed: amend the work order files[] to list components/account-menu.tsx (create: AccountMenu client island split from AppShell so the shell stays a server component). The split is the correct implementation of the ordered change, not creep.\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #33.",

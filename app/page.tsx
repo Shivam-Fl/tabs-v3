@@ -1,6 +1,10 @@
+import { HandCoins, ReceiptText, Split } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { unstable_rethrow } from 'next/navigation';
+import { AppShell, TabsMark } from '../components/app-shell';
+import { buttonClasses } from '../components/ui';
 import type { SessionUser } from '../lib/auth/session';
 import { getSessionUser } from '../lib/auth/session';
 import { withDb } from '../lib/db/client';
@@ -29,20 +33,21 @@ type HomeData =
   | { user: null; groups: GroupSummary[]; summary: null };
 
 /**
- * The Home screen (TR-11, TR-9): what you owe or are owed, who you owe it to, and which group
- * needs attention.
+ * The Home route: the landing page to a visitor, the overview to somebody signed in (TR-11,
+ * TR-9). Which of the two it is decided by the session and nothing else — the same URL, the one
+ * screen a person can always reach, whether or not they have an account.
  *
- * Everything it shows comes from the request's own session in one handle — the signed-in user,
- * the groups their memberships reach, and then each group's balances and simplified transfers,
- * one group at a time (the embedded backend serves a single connection, so concurrent queries
- * would be a queue pretending to be a race). The arithmetic is not done here: the per-group nets
- * and the transfer list are the group page's own two calls, and `summarizeHome` is the one place
- * that decides how they add up across groups, which currency counts, and how one person's rows
- * net together.
+ * Everything the signed-in half shows comes from the request's own session in one handle — the
+ * signed-in user, the groups their memberships reach, and then each group's balances and
+ * simplified transfers, one group at a time (the embedded backend serves a single connection, so
+ * concurrent queries would be a queue pretending to be a race). The arithmetic is not done here:
+ * the per-group nets and the transfer list are the group page's own two calls, and `summarizeHome`
+ * is the one place that decides how they add up across groups, which currency counts, and how one
+ * person's rows net together.
  *
  * Leaving a group already landed here; it now carries the group's name in the query, because
  * the members page the confirming form lived on is not a page the leaver can still see (AC-11).
- * The note is additive: a signed-out or failed home renders exactly as it did before.
+ * The note is additive: a visitor's landing page renders exactly as it does without it.
  */
 export default async function HomePage({
   searchParams,
@@ -89,61 +94,177 @@ export default async function HomePage({
     failed = true;
   }
 
+  if (failed) return <MarketingFrame><BootFailure /></MarketingFrame>;
+  if (data.user === null) return <MarketingFrame><Landing /></MarketingFrame>;
+
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Tabs</h1>
-        {data.user ? (
-          <Link className="text-accent underline" href="/profile">
-            {data.user.displayName}
-          </Link>
-        ) : null}
+    <AppShell place="Home" viewer={{ displayName: data.user.displayName }}>
+      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+        <SignedInHome
+          user={data.user}
+          groups={data.groups}
+          summary={data.summary}
+          leftName={leftName}
+        />
+      </main>
+    </AppShell>
+  );
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * The visitor-facing half.
+ * ------------------------------------------------------------------------------------------- */
+
+/** The three steps, in the order a group actually does them (ui.md's Landing regions). */
+const HOW_IT_WORKS = [
+  {
+    icon: ReceiptText,
+    title: 'Record',
+    body: 'Add what somebody paid, and who was in on it. One expense, or several payers at once.',
+  },
+  {
+    icon: Split,
+    title: 'Split',
+    body: 'Equally, by exact amounts, percentages or shares. The parts always add up to the whole.',
+  },
+  {
+    icon: HandCoins,
+    title: 'Settle',
+    body: 'See the fewest payments that clear everyone, and record each one as it happens.',
+  },
+] as const;
+
+/**
+ * The marketing header and footer a visitor's page wears: the mark, one way in, and the two
+ * product links, and nothing else. Deliberately not the app shell — there is no account to hang
+ * an account menu from yet, and ui.md asks the landing for a minimal header rather than the
+ * signed-in chrome.
+ *
+ * The footer carries only links that go somewhere in this product. A Privacy or About link here
+ * would be a link to a page nobody has built, and a 404 in the footer of the first screen a
+ * visitor sees is worse than no link at all (AC-1).
+ */
+function MarketingFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <header className="mx-auto flex w-full max-w-[1024px] items-center justify-between gap-3 px-4 py-3">
+        <Link
+          href="/"
+          aria-label="Tabs"
+          className="inline-flex items-center gap-2 rounded-token p-1"
+        >
+          <TabsMark />
+          <span className="text-lead font-semibold text-ink">Tabs</span>
+        </Link>
+        <Link className={buttonClasses('secondary', 'md')} href="/signin">
+          Sign in
+        </Link>
       </header>
 
-      {failed ? (
-        <section
-          className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4"
-          aria-labelledby="home-error"
-        >
-          <h2 id="home-error" className="text-lg font-semibold">
-            We could not load your groups
-          </h2>
-          <p className="text-muted">
-            Nothing has been lost — the data did not come back this time. Try again.
-          </p>
-          <Link className="text-accent underline" href="/">
-            Retry
-          </Link>
-        </section>
-      ) : data.user === null ? (
-        <>
-          <p className="max-w-[72ch] text-muted">
-            Tabs keeps a group&rsquo;s shared expenses straight: who paid for what, what everyone
-            owes, and the fewest payments that settle it up.
-          </p>
-          <p className="max-w-[72ch] text-muted">
-            <Link className="text-accent underline" href="/signin">
-              Sign in
-            </Link>{' '}
-            or{' '}
-            <Link className="text-accent underline" href="/signup">
-              create an account
-            </Link>{' '}
-            to start a group.
-          </p>
-        </>
-      ) : (
-        <SignedInHome user={data.user} groups={data.groups} summary={data.summary} leftName={leftName} />
-      )}
+      {children}
 
-      <p>
-        <a className="text-accent underline" href="/api/health">
-          /api/health
-        </a>
+      <footer className="border-t border-border">
+        <div className="mx-auto flex w-full max-w-[1024px] flex-wrap items-center gap-x-5 gap-y-3 px-4 py-5">
+          <Link className="text-body font-medium text-accent underline-offset-4 hover:underline" href="/signin">
+            Sign in
+          </Link>
+          <Link className="text-body font-medium text-accent underline-offset-4 hover:underline" href="/signup">
+            Create account
+          </Link>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/**
+ * The landing page: what Tabs is, in one screen, with the way in at the top, in the middle and
+ * at the bottom of it. The hero headline is the page's h1 — the marketing frame around it emits
+ * no heading, so the visitor's page has exactly one.
+ */
+function Landing() {
+  return (
+    <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-7 px-4 py-8 sm:py-12">
+      <section className="flex flex-col items-start gap-4">
+        <h1 className="text-hero font-semibold text-ink">Split the bill. Settle up in a tap.</h1>
+        <p className="max-w-[65ch] text-lead text-ink-muted">
+          Tabs keeps a group&rsquo;s shared expenses straight — who paid for what, what everyone
+          owes, and the fewest payments that clear it.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link className={buttonClasses('primary', 'md')} href="/signup">
+            Create account
+          </Link>
+          <Link className={buttonClasses('secondary', 'md')} href="/signin">
+            Sign in
+          </Link>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-4" aria-labelledby="how-heading">
+        <h2 id="how-heading" className="text-section font-semibold text-ink">
+          How Tabs works
+        </h2>
+        <ol className="grid gap-3 sm:grid-cols-3">
+          {HOW_IT_WORKS.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <li
+                key={step.title}
+                className="flex flex-col gap-2 rounded-token border border-border bg-surface p-4 shadow-sm"
+              >
+                <span className="inline-flex size-9 items-center justify-center rounded-full bg-accent-tint text-accent">
+                  <Icon aria-hidden="true" className="size-5" />
+                </span>
+                <p className="text-caption font-medium tracking-wide text-ink-muted uppercase">
+                  {`Step ${index + 1}`}
+                </p>
+                <p className="text-body font-medium text-ink">{step.title}</p>
+                <p className="text-secondary text-ink-muted">{step.body}</p>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <p className="max-w-[65ch] text-body text-ink-muted">
+        Money is counted in exact minor units, so the parts of a split always add up to the whole.
+        A group is private to the people in it.
       </p>
     </main>
   );
 }
+
+/**
+ * What a visitor sees when the boot itself failed: the failure named, one recovery action, and
+ * no attempt to guess whether there is an account behind it. Same card the signed-in screens
+ * use, with the page's h1 standing in as its title because the landing it replaces is not there
+ * to carry one.
+ */
+function BootFailure() {
+  return (
+    <main className="mx-auto flex w-full max-w-[640px] flex-1 flex-col justify-center gap-5 px-4 py-8">
+      <section
+        className="flex flex-col items-start gap-3 rounded-token border border-danger/40 bg-surface p-4 shadow-sm"
+        aria-labelledby="home-error"
+      >
+        <h1 id="home-error" className="text-hero font-semibold text-ink">
+          We could not load your groups
+        </h1>
+        <p className="text-body text-ink-muted">
+          Nothing has been lost — the data did not come back this time. Try again.
+        </p>
+        <Link className={buttonClasses('primary', 'md')} href="/">
+          Retry
+        </Link>
+      </section>
+    </main>
+  );
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * The signed-in half.
+ * ------------------------------------------------------------------------------------------- */
 
 function SignedInHome({
   user,
@@ -185,9 +306,11 @@ function SignedInHome({
       </p>
 
       <section className="flex flex-col gap-3" aria-labelledby="balances-heading">
-        <h2 id="balances-heading" className="text-lg font-semibold">
+        {/* The page's h1. The shell above it emits none on purpose, so the screen's own title is
+            the thing it is actually for: the balance the viewer came here to read. */}
+        <h1 id="balances-heading" className="text-2xl font-semibold">
           Your balances
-        </h2>
+        </h1>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-token border border-muted/20 bg-surface p-4">
             <p className="text-sm text-muted">You are owed</p>

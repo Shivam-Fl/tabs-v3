@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { AppShell } from '../../../components/app-shell';
 import { JoinPanel } from '../../../components/groups-panels';
 import { getSessionUser } from '../../../lib/auth/session';
 import { withDb } from '../../../lib/db/client';
@@ -76,33 +77,35 @@ export default async function JoinPage({
   const { group, seats, userName } = resolved;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[560px] flex-col justify-center gap-5 p-4">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Join {group.name}</h1>
+    <AppShell place={group.name} viewer={{ displayName: userName }}>
+      <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center gap-5 px-4 py-5">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold">Join {group.name}</h1>
+          <p className="text-muted">
+            {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} · invited
+            by link
+          </p>
+        </div>
+
+        <div className="rounded-token border border-muted/20 bg-surface p-4">
+          <JoinPanel
+            token={token}
+            groupName={group.name}
+            claimNotice={claimNotice}
+            seats={seats.map((seat) => ({
+              id: seat.id,
+              displayName: seat.displayName,
+              matchesYou: seat.displayName.trim().toLowerCase() === userName.trim().toLowerCase(),
+            }))}
+          />
+        </div>
+
         <p className="text-muted">
-          {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} · invited
-          by link
+          <Link className="text-accent underline" href="/">
+            Not now — back to your groups
+          </Link>
         </p>
-      </div>
-
-      <div className="rounded-token border border-muted/20 bg-surface p-4">
-        <JoinPanel
-          token={token}
-          groupName={group.name}
-          claimNotice={claimNotice}
-          seats={seats.map((seat) => ({
-            id: seat.id,
-            displayName: seat.displayName,
-            matchesYou: seat.displayName.trim().toLowerCase() === userName.trim().toLowerCase(),
-          }))}
-        />
-      </div>
-
-      <p className="text-muted">
-        <Link className="text-accent underline" href="/">
-          Not now — back to your groups
-        </Link>
-      </p>
-    </main>
+      </main>
+    </AppShell>
   );
 }

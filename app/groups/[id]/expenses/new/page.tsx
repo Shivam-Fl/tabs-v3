@@ -57,6 +57,7 @@ function NewExpenseScreen({
       title={`Add an expense to ${group.name}`}
       subtitle={`Amounts are in ${group.currency}. Recorded by ${user.displayName}.`}
       archived={group.archived}
+      viewer={{ displayName: user.displayName }}
     >
       <ExpenseEditor groupId={group.id} expenseId={null} currency={group.currency} data={data} />
     </ExpenseScreen>

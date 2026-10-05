@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { redirect } from 'next/navigation';
+import { AppShell } from '../../components/app-shell';
 import { ActivityFeed } from '../../components/activity-feed';
 import {
   ACTIVITY_FILTER_PARAM,
@@ -62,39 +64,46 @@ export default async function ActivityPage({
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Activity</h1>
-        <Link className="text-accent underline" href="/">
-          Home
-        </Link>
-      </header>
-
-      {failed ? (
-        <section
-          className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4"
-          aria-labelledby="activity-error"
-        >
-          <h2 id="activity-error" className="text-lg font-semibold">
-            We could not load your activity
-          </h2>
-          <p className="text-muted">
-            Nothing has been lost — the feed did not come back this time. Try again.
-          </p>
-          <Link className="text-accent underline" href={activityHref(filter)}>
-            Retry
+    <AppShell place="Activity" viewer={{ displayName: viewer.displayName }}>
+      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Activity</h1>
+          {/* The feed is every group at once, so its way back is Home — where the groups are. */}
+          <Link
+            className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
+            href="/"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Back to Home
           </Link>
-        </section>
-      ) : (
-        <ActivityFeed
-          rows={rows}
-          filter={filter}
-          action="/activity"
-          showGroup
-          emptyText={emptyFeedText(groups)}
-        />
-      )}
-    </main>
+        </header>
+
+        {failed ? (
+          <section
+            className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4"
+            aria-labelledby="activity-error"
+          >
+            <h2 id="activity-error" className="text-lg font-semibold">
+              We could not load your activity
+            </h2>
+            <p className="text-muted">
+              Nothing has been lost — the feed did not come back this time. Try again.
+            </p>
+            <Link className="text-accent underline" href={activityHref(filter)}>
+              Retry
+            </Link>
+          </section>
+        ) : (
+          <ActivityFeed
+            rows={rows}
+            filter={filter}
+            action="/activity"
+            showGroup
+            emptyText={emptyFeedText(groups)}
+          />
+        )}
+      </main>
+    </AppShell>
   );
 }
 

@@ -12,29 +12,76 @@
  * The token set from docs/ui.md, and the only colours, spacing and radii any screen uses.
  * Tailwind publishes every @theme entry as a :root custom property, so these are readable
  * from plain CSS as well as through utilities (bg-bg, text-ink, gap-4, rounded-token).
+ *
+ * The table below is now complete against ui.md. The entries that predate the redesign are
+ * kept resolving exactly as they were, because eleven screens still read text-muted,
+ * border-muted/40 and bg-muted/20, and a token that stopped resolving would be a silent
+ * restyle of screens this slice does not own. `--color-muted` therefore stays beside
+ * `--color-ink-muted` rather than being an alias of it: they hold the same value today and
+ * are separate names on purpose, so the later redesign slices can migrate a screen at a
+ * time and then drop the old name once nothing reads it.
  */
 @theme {
   --color-bg: #fafaf8;
   --color-surface: #ffffff;
+  --color-surface-sunken: #f1f2f4;
   --color-ink: #1a1d21;
+  --color-ink-muted: #5f6570;
+  --color-ink-subtle: #8a919c;
   --color-muted: #5f6570;
-  --color-accent: #0e6b4f;
-  --color-danger: #b3261e;
-  --color-owed: #b3261e;
-  --color-lent: #0e6b4f;
+  --color-border: #e3e5e8;
 
-  --font-body: "Inter", system-ui, sans-serif;
+  --color-accent: #0e6b4f;
+  --color-accent-hover: #0a5a42;
+  --color-accent-contrast: #ffffff;
+  --color-accent-tint: rgba(14, 107, 79, 0.1);
+
+  --color-owed: #b3261e;
+  --color-owed-tint: rgba(179, 38, 30, 0.1);
+  --color-lent: #0e6b4f;
+  --color-lent-tint: rgba(14, 107, 79, 0.1);
+  --color-danger: #b3261e;
+  --color-danger-tint: rgba(179, 38, 30, 0.1);
+
+  /* Inter arrives as a CSS variable from next/font in app/layout.tsx, so the family below
+     resolves to the self-hosted file and falls back to the system stack without it. */
+  --font-body: var(--font-inter), system-ui, sans-serif;
 
   --radius-token: 10px;
+  --radius-full: 9999px;
+
+  /* The one type scale. Each size carries its line-height beside it, which is what makes
+     `text-body` a complete instruction rather than half of one. */
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-secondary: 14px;
+  --text-secondary--line-height: 20px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-lead: 18px;
+  --text-lead--line-height: 28px;
+  --text-section: 20px;
+  --text-section--line-height: 28px;
+  --text-page: 24px;
+  --text-page--line-height: 32px;
+  --text-hero: 30px;
+  --text-hero--line-height: 36px;
 
   /* The 4/8/12/16/24/32 scale, replacing Tailwind's default steps so no screen can pick a
-     spacing that is not on it. */
+     spacing that is not on it; 7 and 8 extend it for page-level separation as ui.md asks. */
   --spacing-1: 4px;
   --spacing-2: 8px;
   --spacing-3: 12px;
   --spacing-4: 16px;
   --spacing-5: 24px;
   --spacing-6: 32px;
+  --spacing-7: 48px;
+  --spacing-8: 64px;
+
+  /* Cards get the hairline border plus shadow-sm; menus, dialogs, sheets and toasts get
+     shadow-md. Nothing else floats. */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.12);
 }
 
 @layer base {

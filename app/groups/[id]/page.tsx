@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ActivityFeed, type PreservedParams } from '../../../components/activity-feed';
+import { AppShell } from '../../../components/app-shell';
 import { DeleteExpenseForm } from '../../../components/expense-editor';
 import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
@@ -225,327 +226,350 @@ function GroupDetail({
         : 'You are settled up here. The card below shows what the others owe each other.';
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{group.name}</h1>
-        <p className="text-muted">
-          {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} ·{' '}
-          {user.displayName}
-        </p>
-        <p>
-          <Link className="text-accent underline" href={`/groups/${group.id}/members`}>
-            Members and invite link
-          </Link>
-        </p>
-      </header>
+    <AppShell place={group.name} viewer={{ displayName: user.displayName }}>
+      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+        {/* Where this screen sits: the group is one click from Home, and the shell's place is only
+            a label, not a way back. */}
+        <nav aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-2 text-secondary">
+            <li>
+              <Link
+                className="font-medium text-accent underline-offset-4 hover:underline"
+                href="/"
+              >
+                Home
+              </Link>
+            </li>
+            <li aria-hidden="true" className="text-ink-subtle">
+              /
+            </li>
+            <li aria-current="page" className="truncate text-ink-muted">
+              {group.name}
+            </li>
+          </ol>
+        </nav>
 
-      {group.archived ? (
-        <>
-          {justArchived ? (
+        <header className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold">{group.name}</h1>
+          <p className="text-muted">
+            {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} ·{' '}
+            {user.displayName}
+          </p>
+          <p>
+            <Link className="text-accent underline" href={`/groups/${group.id}/members`}>
+              Members and invite link
+            </Link>
+          </p>
+        </header>
+
+        {group.archived ? (
+          <>
+            {justArchived ? (
+              <p
+                role="status"
+                aria-live="polite"
+                className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+              >
+                {archivedNoticeText(group.name)}
+              </p>
+            ) : null}
             <p
               role="status"
-              aria-live="polite"
-              className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+              className="rounded-token border border-muted/40 bg-surface p-3 text-sm"
             >
-              {archivedNoticeText(group.name)}
+              This group is archived. You can read it, but nothing in it can change — and you can
+              still leave it.
             </p>
-          ) : null}
+          </>
+        ) : null}
+
+        {/* One slot, like the invite notices: whichever change last landed here is the one worth
+            saying, and the row it happened to is already on screen below. */}
+        {expenseNotice ? (
           <p
             role="status"
-            className="rounded-token border border-muted/40 bg-surface p-3 text-sm"
+            aria-live="polite"
+            className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
           >
-            This group is archived. You can read it, but nothing in it can change — and you can
-            still leave it.
+            {expenseNotice}
           </p>
-        </>
-      ) : null}
+        ) : null}
 
-      {/* One slot, like the invite notices: whichever change last landed here is the one worth
-          saying, and the row it happened to is already on screen below. */}
-      {expenseNotice ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+        <section
+          className="rounded-token border border-muted/20 bg-surface p-4"
+          aria-labelledby="balance-heading"
         >
-          {expenseNotice}
-        </p>
-      ) : null}
-
-      <section
-        className="rounded-token border border-muted/20 bg-surface p-4"
-        aria-labelledby="balance-heading"
-      >
-        <h2 id="balance-heading" className="text-lg font-semibold">
-          Your balance
-        </h2>
-        <p
-          data-amount
-          className={`text-xl font-semibold ${ownMinor > 0 ? 'text-lent' : ownMinor < 0 ? 'text-owed' : ''}`}
-        >
-          {formatMinorUnits(ownMinor, group.currency)}
-        </p>
-        <p className="text-sm text-muted">{bannerNote}</p>
-      </section>
-
-      {/* The debts card sits above the expense list in the DOM, so a narrow screen stacks the two
-          in the order ui.md asks for without a second layout. */}
-      <section
-        className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4"
-        aria-labelledby="debts-heading"
-      >
-        <h2 id="debts-heading" className="text-lg font-semibold">
-          Who owes what
-        </h2>
-
-        <ul className="flex flex-col gap-2">
-          {shown.map((balance) => (
-            <li
-              key={balance.membershipId}
-              className="flex flex-wrap items-baseline justify-between gap-2"
-            >
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{balance.displayName}</span>
-                {currentIds.has(balance.membershipId) ? null : (
-                  <span className="rounded-token border border-muted/40 px-2 text-sm text-muted">
-                    No longer in the group
-                  </span>
-                )}
-                <span className="text-sm text-muted">
-                  {balance.balanceMinor > 0
-                    ? 'is owed'
-                    : balance.balanceMinor < 0
-                      ? 'owes'
-                      : 'is settled up'}
-                </span>
-              </span>
-              {balance.balanceMinor === 0 ? null : (
-                <span
-                  data-amount
-                  className={`font-semibold ${balance.balanceMinor > 0 ? 'text-lent' : 'text-owed'}`}
-                >
-                  {formatMinorUnits(Math.abs(balance.balanceMinor), group.currency)}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        <h3 className="text-lg font-semibold">Suggested payments</h3>
-        <p className="text-sm text-muted">
-          {settled
-            ? 'Nothing to settle — the totals above are all zero.'
-            : 'Settle up records a payment between two people. It does not move money by itself.'}
-        </p>
-        <SettleUpForm
-          groupId={group.id}
-          currency={group.currency}
-          transfers={transfers}
-          archived={group.archived}
-        />
-
-        <DeletePaymentForm
-          groupId={group.id}
-          currency={group.currency}
-          payments={payments}
-          archived={group.archived}
-        />
-      </section>
-
-      <section className="flex flex-col gap-4" aria-labelledby="expenses-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="expenses-heading" className="text-lg font-semibold">
-            Expenses
+          <h2 id="balance-heading" className="text-lg font-semibold">
+            Your balance
           </h2>
-          {group.archived ? null : (
-            <Link
-              className="inline-flex min-h-11 items-center rounded-token bg-accent px-4 font-medium text-surface"
-              href={`/groups/${group.id}/expenses/new`}
-            >
-              Add expense
-            </Link>
-          )}
-        </div>
-
-        {/* A plain GET form: the filter is in the URL, so the page someone is looking at is the
-            page they can send to somebody else — and it works before any JavaScript arrives. */}
-        <form
-          method="get"
-          action={`/groups/${group.id}`}
-          className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
-        >
-          <div className="flex flex-col gap-1 sm:w-48">
-            <label className="text-sm font-medium" htmlFor="expense-filter-member">
-              Member
-            </label>
-            <select
-              id="expense-filter-member"
-              name={EXPENSE_MEMBER_PARAM}
-              defaultValue={filters.memberId ?? ''}
-              className={INPUT_CLASSES}
-            >
-              <option value="">Everyone</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1 sm:w-48">
-            <label className="text-sm font-medium" htmlFor="expense-filter-category">
-              Category
-            </label>
-            <select
-              id="expense-filter-category"
-              name={EXPENSE_CATEGORY_PARAM}
-              defaultValue={filters.category ?? ''}
-              className={INPUT_CLASSES}
-            >
-              <option value="">All categories</option>
-              {EXPENSE_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {expenseCategoryLabel(category)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-1 flex-col gap-1">
-            <label className="text-sm font-medium" htmlFor="expense-filter-search">
-              Search descriptions
-            </label>
-            <input
-              id="expense-filter-search"
-              name={EXPENSE_SEARCH_PARAM}
-              type="search"
-              defaultValue={filters.search ?? ''}
-              className={INPUT_CLASSES}
-            />
-          </div>
-
-          {/* The chip this page's other form holds, carried through a submit of this one: a
-              browser sends only the form it submits, so without this, filtering expenses would
-              silently drop the activity chip (AC-8). */}
-          {activityFilter === 'all' ? null : (
-            <input type="hidden" name={ACTIVITY_FILTER_PARAM} value={activityFilter} />
-          )}
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" className={QUIET_BUTTON}>
-              Filter
-            </button>
-            {filtered ? (
-              <Link className="text-accent underline" href={clearExpenseHref}>
-                Clear
-              </Link>
-            ) : null}
-          </div>
-        </form>
-
-        {expenses.length === 0 ? (
-          <p className="text-sm text-muted">
-            {filtered
-              ? 'No expenses match these filters.'
-              : 'No expenses yet. Add the first one and the balances will follow.'}
+          <p
+            data-amount
+            className={`text-xl font-semibold ${ownMinor > 0 ? 'text-lent' : ownMinor < 0 ? 'text-owed' : ''}`}
+          >
+            {formatMinorUnits(ownMinor, group.currency)}
           </p>
-        ) : (
+          <p className="text-sm text-muted">{bannerNote}</p>
+        </section>
+
+        {/* The debts card sits above the expense list in the DOM, so a narrow screen stacks the two
+            in the order ui.md asks for without a second layout. */}
+        <section
+          className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4"
+          aria-labelledby="debts-heading"
+        >
+          <h2 id="debts-heading" className="text-lg font-semibold">
+            Who owes what
+          </h2>
+
           <ul className="flex flex-col gap-2">
-            {expenses.map((expense) => (
+            {shown.map((balance) => (
               <li
-                key={expense.id}
-                className="flex flex-col gap-2 rounded-token border border-muted/20 bg-surface p-3"
+                key={balance.membershipId}
+                className="flex flex-wrap items-baseline justify-between gap-2"
               >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">{expense.description}</span>
-                  <span data-amount className="font-semibold">
-                    {formatMinorUnits(expense.amountMinor, group.currency)}
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{balance.displayName}</span>
+                  {currentIds.has(balance.membershipId) ? null : (
+                    <span className="rounded-token border border-muted/40 px-2 text-sm text-muted">
+                      No longer in the group
+                    </span>
+                  )}
+                  <span className="text-sm text-muted">
+                    {balance.balanceMinor > 0
+                      ? 'is owed'
+                      : balance.balanceMinor < 0
+                        ? 'owes'
+                        : 'is settled up'}
                   </span>
-                </div>
-                <p className="text-sm text-muted">
-                  <time dateTime={expense.date}>{expense.date}</time> ·{' '}
-                  {expenseCategoryLabel(expense.category)} ·{' '}
-                  {SPLIT_TYPE_LABELS[expense.splitType]} · Paid by{' '}
-                  {expense.payers
-                    .map((payer) =>
-                      expense.payers.length === 1
-                        ? payer.displayName
-                        : `${payer.displayName} ${formatMinorUnits(payer.amountMinor, group.currency)}`,
-                    )
-                    .join(', ')}
-                </p>
-                {group.archived ? null : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      className="inline-flex min-h-11 items-center rounded-token border border-muted/40 px-4 font-medium"
-                      href={`/groups/${group.id}/expenses/${expense.id}/edit`}
-                    >
-                      Edit
-                    </Link>
-                    <DeleteExpenseForm
-                      groupId={group.id}
-                      expenseId={expense.id}
-                      description={expense.description}
-                    />
-                  </div>
+                </span>
+                {balance.balanceMinor === 0 ? null : (
+                  <span
+                    data-amount
+                    className={`font-semibold ${balance.balanceMinor > 0 ? 'text-lent' : 'text-owed'}`}
+                  >
+                    {formatMinorUnits(Math.abs(balance.balanceMinor), group.currency)}
+                  </span>
                 )}
               </li>
             ))}
           </ul>
-        )}
-      </section>
 
-      {isOwner && !group.archived ? (
-        <section
-          className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-4"
-          aria-labelledby="settings-heading"
-        >
-          <h2 id="settings-heading" className="text-lg font-semibold">
-            Group settings
-          </h2>
-          <RenameGroupForm groupId={group.id} name={group.name} />
-          <ArchiveGroupForm groupId={group.id} groupName={group.name} />
+          <h3 className="text-lg font-semibold">Suggested payments</h3>
           <p className="text-sm text-muted">
-            Removing members and leaving live with the member list.
+            {settled
+              ? 'Nothing to settle — the totals above are all zero.'
+              : 'Settle up records a payment between two people. It does not move money by itself.'}
           </p>
-          <p>
-            <Link className="text-accent underline" href={`/groups/${group.id}/members`}>
-              Go to members
-            </Link>
-          </p>
-        </section>
-      ) : null}
-
-      {/* Last, which is where ui.md puts the excerpt in this screen's regions: the ledger first,
-          then the record of how it got that way. The failure is the one section failing, so it
-          is the one section that says so — with the retry on the URL the reader was already
-          looking at, filter and all (TR-11). */}
-      <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
-        <h2 id="activity-heading" className="text-lg font-semibold">
-          Recent activity
-        </h2>
-
-        {activityFailed ? (
-          <div className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4">
-            <p className="font-medium">We could not load this group&rsquo;s activity</p>
-            <p className="text-sm text-muted">
-              Everything else on this page is up to date. The feed did not come back this time.
-            </p>
-            <Link className="text-accent underline" href={retryHref}>
-              Retry
-            </Link>
-          </div>
-        ) : (
-          <ActivityFeed
-            rows={activity}
-            filter={activityFilter}
-            action={`/groups/${group.id}`}
-            preserved={activityPreserved}
-            emptyText="No activity yet. Adding an expense, recording a payment or changing the members all show up here."
+          <SettleUpForm
+            groupId={group.id}
+            currency={group.currency}
+            transfers={transfers}
+            archived={group.archived}
           />
-        )}
-      </section>
-    </main>
+
+          <DeletePaymentForm
+            groupId={group.id}
+            currency={group.currency}
+            payments={payments}
+            archived={group.archived}
+          />
+        </section>
+
+        <section className="flex flex-col gap-4" aria-labelledby="expenses-heading">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="expenses-heading" className="text-lg font-semibold">
+              Expenses
+            </h2>
+            {group.archived ? null : (
+              <Link
+                className="inline-flex min-h-11 items-center rounded-token bg-accent px-4 font-medium text-surface"
+                href={`/groups/${group.id}/expenses/new`}
+              >
+                Add expense
+              </Link>
+            )}
+          </div>
+
+          {/* A plain GET form: the filter is in the URL, so the page someone is looking at is the
+              page they can send to somebody else — and it works before any JavaScript arrives. */}
+          <form
+            method="get"
+            action={`/groups/${group.id}`}
+            className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
+          >
+            <div className="flex flex-col gap-1 sm:w-48">
+              <label className="text-sm font-medium" htmlFor="expense-filter-member">
+                Member
+              </label>
+              <select
+                id="expense-filter-member"
+                name={EXPENSE_MEMBER_PARAM}
+                defaultValue={filters.memberId ?? ''}
+                className={INPUT_CLASSES}
+              >
+                <option value="">Everyone</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1 sm:w-48">
+              <label className="text-sm font-medium" htmlFor="expense-filter-category">
+                Category
+              </label>
+              <select
+                id="expense-filter-category"
+                name={EXPENSE_CATEGORY_PARAM}
+                defaultValue={filters.category ?? ''}
+                className={INPUT_CLASSES}
+              >
+                <option value="">All categories</option>
+                {EXPENSE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {expenseCategoryLabel(category)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-1 flex-col gap-1">
+              <label className="text-sm font-medium" htmlFor="expense-filter-search">
+                Search descriptions
+              </label>
+              <input
+                id="expense-filter-search"
+                name={EXPENSE_SEARCH_PARAM}
+                type="search"
+                defaultValue={filters.search ?? ''}
+                className={INPUT_CLASSES}
+              />
+            </div>
+
+            {/* The chip this page's other form holds, carried through a submit of this one: a
+                browser sends only the form it submits, so without this, filtering expenses would
+                silently drop the activity chip (AC-8). */}
+            {activityFilter === 'all' ? null : (
+              <input type="hidden" name={ACTIVITY_FILTER_PARAM} value={activityFilter} />
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="submit" className={QUIET_BUTTON}>
+                Filter
+              </button>
+              {filtered ? (
+                <Link className="text-accent underline" href={clearExpenseHref}>
+                  Clear
+                </Link>
+              ) : null}
+            </div>
+          </form>
+
+          {expenses.length === 0 ? (
+            <p className="text-sm text-muted">
+              {filtered
+                ? 'No expenses match these filters.'
+                : 'No expenses yet. Add the first one and the balances will follow.'}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {expenses.map((expense) => (
+                <li
+                  key={expense.id}
+                  className="flex flex-col gap-2 rounded-token border border-muted/20 bg-surface p-3"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">{expense.description}</span>
+                    <span data-amount className="font-semibold">
+                      {formatMinorUnits(expense.amountMinor, group.currency)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted">
+                    <time dateTime={expense.date}>{expense.date}</time> ·{' '}
+                    {expenseCategoryLabel(expense.category)} ·{' '}
+                    {SPLIT_TYPE_LABELS[expense.splitType]} · Paid by{' '}
+                    {expense.payers
+                      .map((payer) =>
+                        expense.payers.length === 1
+                          ? payer.displayName
+                          : `${payer.displayName} ${formatMinorUnits(payer.amountMinor, group.currency)}`,
+                      )
+                      .join(', ')}
+                  </p>
+                  {group.archived ? null : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        className="inline-flex min-h-11 items-center rounded-token border border-muted/40 px-4 font-medium"
+                        href={`/groups/${group.id}/expenses/${expense.id}/edit`}
+                      >
+                        Edit
+                      </Link>
+                      <DeleteExpenseForm
+                        groupId={group.id}
+                        expenseId={expense.id}
+                        description={expense.description}
+                      />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {isOwner && !group.archived ? (
+          <section
+            className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-4"
+            aria-labelledby="settings-heading"
+          >
+            <h2 id="settings-heading" className="text-lg font-semibold">
+              Group settings
+            </h2>
+            <RenameGroupForm groupId={group.id} name={group.name} />
+            <ArchiveGroupForm groupId={group.id} groupName={group.name} />
+            <p className="text-sm text-muted">
+              Removing members and leaving live with the member list.
+            </p>
+            <p>
+              <Link className="text-accent underline" href={`/groups/${group.id}/members`}>
+                Go to members
+              </Link>
+            </p>
+          </section>
+        ) : null}
+
+        {/* Last, which is where ui.md puts the excerpt in this screen's regions: the ledger first,
+            then the record of how it got that way. The failure is the one section failing, so it
+            is the one section that says so — with the retry on the URL the reader was already
+            looking at, filter and all (TR-11). */}
+        <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
+          <h2 id="activity-heading" className="text-lg font-semibold">
+            Recent activity
+          </h2>
+
+          {activityFailed ? (
+            <div className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4">
+              <p className="font-medium">We could not load this group&rsquo;s activity</p>
+              <p className="text-sm text-muted">
+                Everything else on this page is up to date. The feed did not come back this time.
+              </p>
+              <Link className="text-accent underline" href={retryHref}>
+                Retry
+              </Link>
+            </div>
+          ) : (
+            <ActivityFeed
+              rows={activity}
+              filter={activityFilter}
+              action={`/groups/${group.id}`}
+              preserved={activityPreserved}
+              emptyText="No activity yet. Adding an expense, recording a payment or changing the members all show up here."
+            />
+          )}
+        </section>
+      </main>
+    </AppShell>
   );
 }

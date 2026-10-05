@@ -55,7 +55,7 @@ function EditExpenseScreen({
   expenseId: string;
   data: ExpenseEditorData;
 }) {
-  const { group } = access;
+  const { group, user } = access;
 
   return (
     <ExpenseScreen
@@ -65,6 +65,7 @@ function EditExpenseScreen({
       title={`Edit “${data.description}”`}
       subtitle={`${group.name} · amounts in ${group.currency}`}
       archived={group.archived}
+      viewer={{ displayName: user.displayName }}
     >
       <ExpenseEditor
         groupId={group.id}

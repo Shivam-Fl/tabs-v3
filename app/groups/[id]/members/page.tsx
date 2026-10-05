@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { notFound, redirect } from 'next/navigation';
+import { AppShell } from '../../../../components/app-shell';
 import { AddPlaceholderForm, InvitePanel, MembersPanel } from '../../../../components/groups-panels';
 import { withDb } from '../../../../lib/db/client';
 import { guardGroup, type GroupAccess } from '../../../../lib/groups/authz';
@@ -82,62 +84,74 @@ function MembersScreen({
   const balanceOf = new Map(balances.map((balance) => [balance.membershipId, balance.balanceMinor]));
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{group.name}</h1>
-        <p className="text-muted">Members and invite link</p>
-      </header>
+    <AppShell place={group.name} viewer={{ displayName: user.displayName }}>
+      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+        {/* The group is this screen's parent, and the shell's place is a label rather than a link:
+            the way up has to be on the page. */}
+        <Link
+          className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
+          href={`/groups/${group.id}`}
+        >
+          <ArrowLeft aria-hidden="true" className="size-4" />
+          {`Back to ${group.name}`}
+        </Link>
 
-      {/* Narrow screens put the invite panel first, so the thing a new group needs is the
-          thing you see; the member list follows. */}
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-        {isOwner ? (
-          <div className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-4 lg:order-2 lg:w-[22rem]">
-            <InvitePanel
+        <header className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold">{group.name}</h1>
+          <p className="text-muted">Members and invite link</p>
+        </header>
+
+        {/* Narrow screens put the invite panel first, so the thing a new group needs is the
+            thing you see; the member list follows. */}
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          {isOwner ? (
+            <div className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-4 lg:order-2 lg:w-[22rem]">
+              <InvitePanel
+                groupId={group.id}
+                groupName={group.name}
+                invitePath={group.inviteToken ? `/join/${group.inviteToken}` : null}
+                inviteEnabled={group.inviteEnabled}
+                inviteNotice={inviteNotice}
+              />
+            </div>
+          ) : null}
+
+          <div className="flex flex-1 flex-col gap-5 rounded-token border border-muted/20 bg-surface p-4">
+            <MembersPanel
               groupId={group.id}
               groupName={group.name}
-              invitePath={group.inviteToken ? `/join/${group.inviteToken}` : null}
-              inviteEnabled={group.inviteEnabled}
-              inviteNotice={inviteNotice}
+              members={members.map((member) => ({
+                id: member.id,
+                userId: member.userId,
+                displayName: member.displayName,
+                role: member.role,
+                balanceMinor: balanceOf.get(member.id) ?? 0,
+              }))}
+              viewerMembershipId={membership.id}
+              isOwner={isOwner}
+              archived={group.archived}
+              currency={group.currency}
+              removedNotice={
+                removedName === null ? null : removedNoticeText(removedName, group.name)
+              }
             />
+
+            {!group.archived ? (
+              <AddPlaceholderForm groupId={group.id} />
+            ) : (
+              <p className="text-sm text-muted">
+                This group is archived, so seats cannot be added to it.
+              </p>
+            )}
           </div>
-        ) : null}
-
-        <div className="flex flex-1 flex-col gap-5 rounded-token border border-muted/20 bg-surface p-4">
-          <MembersPanel
-            groupId={group.id}
-            groupName={group.name}
-            members={members.map((member) => ({
-              id: member.id,
-              userId: member.userId,
-              displayName: member.displayName,
-              role: member.role,
-              balanceMinor: balanceOf.get(member.id) ?? 0,
-            }))}
-            viewerMembershipId={membership.id}
-            isOwner={isOwner}
-            archived={group.archived}
-            currency={group.currency}
-            removedNotice={
-              removedName === null ? null : removedNoticeText(removedName, group.name)
-            }
-          />
-
-          {!group.archived ? (
-            <AddPlaceholderForm groupId={group.id} />
-          ) : (
-            <p className="text-sm text-muted">
-              This group is archived, so seats cannot be added to it.
-            </p>
-          )}
         </div>
-      </div>
 
-      <p className="text-muted">
-        <Link className="text-accent underline" href={`/groups/${group.id}`}>
-          Back to {group.name}
-        </Link>
-      </p>
-    </main>
+        <p className="text-muted">
+          <Link className="text-accent underline" href={`/groups/${group.id}`}>
+            Back to {group.name}
+          </Link>
+        </p>
+      </main>
+    </AppShell>
   );
 }

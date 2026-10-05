@@ -208,8 +208,8 @@
     "version": 3
   },
   "touch_paths": [
-    "components/ui.tsx",
-    "app/groups/[id]/debts-live-region.test.ts"
+    "components/settle-panels.tsx",
+    "components/settle-panels.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

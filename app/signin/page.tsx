@@ -37,7 +37,6 @@ export default async function SignInPage({
         action={signin}
         submitLabel="Sign in"
         pendingLabel="Signing in…"
-        next={next ?? undefined}
       />
       <p className="text-muted">
         New to Tabs?{' '}

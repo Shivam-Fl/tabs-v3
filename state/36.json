@@ -401,5 +401,17 @@
   "work_order_posted_at": "2026-10-05T22:58:28.222Z",
   "work_order_from": "plan",
   "work_order_comment": "6004920174",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Expense-row relative dates ('Today'/'Yesterday'/'Tomorrow') are computed from the server's UTC clock, so they can be off by one for viewers away from UTC.",
+        "detail": "Expense-row relative dates ('Today'/'Yesterday'/'Tomorrow') are computed from the server's UTC clock, so they can be off by one for viewers away from UTC.\n\n`app/groups/[id]/page.tsx:236`\n\nEvidence: app/groups/[id]/page.tsx:236 `const today = new Date().toISOString().slice(0, 10)` (UTC) feeds humanDateLabel at :555. toISOString is UTC: a viewer at UTC-8 reading the group page at 6pm local sees server-tomorrow, so today's expenses read 'Yesterday'. The editor avoids this by reading the clock client-side post-mount; the server-rendered rows cannot, and the relative word replaces (not accompanies) the absolute date.\n\nFix: Render the absolute day-month next to the relative word on server rows (so the row is never wrong, only less chatty), or move the relative label into a tiny client island that reads the viewer's day.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/page.tsx"
+      }
+    ],
+    "pr": "43"
+  }
 }

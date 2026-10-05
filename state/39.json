@@ -18,7 +18,86 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "acceptance": [
+      {
+        "check": "Sign up a new account, sign out via the account menu, then sign in with correct credentials: the browser lands on Home (/) showing the signed-in overview with the app shell, never on /profile.",
+        "how_to_verify": "In a clean browser: create an account via /signup, open the avatar menu and choose Sign out, then sign in via /signin. Assert the URL is / and the page shows the shell plus balances/groups content.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Every signed-in page shows the slim top bar: Tabs mark linking Home (/), the current place truncated with full title, and the avatar account menu opening Profile (/profile) and Sign out (posts signOut). Walk Home, a group, members, activity, profile, new group, expense new/edit, and join as a signed-in non-member.",
+        "how_to_verify": "Sign in, then visit each URL and assert the header contains href=\"/\" with aria-label Tabs Home, the place label, and aria-haspopup menu whose panel offers Profile and Sign out; open the menu with mouse and keyboard (arrows/Escape) and follow both items.",
+        "id": "AC-2",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "The shared 404 stays shell-less and session-blind: visiting a missing group id and a forbidden group id as two different users renders the identical page with no top bar and no account menu.",
+        "how_to_verify": "As user A open /groups/<random-uuid> and as user B open /groups/<A-only-group-id>; assert both show That page is not available with Back to your groups and neither contains the shell header.",
+        "id": "AC-3",
+        "source": "TR-3",
+        "verify": "browser"
+      }
+    ],
+    "approach": "Vertical slice: the contract (session cookie plus validated next) and the screen that uses it (auth card plus app shell) together. Reuse AppShell, AccountMenuPanel, parseNextPath/isSameOriginPath, and the existing AuthForm pending guard, controlled inputs, and show/hide toggle; add no dependency, no new ADR, no docs/ui.md or token change per the binding route notes. Make signin landing deterministic: AuthForm takes the already-validated next from its page and on signin success pushes next ?? / while signup keeps refresh-only so a taken address stays indistinguishable (no session, no navigation, same neutral Account created message). Keep every convention: Server Components by default with one client island, zod at the boundary, refusal rendered exactly once in role=alert with input preserved, success navigates rather than stacking notices, 44px targets, full-width card with 16px gutters at 375px, Tabs mark back to landing, labels above every field, focus-visible ring, avatar menu arrows/Escape with focus returned to the trigger, direction in words plus colour, copy as written (Sign in, Create account, Welcome back. Your groups are waiting, Email or password is incorrect, Account menu for X, Profile, Sign out). States: auth ideal (clean card), loading (submit pending spinner plus disabled, double-submit impossible), error (one neutral message, rate-limit names the wait), empty/partial not applicable (form always actionable, no data fetch); shell ideal (mark, place, menu), loading (place null skeleton block plus nameless menu, same bar height), error (page-level retry, never half shell).",
+    "confidence": 85,
+    "confidence_rationale": "Shell component, account menu keyboard map, and next validation already exist with unit coverage; the change is three small prop-and-branch edits on the auth island plus its two pages, following the established refresh-then-server-redirect pattern but making signin explicit. Main residual is Next router timing (push vs refresh with a just-set cookie), which the browser criteria pin directly.",
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add optional next prop (string | null) to AuthFormProps; on success branch by mode: signin pushes next ?? / via useRouter (deterministic Home landing) while signup calls router.refresh() only so a taken address keeps the neutral success with no session and no navigation; keep isPending guard, controlled fields, show/hide toggle, and single refusal/success slots unchanged.",
+        "path": "components/auth-form.tsx",
+        "why": "Makes Signing in lands on Home deterministic instead of relying on refresh-triggered server redirect timing, while preserving signup indistinguishability."
+      },
+      {
+        "action": "edit",
+        "change": "Pass the already-parsed next (parseNextPath result) as next prop to AuthForm mode=signin; keep the signed-in bounce redirect(next ?? /) and the Tabs mark back to landing unchanged.",
+        "path": "app/signin/page.tsx",
+        "why": "Supplies the validated same-origin destination the island navigates to after a real session is minted."
+      },
+      {
+        "action": "edit",
+        "change": "Pass the already-parsed next (parseNextPath result) as next prop to AuthForm mode=signup; keep the signed-in bounce redirect(next ?? /) and the signin/signup cross-links carrying next unchanged.",
+        "path": "app/signup/page.tsx",
+        "why": "Same wiring for the invite-link-survives-signup path without changing the neutral-response contract."
+      }
+    ],
+    "issue": 39,
+    "kind": "feature",
+    "out_of_scope": [
+      "Shared 404 shell: app/not-found.tsx stays shell-less and session-blind by TR-3 so missing and forbidden stay indistinguishable.",
+      "Home, group, expense, members, activity, and profile content redesign: later slices migrate screens one at a time off text-muted/border-muted names; this slice keeps both token names resolving.",
+      "Password reset, account deletion, native apps, in-app payments, and other PRD non-goals."
+    ],
+    "qa_script": [
+      "Sign up a fresh address via /signup and land signed in; sign out from the avatar menu.",
+      "Sign in with the same credentials and assert landing on / Home with the shell (mark Home link, place, avatar menu).",
+      "Open the avatar menu by click and by keyboard; follow Profile then Sign out; assert Profile has Back to Home and the shell.",
+      "As signed in, walk a group, members, activity, new group, expense new/edit, and an unclaimed join link; assert the shell on each.",
+      "Visit /groups/<random-uuid> signed in and signed out; assert identical shell-less 404 with one recovery link."
+    ],
+    "risks": [
+      "Auth timing: pushing before the session cookie is readable could bounce back to signin; mitigated by pushing the server-validated path the bounce already targets and keeping the server redirect as backstop.",
+      "Enumeration: signup must never branch on taken vs fresh; the island branches on mode only, never on response detail, and signup never pushes.",
+      "Open redirect: next travels only as the page-parsed same-origin value; raw query is never echoed into navigation."
+    ],
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "parseNextPath rejects protocol-relative //evil.example, backslash /\\evil.example, absolute https://evil.example, and empty input as null",
+          "parseNextPath preserves /join/<token>, /groups/<id>, and /profile as-is for legitimate post-auth destinations"
+        ],
+        "path": "lib/groups/validation.test.ts"
+      }
+    ],
+    "understanding": "IAC-1 needs two things: signing in lands on Home never Profile, and every signed-in page wears the slim shell (Tabs mark to Home, current place, avatar menu to Profile and Sign out), with the shared 404 explicitly staying shell-less per TR-3. Binding route notes keep docs/ui.md, tokens, lucide-react, and all recorded decisions unchanged. The shell, menu keyboard map, and next validation already exist on every signed-in route; the fragile half is AuthForm landing, which today only refreshes and hopes the server bounce navigates, with no explicit next wiring.",
+    "version": 1,
+    "mode": "committed"
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -82,166 +161,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "plan",
-  "validated_work_order": {
-    "acceptance": [
-      {
-        "check": "Sign up a new account, sign out via the account menu, then sign in with correct credentials: the browser lands on Home (/) showing the signed-in overview with the app shell, never on /profile.",
-        "how_to_verify": "In a clean browser: create an account via /signup, open the avatar menu and choose Sign out, then sign in via /signin. Assert the URL is / and the page shows the shell plus balances/groups content.",
-        "id": "AC-1",
-        "source": "IAC-1",
-        "verify": "browser"
-      },
-      {
-        "check": "Every signed-in page shows the slim top bar: Tabs mark linking Home (/), the current place truncated with full title, and the avatar account menu opening Profile (/profile) and Sign out (posts signOut). Walk Home, a group, members, activity, profile, new group, expense new/edit, and join as a signed-in non-member.",
-        "how_to_verify": "Sign in, then visit each URL and assert the header contains href=\"/\" with aria-label Tabs Home, the place label, and aria-haspopup menu whose panel offers Profile and Sign out; open the menu with mouse and keyboard (arrows/Escape) and follow both items.",
-        "id": "AC-2",
-        "source": "IAC-1",
-        "verify": "browser"
-      },
-      {
-        "check": "The shared 404 stays shell-less and session-blind: visiting a missing group id and a forbidden group id as two different users renders the identical page with no top bar and no account menu.",
-        "how_to_verify": "As user A open /groups/<random-uuid> and as user B open /groups/<A-only-group-id>; assert both show That page is not available with Back to your groups and neither contains the shell header.",
-        "id": "AC-3",
-        "source": "TR-3",
-        "verify": "browser"
-      }
-    ],
-    "approach": "Vertical slice: the contract (session cookie plus validated next) and the screen that uses it (auth card plus app shell) together. Reuse AppShell, AccountMenuPanel, parseNextPath/isSameOriginPath, and the existing AuthForm pending guard, controlled inputs, and show/hide toggle; add no dependency, no new ADR, no docs/ui.md or token change per the binding route notes. Make signin landing deterministic: AuthForm takes the already-validated next from its page and on signin success pushes next ?? / while signup keeps refresh-only so a taken address stays indistinguishable (no session, no navigation, same neutral Account created message). Keep every convention: Server Components by default with one client island, zod at the boundary, refusal rendered exactly once in role=alert with input preserved, success navigates rather than stacking notices, 44px targets, full-width card with 16px gutters at 375px, Tabs mark back to landing, labels above every field, focus-visible ring, avatar menu arrows/Escape with focus returned to the trigger, direction in words plus colour, copy as written (Sign in, Create account, Welcome back. Your groups are waiting, Email or password is incorrect, Account menu for X, Profile, Sign out). States: auth ideal (clean card), loading (submit pending spinner plus disabled, double-submit impossible), error (one neutral message, rate-limit names the wait), empty/partial not applicable (form always actionable, no data fetch); shell ideal (mark, place, menu), loading (place null skeleton block plus nameless menu, same bar height), error (page-level retry, never half shell).",
-    "confidence": 85,
-    "confidence_rationale": "Shell component, account menu keyboard map, and next validation already exist with unit coverage; the change is three small prop-and-branch edits on the auth island plus its two pages, following the established refresh-then-server-redirect pattern but making signin explicit. Main residual is Next router timing (push vs refresh with a just-set cookie), which the browser criteria pin directly.",
-    "files": [
-      {
-        "action": "edit",
-        "change": "Add optional next prop (string | null) to AuthFormProps; on success branch by mode: signin pushes next ?? / via useRouter (deterministic Home landing) while signup calls router.refresh() only so a taken address keeps the neutral success with no session and no navigation; keep isPending guard, controlled fields, show/hide toggle, and single refusal/success slots unchanged.",
-        "path": "components/auth-form.tsx",
-        "why": "Makes Signing in lands on Home deterministic instead of relying on refresh-triggered server redirect timing, while preserving signup indistinguishability."
-      },
-      {
-        "action": "edit",
-        "change": "Pass the already-parsed next (parseNextPath result) as next prop to AuthForm mode=signin; keep the signed-in bounce redirect(next ?? /) and the Tabs mark back to landing unchanged.",
-        "path": "app/signin/page.tsx",
-        "why": "Supplies the validated same-origin destination the island navigates to after a real session is minted."
-      },
-      {
-        "action": "edit",
-        "change": "Pass the already-parsed next (parseNextPath result) as next prop to AuthForm mode=signup; keep the signed-in bounce redirect(next ?? /) and the signin/signup cross-links carrying next unchanged.",
-        "path": "app/signup/page.tsx",
-        "why": "Same wiring for the invite-link-survives-signup path without changing the neutral-response contract."
-      }
-    ],
-    "issue": 39,
-    "kind": "feature",
-    "out_of_scope": [
-      "Shared 404 shell: app/not-found.tsx stays shell-less and session-blind by TR-3 so missing and forbidden stay indistinguishable.",
-      "Home, group, expense, members, activity, and profile content redesign: later slices migrate screens one at a time off text-muted/border-muted names; this slice keeps both token names resolving.",
-      "Password reset, account deletion, native apps, in-app payments, and other PRD non-goals."
-    ],
-    "qa_script": [
-      "Sign up a fresh address via /signup and land signed in; sign out from the avatar menu.",
-      "Sign in with the same credentials and assert landing on / Home with the shell (mark Home link, place, avatar menu).",
-      "Open the avatar menu by click and by keyboard; follow Profile then Sign out; assert Profile has Back to Home and the shell.",
-      "As signed in, walk a group, members, activity, new group, expense new/edit, and an unclaimed join link; assert the shell on each.",
-      "Visit /groups/<random-uuid> signed in and signed out; assert identical shell-less 404 with one recovery link."
-    ],
-    "risks": [
-      "Auth timing: pushing before the session cookie is readable could bounce back to signin; mitigated by pushing the server-validated path the bounce already targets and keeping the server redirect as backstop.",
-      "Enumeration: signup must never branch on taken vs fresh; the island branches on mode only, never on response detail, and signup never pushes.",
-      "Open redirect: next travels only as the page-parsed same-origin value; raw query is never echoed into navigation."
-    ],
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "parseNextPath rejects protocol-relative //evil.example, backslash /\\evil.example, absolute https://evil.example, and empty input as null",
-          "parseNextPath preserves /join/<token>, /groups/<id>, and /profile as-is for legitimate post-auth destinations"
-        ],
-        "path": "lib/groups/validation.test.ts"
-      }
-    ],
-    "understanding": "IAC-1 needs two things: signing in lands on Home never Profile, and every signed-in page wears the slim shell (Tabs mark to Home, current place, avatar menu to Profile and Sign out), with the shared 404 explicitly staying shell-less per TR-3. Binding route notes keep docs/ui.md, tokens, lucide-react, and all recorded decisions unchanged. The shell, menu keyboard map, and next validation already exist on every signed-in route; the fragile half is AuthForm landing, which today only refreshes and hopes the server bounce navigates, with no explicit next wiring.",
-    "version": 1
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-05T22:37:57.790Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "acceptance": [
-      {
-        "check": "Sign up a new account, sign out via the account menu, then sign in with correct credentials: the browser lands on Home (/) showing the signed-in overview with the app shell, never on /profile.",
-        "how_to_verify": "In a clean browser: create an account via /signup, open the avatar menu and choose Sign out, then sign in via /signin. Assert the URL is / and the page shows the shell plus balances/groups content.",
-        "id": "AC-1",
-        "source": "IAC-1",
-        "verify": "browser"
-      },
-      {
-        "check": "Every signed-in page shows the slim top bar: Tabs mark linking Home (/), the current place truncated with full title, and the avatar account menu opening Profile (/profile) and Sign out (posts signOut). Walk Home, a group, members, activity, profile, new group, expense new/edit, and join as a signed-in non-member.",
-        "how_to_verify": "Sign in, then visit each URL and assert the header contains href=\"/\" with aria-label Tabs Home, the place label, and aria-haspopup menu whose panel offers Profile and Sign out; open the menu with mouse and keyboard (arrows/Escape) and follow both items.",
-        "id": "AC-2",
-        "source": "IAC-1",
-        "verify": "browser"
-      },
-      {
-        "check": "The shared 404 stays shell-less and session-blind: visiting a missing group id and a forbidden group id as two different users renders the identical page with no top bar and no account menu.",
-        "how_to_verify": "As user A open /groups/<random-uuid> and as user B open /groups/<A-only-group-id>; assert both show That page is not available with Back to your groups and neither contains the shell header.",
-        "id": "AC-3",
-        "source": "TR-3",
-        "verify": "browser"
-      }
-    ],
-    "approach": "Vertical slice: the contract (session cookie plus validated next) and the screen that uses it (auth card plus app shell) together. Reuse AppShell, AccountMenuPanel, parseNextPath/isSameOriginPath, and the existing AuthForm pending guard, controlled inputs, and show/hide toggle; add no dependency, no new ADR, no docs/ui.md or token change per the binding route notes. Make signin landing deterministic: AuthForm takes the already-validated next from its page and on signin success pushes next ?? / while signup keeps refresh-only so a taken address stays indistinguishable (no session, no navigation, same neutral Account created message). Keep every convention: Server Components by default with one client island, zod at the boundary, refusal rendered exactly once in role=alert with input preserved, success navigates rather than stacking notices, 44px targets, full-width card with 16px gutters at 375px, Tabs mark back to landing, labels above every field, focus-visible ring, avatar menu arrows/Escape with focus returned to the trigger, direction in words plus colour, copy as written (Sign in, Create account, Welcome back. Your groups are waiting, Email or password is incorrect, Account menu for X, Profile, Sign out). States: auth ideal (clean card), loading (submit pending spinner plus disabled, double-submit impossible), error (one neutral message, rate-limit names the wait), empty/partial not applicable (form always actionable, no data fetch); shell ideal (mark, place, menu), loading (place null skeleton block plus nameless menu, same bar height), error (page-level retry, never half shell).",
-    "confidence": 85,
-    "confidence_rationale": "Shell component, account menu keyboard map, and next validation already exist with unit coverage; the change is three small prop-and-branch edits on the auth island plus its two pages, following the established refresh-then-server-redirect pattern but making signin explicit. Main residual is Next router timing (push vs refresh with a just-set cookie), which the browser criteria pin directly.",
-    "files": [
-      {
-        "action": "edit",
-        "change": "Add optional next prop (string | null) to AuthFormProps; on success branch by mode: signin pushes next ?? / via useRouter (deterministic Home landing) while signup calls router.refresh() only so a taken address keeps the neutral success with no session and no navigation; keep isPending guard, controlled fields, show/hide toggle, and single refusal/success slots unchanged.",
-        "path": "components/auth-form.tsx",
-        "why": "Makes Signing in lands on Home deterministic instead of relying on refresh-triggered server redirect timing, while preserving signup indistinguishability."
-      },
-      {
-        "action": "edit",
-        "change": "Pass the already-parsed next (parseNextPath result) as next prop to AuthForm mode=signin; keep the signed-in bounce redirect(next ?? /) and the Tabs mark back to landing unchanged.",
-        "path": "app/signin/page.tsx",
-        "why": "Supplies the validated same-origin destination the island navigates to after a real session is minted."
-      },
-      {
-        "action": "edit",
-        "change": "Pass the already-parsed next (parseNextPath result) as next prop to AuthForm mode=signup; keep the signed-in bounce redirect(next ?? /) and the signin/signup cross-links carrying next unchanged.",
-        "path": "app/signup/page.tsx",
-        "why": "Same wiring for the invite-link-survives-signup path without changing the neutral-response contract."
-      }
-    ],
-    "issue": 39,
-    "kind": "feature",
-    "out_of_scope": [
-      "Shared 404 shell: app/not-found.tsx stays shell-less and session-blind by TR-3 so missing and forbidden stay indistinguishable.",
-      "Home, group, expense, members, activity, and profile content redesign: later slices migrate screens one at a time off text-muted/border-muted names; this slice keeps both token names resolving.",
-      "Password reset, account deletion, native apps, in-app payments, and other PRD non-goals."
-    ],
-    "qa_script": [
-      "Sign up a fresh address via /signup and land signed in; sign out from the avatar menu.",
-      "Sign in with the same credentials and assert landing on / Home with the shell (mark Home link, place, avatar menu).",
-      "Open the avatar menu by click and by keyboard; follow Profile then Sign out; assert Profile has Back to Home and the shell.",
-      "As signed in, walk a group, members, activity, new group, expense new/edit, and an unclaimed join link; assert the shell on each.",
-      "Visit /groups/<random-uuid> signed in and signed out; assert identical shell-less 404 with one recovery link."
-    ],
-    "risks": [
-      "Auth timing: pushing before the session cookie is readable could bounce back to signin; mitigated by pushing the server-validated path the bounce already targets and keeping the server redirect as backstop.",
-      "Enumeration: signup must never branch on taken vs fresh; the island branches on mode only, never on response detail, and signup never pushes.",
-      "Open redirect: next travels only as the page-parsed same-origin value; raw query is never echoed into navigation."
-    ],
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "parseNextPath rejects protocol-relative //evil.example, backslash /\\evil.example, absolute https://evil.example, and empty input as null",
-          "parseNextPath preserves /join/<token>, /groups/<id>, and /profile as-is for legitimate post-auth destinations"
-        ],
-        "path": "lib/groups/validation.test.ts"
-      }
-    ],
-    "understanding": "IAC-1 needs two things: signing in lands on Home never Profile, and every signed-in page wears the slim shell (Tabs mark to Home, current place, avatar menu to Profile and Sign out), with the shared 404 explicitly staying shell-less per TR-3. Binding route notes keep docs/ui.md, tokens, lucide-react, and all recorded decisions unchanged. The shell, menu keyboard map, and next validation already exist on every signed-in route; the fragile half is AuthForm landing, which today only refreshes and hopes the server bounce navigates, with no explicit next wiring.",
-    "version": 1
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-05T22:40:50.959Z",
+  "work_order_from": "plan",
+  "work_order_comment": "6004646899"
 }

@@ -83,6 +83,13 @@
         "id": "AC-8",
         "source": "IAC-3",
         "verify": "test"
+      },
+      {
+        "check": "The debts card renders a persistent polite live region (role=status) from first paint, so the first settle-up and delete results are announced as updates to an already-present region rather than as a region inserted together with its message",
+        "how_to_verify": "QA opens a group page before recording anything and asserts the debts card already contains a role=status aria-live=polite node; QA records a transfer and sees the announcement update that same region",
+        "id": "AC-9",
+        "source": "IAC-3",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
@@ -101,17 +108,21 @@
       {
         "approach": "Null payload on payment activity rows like every other non-edit kind",
         "rejected_because": "The schema comment's null-payload rule assumes the linked row survives, but payment-deleted rows outlive their payment through set-null, so with nothing stored the later feed ticket could never render them; a small amount/endpoints snapshot is the minimum that keeps TR-10 renderable"
+      },
+      {
+        "approach": "Mount a separate always-present live region inside each settle panel instead of fixing StateMessage",
+        "rejected_because": "Two announcement sources per panel invite divergence (one region per outcome) and every future StateMessage consumer would repeat the bug; fixing the shared contract once makes both panels and all later consumers persistent with no panel change"
       }
     ],
-    "approach": "Add migration 0005 with a payments ledger table plus a nullable payment_id on activity_event (mirroring expense_id's set-null pattern so payment-deleted rows outlive the delete), and give payment rows a small snapshot payload (amount plus both endpoint ids and display names) so the later feed ticket can render them. Add lib/settle/: balances.ts with computeNetBalances(db, groupId) as the single recompute path (paid parts minus computed shares plus payments received minus payments sent, integer minor units, keyed by membership id with snapshotted display names, including departed seats whose membership row is deleted so nets stay truthful and sum to zero), simplify.ts with the ADR-0005 greedy max-debtor-vs-max-creditor pass with deterministic displayName/membershipId tiebreaks, validation.ts with zod boundaries for create/delete payment input, and actions.ts with createPayment/deletePayment Server Actions through guardGroup (membership check first, archived groups refuse writes, inputs validated at the boundary, each write plus its activity row in one interactive transaction). createPayment requires both endpoints to belong to the guarded group — a current membership or a departed ledger participant of that group, never an id from another group — and from != to; deletePayment requires the acting current member to be the payer or the recipient. Replace the sync getMemberBalance stub in lib/groups/members.ts with an async db-backed read through computeNetBalances and update its four call sites plus the existing mocks. Render the group debts card with per-member nets (departed holders labelled), the simplified transfer list with Settle-up buttons hidden when archived, and the settled/owes-summary banner (debts card above expenses in DOM order so narrow screens stack correctly); render home viewer totals and per-person rows under the same-currency-sum rule with an exclusion note naming foreign-currency groups, plus per-group balances in group currency read sequentially in one request. Client islands (components/settle-panels.tsx) follow the groups-panels ConfirmStep plus StateMessage (role=status, aria-live=polite) pattern: settle-up and delete-payment forms with explicit confirms, input preserved on error, in-place updates announced through the live region — no new toast infrastructure. Payment activity rows use kinds payment-created/payment-deleted with the snapshot payload for the later activity-feed ticket to render; activity feed UI itself stays out of scope.",
+    "approach": "Fix the shared contract the previous plan miscopied instead of reworking payments: edit components/ui.tsx so StateMessage always renders its region — idle renders an empty <p role=status aria-live=polite>, success renders the message in that same node, error keeps role=alert with aria-live=polite unchanged. No change in components/settle-panels.tsx is needed: SettleUpForm and DeletePaymentForm already mount StateMessage unconditionally at panel level (including the settled branch), so both regions become persistent automatically. Add app/groups/[id]/debts-live-region.test.ts using react-dom/server renderToStaticMarkup (node env, no new deps): idle renders the empty polite region (the BUG-1/T-12 repro), success fills the same node, error keeps alert. Append AC-9 plus a qa_script step so QA asserts pre-submit region presence on every future run.",
     "assumptions": [
       "Issue #6's ledger (expenses, expense_payers, split_lines, activity_event with payload) is merged — verified present in lib/db/schema.ts, lib/expenses/actions.ts and migration 0004",
       "CI and QA run on PGlite only, so no backend-specific code is needed anywhere in this plan (backend-invariant holds as long as only getDb branches)",
       "The later activity-feed ticket will render payment-created/payment-deleted rows from the snapshot payload defined here; this plan only writes the rows",
       "A payment needs only from, to and amount (created_at orders the feed); no per-payment date picker or note field in v1"
     ],
-    "confidence": 78,
-    "confidence_rationale": "The ledger, guard, transaction, and confirm-step plus live-region patterns are all established code to copy, the root-cause stub is verified at lib/groups/members.ts:29, and ADR-0005 fixes the algorithm; the number stays below 90 because the departed-participant payment rule and the payment snapshot payload shape are arbiter judgment calls the maintainer has not reviewed, and the later feed ticket could still want a field the snapshot does not carry.",
+    "confidence": 85,
+    "confidence_rationale": "The failure mechanism was reproduced locally against the real component (idle renders '', success renders the role=status node), both StateMessage mount sites were verified unconditional on the PR branch, and T-6 already proves the post-submit announcement path; it stays below 95 because actual screen-reader announcement behavior is asserted by QA's browser check, not by any CI test.",
     "debate_summary": "The critique was a summary-only verdict of flawed with eight claims and I verified each against the code rather than applying them. Blocking (home per-person rows missing while AC-2 claims IAC-2): confirmed — the issue text, ui.md Home regions, spec tabs, TR-9 and IAC-2 all require per-person rows and the proposal's acceptance, files and qa_script omit them; fixed by extending AC-2, app/page.tsx and qa_script. Major (departed seat stranded non-zero after a later expense edit/delete, unreachable all-zero under a current-members-only rule): confirmed — removal deletes the membership row while ledger split lines keep the seat (the expense path's resolveNames previous-snapshot case proves it), so the state is reachable; fixed with the departed-ledger-participant rule plus AC-8 and tests, not by touching expense code. Major (null-payload payment rows can never render after set-null): confirmed as a specification gap — fixed by defining the snapshot payload plus AC-7 and tests, keeping feed UI out of scope. Major (endpoints not scoped to the guarded group, no cross-group test): confirmed as a precision gap against removeMember's own this-group scoping precedent — fixed in the actions rule, AC-5 and tests. Minor (cross-currency rule untested): confirmed — covered now in AC-2 and qa_script. Minor (toasts do not exist, aria-live unspecified): confirmed in the narrow sense — groups-panels has ConfirmStep plus a StateMessage live region but no toast component, so the plan now names that mechanism instead. Minor (debts card not conditioned on archived): confirmed omission — settle controls now hide when archived, matching the page's existing pattern. Minor (one computeNetBalances call per group on a single-connection backend): judged a non-defect — sequential reads in one request are correct on PGlite and within the TR-9 recompute budget, so it is recorded as a residual risk rather than a plan change. Nothing in the critique contradicts the brief's recorded decisions, so nothing was dismissed on those grounds.",
     "evidence": [
       "lib/groups/members.ts:29 sync getMemberBalance stub returning 0; no lib/settle directory; 0004 the last migration",
@@ -119,84 +130,22 @@
       "lib/groups/actions.ts removeMember scopes the membership id to the group and deletes the row; leaveGroup deletes the row",
       "components/groups-panels.tsx ConfirmStep plus StateMessage with aria-live=polite; no toast component exists",
       "app/groups/[id]/page.tsx gates write UI on group.archived and reserves the debts slot for TR-9",
-      "docs/ui.md Home regions list per-person rows; issue Person-sees lists per-person rows; TR-9 requires per-person totals"
+      "docs/ui.md Home regions list per-person rows; issue Person-sees lists per-person rows; TR-9 requires per-person totals",
+      "components/ui.tsx:34 StateMessage returns null while idle — reproduced locally with renderToStaticMarkup against the real component: idle yields '', success yields <p role=status aria-live=polite>, error yields <p role=alert aria-live=polite>",
+      "origin/sdlc/issue-7 components/settle-panels.tsx mounts <StateMessage state={state}> unconditionally at panel level in SettleUpForm (both the transfer-list and settled branches) and DeletePaymentForm, so the shared-contract fix makes both regions persistent with no panel change",
+      "T-12 fails at qa-run/tests/settle-hostile.spec.ts:107 with zero [aria-live=polite] nodes in the debts section before the first submit, while the label, focus and Enter-to-confirm steps before it all passed"
     ],
     "files": [
       {
-        "action": "create",
-        "change": "payments table (id uuid, group_id FK cascade, from/to membership ids with no membership FK per ADR-0007 plus snapshotted display names, amount_minor integer, created_at) with (group_id, id) index; activity_event.payment_id nullable uuid with set-null FK mirroring expense_id, guarded catalogue-style like 0004",
-        "path": "lib/db/migrations/0005_payments.sql",
-        "why": "Ledger storage for settle-up payments and feed linkage that survives payment deletes"
-      },
-      {
         "action": "edit",
-        "change": "Add payments pgTable and activityEvents.paymentId column matching 0005, plus the payment snapshot payload type (amount plus endpoint ids and names) that payment-deleted rows keep after set-null",
-        "path": "lib/db/schema.ts",
-        "why": "Schema is the single source of truth the migration must match"
-      },
-      {
-        "action": "create",
-        "change": "computeNetBalances(db, groupId) returning per-membership {membershipId, displayName, balanceMinor}; sums stored payer parts minus stored computed shares plus payments received minus payments sent; includes departed seats via snapshot names so nets stay truthful and sum to zero; zero rows for members untouched by the ledger; the one path every screen and guard reads",
-        "path": "lib/settle/balances.ts",
-        "why": "Single derived-balances path the invariant requires"
-      },
-      {
-        "action": "create",
-        "change": "simplifyDebts(balances) greedy max-debtor vs max-creditor over integer minor units with deterministic tiebreak, returning transfers that settle all nets with at most N-1 entries and none for the all-zero case; transfers may name departed holders",
-        "path": "lib/settle/simplify.ts",
-        "why": "The stated algorithm with its guarantee, per ADR-0005 and TR-9"
-      },
-      {
-        "action": "create",
-        "change": "zod paymentScope/paymentInput boundaries: amount as minor-unit integer 1..MAX_MINOR_UNITS, from/to membership ids, from != to; group scoping of endpoints is enforced in actions against the guarded group, not in zod; user-safe messages naming what is off",
-        "path": "lib/settle/validation.ts",
-        "why": "Server input validation at the action boundary per conventions"
-      },
-      {
-        "action": "create",
-        "change": "createPayment/deletePayment Server Actions: guardGroup first, archived refuses, zod input, endpoints must each be a current membership of the guarded group or a departed ledger participant of it (cross-group ids get the 404-shaped refusal), deleter must be payer or recipient as a current member (else 404-shaped refusal), each write plus its payment-created/payment-deleted activity row with snapshot payload in one interactive transaction, revalidate / and group paths",
-        "path": "lib/settle/actions.ts",
-        "why": "Payment writes with TR-3 authz and TR-8-style atomicity"
-      },
-      {
-        "action": "edit",
-        "change": "Replace sync stub with async getMemberBalance(db, groupId, membershipId) reading computeNetBalances; keep assertZeroBalance/NonZeroBalanceError unchanged",
-        "path": "lib/groups/members.ts",
-        "why": "The seam TR-9 was waiting for; callers already exist on both sides of it"
-      },
-      {
-        "action": "edit",
-        "change": "Await the new getMemberBalance(handle.db, ...) in removeMember and leaveGroup inside the existing withDb callbacks",
-        "path": "lib/groups/actions.ts",
-        "why": "Balance-blocked removal/leave must read the real ledger"
-      },
-      {
-        "action": "edit",
-        "change": "Replace the zero-balance shell with the balance banner (settled vs owes-summary), the simplified-debts card with per-member nets (departed holders labelled), transfer list and Settle-up buttons hidden when archived, keeping the debts card above expenses in DOM order; read through computeNetBalances/simplifyDebts after guardGroup",
-        "path": "app/groups/[id]/page.tsx",
-        "why": "IAC-1 debts card and banner where the shell already reserves the slot"
-      },
-      {
-        "action": "edit",
-        "change": "Replace the zeroed totals slots with real viewer totals and per-person rows under the same-currency-sum rule with an exclusion note naming foreign-currency groups, plus per-group balances in group currency; sequential per-group reads in one request with no backend branching",
-        "path": "app/page.tsx",
-        "why": "IAC-2 cross-group totals, per-person rows and per-group balances"
-      },
-      {
-        "action": "edit",
-        "change": "Pass real per-member balances from computeNetBalances into MembersPanel instead of the stub",
-        "path": "app/groups/[id]/members/page.tsx",
-        "why": "Member list shows the same numbers as the debts card"
-      },
-      {
-        "action": "create",
-        "change": "SettleUpForm and DeletePaymentForm client islands using the shared ConfirmStep plus StateMessage (role=status, aria-live=polite) pattern, preserving input on error and announcing results through the live region; no new toast infrastructure",
-        "path": "components/settle-panels.tsx",
-        "why": "IAC-3 confirms and in-place feedback without inventing a new interaction pattern"
+        "change": "Drop the idle/message-empty early null return in StateMessage so it always renders its region: idle yields an empty <p role=status aria-live=polite>, success renders the message in that same node, error keeps role=alert with aria-live=polite unchanged",
+        "path": "components/ui.tsx",
+        "why": "The shared live-region contract both settle panels mount unconditionally; one fix makes both persistent"
       }
     ],
     "issue": 7,
-    "kind": "feature",
+    "kind": "bug",
+    "mode": "committed",
     "out_of_scope": [
       "Activity feed UI — payment rows are written now with a renderable snapshot, rendered by the later activity ticket",
       "Seed fixtures and deploy guide (TR-12 ticket)",
@@ -206,6 +155,7 @@
       "Sign up as Ada, create a group, add Bo and Cy as placeholders",
       "Add an equal-split expense paid by Ada and an exact-split multi-payer expense",
       "Open the group page: per-member nets plus a simplified transfer list with at most N-1 entries and Settle-up buttons",
+      "Before recording any payment, assert the debts card already contains a polite live region (role=status, aria-live=polite); record a transfer and see the announcement update that same region",
       "Open home: totals cards, per-person rows and per-group balances all agree with the group page",
       "Add a group in a second currency: it appears as a per-group row only, plus the exclusion note on the totals",
       "Pay one transfer in full and one partially through the debts card confirms; balances update in place with an announcement",
@@ -214,71 +164,34 @@
       "Open an archived group: balances read correctly with no settle-up or delete controls",
       "Repeat the group read on a 390px viewport: debts card above expenses, currency-formatted tabular amounts"
     ],
+    "reproduced": true,
     "residual_risks": [
       "Home reads each group sequentially in one request; within the TR-9 recompute budget for typical homes, but a user in dozens of large groups may see a slow home — QA should try a multi-group home if fixtures allow",
       "The departed-participant payment rule is new judgment: a current member recording with a departed seat has no maintainer precedent, and review may prefer to forbid it and accept the stranded state as a later ticket",
       "The payment snapshot payload shape is chosen for the later feed ticket without its input; if that ticket wants more fields it will need a follow-up migration"
     ],
     "risks": [
-      "No docs/ or .sdlc/ files change in this plan: ADR-0005 already covers the algorithm and the payment activity kinds follow the existing expense-event pattern, so no new ADR is needed; if review disagrees, the activity ticket can carry the doc update",
-      "Cross-currency home totals and per-person rows exclude foreign-currency groups by the stated same-currency rule; a group in a second currency is the case that proves the note renders"
+      "No docs/ or .sdlc/ files change in this plan: the fix touches only components/ui.tsx plus one app test, so no new ADR is needed; if review disagrees, the activity ticket can carry the doc update",
+      "Cross-currency home totals and per-person rows exclude foreign-currency groups by the stated same-currency rule; a group in a second currency is the case that proves the note renders",
+      "The idle region renders an empty paragraph in each panel until the first result, adding a small blank gap; accepted deliberately so the announced node is stable from first paint"
     ],
-    "root_cause": "Balances are a sync stub returning 0 with no payments ledger and no lib/settle module, while both screens already render zeroed balance shells; the proposal fills exactly that seam, and the critique's gaps were missing per-person rows, underspecified endpoint scoping and payment-row contents, and the reachable departed-seat strand.",
+    "root_cause": "components/ui.tsx StateMessage returns null while idle, so both settle panels mount with zero live regions from first paint; the first result inserts the [aria-live] node together with its message, which screen readers announce unreliably. The previous work order assumed the ConfirmStep-plus-StateMessage pattern is a persistent live region; it never was, and only the shared contract needs to change since both panels already mount it unconditionally.",
     "tests": [
       {
         "action": "create",
         "cases": [
-          "equal/exact/percentage/shares fixtures with multi-payer expenses produce exact nets summing to zero",
-          "payments move nets payer-to-recipient and full settlement reads all-zero",
-          "members untouched by the ledger read zero",
-          "a departed seat (membership row deleted) still nets from its snapshot rows so group nets sum to zero"
+          "idle state renders an empty persistent polite live region (role=status, aria-live=polite) with no message — the BUG-1/T-12 repro that fails while StateMessage returns null",
+          "success renders the message text inside that same status node",
+          "error keeps role=alert with aria-live=polite and the message text"
         ],
-        "path": "lib/settle/balances.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "three-member fixture simplifies to at most 2 transfers with exact amounts",
-          "all-zero input returns no transfers",
-          "tiebreak is deterministic across runs",
-          "at most N-1 transfers on a generated 8-member ledger"
-        ],
-        "path": "lib/settle/simplify.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "stranger and signed-out callers get identical 404-shaped refusals on create and delete",
-          "from == to and non-positive amounts refused with user-safe messages",
-          "an endpoint id from another group is refused with the 404-shaped refusal",
-          "a transfer involving a departed ledger participant of the same group succeeds; delete by the involved current member succeeds and by a third member is refused",
-          "delete by a non-involved member refused; delete by payer and by recipient both succeed",
-          "failing write leaves no payment and no activity row (transaction atomicity)",
-          "successful writes record payment-created/payment-deleted activity rows with actor, timestamp and snapshot payload; the deleted row still reads after its payment row is gone"
-        ],
-        "path": "lib/settle/actions.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "update getMemberBalance mock to the async db-backed signature; removal/leave still blocked on non-zero and allowed at zero"
-        ],
-        "path": "lib/groups/actions.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "replace stub-returns-zero expectations with ledger-backed reads (zero with no ledger rows, real nets with fixture rows)"
-        ],
-        "path": "lib/groups/members.test.ts"
+        "path": "app/groups/[id]/debts-live-region.test.ts"
       }
     ],
-    "understanding": "Issue #7 needs per-group net balances with greedy min-cash-flow simplified debts (at most N-1 transfers), cross-group you-owe/you-are-owed home totals with per-person rows, and full/partial settle-up payments recorded as ledger entries deletable only by involved members, all derived by one recompute path and never stored. Today the expense/payment ledger exists for expenses (migration 0004, lib/expenses) but there is no payments table, no lib/settle module, and balances are a sync getMemberBalance stub returning 0 with four call sites (removeMember, leaveGroup, group page, members page) plus mocks in groups tests; the group and home pages render zeroed balance shells where the debts card, banner, totals, per-person rows and per-group balances will go.",
+    "understanding": "PR #22 implemented version 1 faithfully and still failed QA (12/13 green, only T-12 red) because version 1's premise was wrong, not its execution: it specified the ConfirmStep-plus-StateMessage pattern as the debts card's persistent polite live region, but StateMessage returns null while idle (components/ui.tsx:34), so both settle panels mount zero [aria-live] nodes from first paint and the first result inserts the node together with its message — exactly what T-12 asserts against (BUG-1). I reproduced this locally against the real component: idle renders '', success renders the role=status node. My previous revision of this fix was additionally refused by the validator for dropping the IAC/TR sources on the acceptance criteria; this revision restores AC-1 through AC-8 verbatim with their sources and appends AC-9 for BUG-1.",
     "unknowns": [
       "Whether the later activity-feed ticket wants more than amount plus endpoint ids and names on payment rows; the snapshot defined here is the minimum that renders them"
     ],
-    "version": 1,
-    "mode": "committed"
+    "version": 2
   },
   "touch_paths": [
     "lib/db/migrations/0005_payments.sql",
@@ -552,10 +465,10 @@
   "validated_at": "2026-10-05T05:32:30.997Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
-  "work_order_version": 1,
-  "work_order_posted_at": "2026-10-05T05:35:13.215Z",
-  "work_order_from": "plan",
-  "work_order_comment": "5988738000",
+  "work_order_version": 2,
+  "work_order_posted_at": "2026-10-05T08:33:59.762Z",
+  "work_order_from": "root-cause",
+  "work_order_comment": "5990958644",
   "implemented_version": 1,
   "follow_ups": {
     "review": [

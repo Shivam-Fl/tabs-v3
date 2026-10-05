@@ -523,5 +523,17 @@
     "IAC-2": 38,
     "IAC-4": 39
   },
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Scope: components/account-menu.tsx is a new file not listed in work-order.json files[], which plans the AccountMenu island inside the single components/app-shell.tsx entry.",
+        "detail": "Scope: components/account-menu.tsx is a new file not listed in work-order.json files[], which plans the AccountMenu island inside the single components/app-shell.tsx entry.\n\n`components/account-menu.tsx:1`\n\nEvidence: gh pr diff 40 --name-only lists 25 files including components/account-menu.tsx; work-order.json files[] (22 entries) plus tests[] (app/ui-set.test.ts, app/app-shell.test.ts) contain no account-menu entry. The file's own header (components/account-menu.tsx:2371-2375 in the diff) states the split is structural: a 'use client' directive applies to its whole module, so the menu island and the server-rendered top bar cannot share one file.\n\nFix: No code change needed: amend the work order files[] to list components/account-menu.tsx (create: AccountMenu client island split from AppShell so the shell stays a server component). The split is the correct implementation of the ordered change, not creep.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/account-menu.tsx"
+      }
+    ],
+    "pr": "40"
+  }
 }

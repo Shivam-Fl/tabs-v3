@@ -217,5 +217,130 @@
     ],
     "understanding": "Issue #29 batches two non-blocking review findings from PR #28 (for #8). Finding 1: inputs-only expense edits render split values with the wrong unit ('N shares') because expenseChanges drops the unchanged splitType the renderer needs. Finding 2: seedThroughApp treats a wedged app's 10s timeout like no app at all, silently seeding the wrong database with exit 0. Both were traced to exact lines (validation.ts:228-236 plus activity-feed.tsx:337-355, and seed.ts:117-129 plus runSeed :143-157) and still reproduce. This v2 directly answers the rejection: AC-1 and qa_script step 2 now describe the sum-100 triple 60/30/10 with split type untouched (no single-input change), and AC-2 plus qa_script step 3 now describe the sum-preserving exact edit 30/30/30 to 40/20/30 with the 90_000 total untouched, so every described save passes parseExpenseInput validation and writes the feed entry to be verified.",
     "version": 2
-  }
+  },
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Editing the split inputs on the seeded percentage expense 'Groceries for the week' from 50/25/25 to 60/30/10, with split type and everything else untouched, shows a feed entry with percentages such as 'Ada 50% -> Ada 60%' and no 'shares' text, and no 'Split type' row appears because the type did not change.",
+        "how_to_verify": "Seed with the app running, sign in as ada@tabs.test, open 'Goa trip', edit 'Groceries for the week' changing the inputs to 60/30/10 (Ada 60, Bo 30, Cy 10, summing to 100) with split type and everything else untouched, then read the group's activity feed entry for that edit.",
+        "id": "AC-1",
+        "source": "TR-10",
+        "verify": "browser"
+      },
+      {
+        "check": "Editing the split inputs on the seeded exact expense 'Cab to the airport' from 30/30/30 (30_000 each of the 90_000 total) to 40/20/30 (40_000/20_000/30_000, total and split type untouched) shows money amounts in the group's currency, not 'N shares' and not raw minor units.",
+        "how_to_verify": "Same path as AC-1 against 'Cab to the airport', changing the inputs to 40/20/30 with the 90_000 total and the exact split type untouched.",
+        "id": "AC-2",
+        "source": "TR-10",
+        "verify": "browser"
+      },
+      {
+        "check": "A seed request that times out against a wedged app fails loudly and writes nothing to the local database, instead of reporting direct-path success.",
+        "how_to_verify": "Run the new scripts/seed.test.ts timeout-rejection case under npm run test:ci: mocked fetch rejects with a timeout/abort error, runSeed rejects, and the users table stays empty.",
+        "id": "AC-3",
+        "source": "TR-12",
+        "verify": "test"
+      },
+      {
+        "check": "Changing the split type itself (e.g. equal to percentage) still records and renders the split-type change exactly as before — the EditDetail filter change removes no genuinely-changed row.",
+        "how_to_verify": "Edit a seeded expense changing equal to percentage and confirm the feed entry names the split-type change alongside the inputs.",
+        "id": "AC-4",
+        "source": "TR-10",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Add the expense's splitType to ActivityRow and prefer it in snapshotValue when half.splitType is undefined",
+        "rejected_because": "Widens the feed query type and every row construction for context the payload can already carry; larger diff for the same rendering."
+      },
+      {
+        "approach": "Fix only the renderer fallback, e.g. guess the unit from the value's magnitude",
+        "rejected_because": "The unit is not recoverable from the value — 6000 could be basis points or minor units — so any heuristic misrenders some split type."
+      }
+    ],
+    "approach": "Two independent single-root-cause fixes, planned as one batch because both reproduced, both come from the same PR #28 review, and one seed-then-edit-then-read-the-feed QA pass covers both; splitting them would spend two full implement/review/QA cycles on about ten lines. Fix 1 (feed unit): expenseChanges carries splitType in both halves whenever inputs changed so each half names its own unit, and EditDetail selects fields whose before/after values differ (not merely fields present) so the carried-but-equal splitType does not print a spurious 'Split type: X -> X' row. Fix 2 (seed timeout): seedThroughApp returns null only for a refused connection (fetch TypeError) and rethrows timeout/abort errors so runSeed fails loudly. Tests pin the new payload shape, the narrowed catch, and keep the existing refused-connection and unchanged-save behaviors green.",
+    "assumptions": [
+      "AbortSignal.timeout() surfaces as a non-TypeError rejection (TimeoutError/AbortError) in this runtime while a refused connection surfaces as TypeError; the implementer confirms both against a real hanging server, not just mocks.",
+      "Seeded QA identity is unchanged: ada@tabs.test / bo@tabs.test / cy@tabs.test in group 'Goa trip' with the expenses named in the acceptance criteria."
+    ],
+    "confidence": 85,
+    "confidence_rationale": "Both root causes are traced to exact lines and the current (wrong) behavior is pinned by existing tests; the only uncertainty is Node's fetch error identity for timeouts, which the order tells the implementer to verify against a real server. v2 changes only the QA/acceptance edit descriptions to sum-preserving triples per the rejection, not the fix itself.",
+    "evidence": [
+      "components/activity-feed.tsx:337-342 renders split inputs with half.splitType and :346-355 falls through to `${value} shares` when it is undefined",
+      "lib/expenses/validation.ts:228-236 copies only JSON-differing fields, so an inputs-only edit yields halves without splitType — pinned by lib/expenses/actions.test.ts asserting a payload of exactly {before:{inputs},after:{inputs}}",
+      "scripts/seed.ts:117-129 catch-all returns null even for the AbortSignal.timeout throw, and runSeed :143-157 then takes the direct path reporting success, contradicting the comment at :113-115 that a wedged app is a reason to stop"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "In expenseChanges, when the inputs field differs, also copy splitType into both halves even though its value is unchanged, so each half carries the unit its input values are stored in (minor units / basis points / shares per the expense's split type). Update the doc comment that says the payload holds 'only the fields that moved' to state this one exception and why the renderer needs it. Keep everything else: field-by-field JSON comparison, null when nothing changed.",
+        "path": "lib/expenses/validation.ts",
+        "why": "The payload is the only unit context the renderer gets for an inputs-only edit; without splitType beside the inputs, snapshotValue cannot format them."
+      },
+      {
+        "action": "edit",
+        "change": "In EditDetail, choose the rows to render as the fields whose before/after values JSON-differ, not the fields merely present in either half. Fields present in only one half (historical rows written before fix 1) still render exactly as today because a missing side always differs. snapshotValue and inputValueText are otherwise unchanged and now receive half.splitType for inputs-only edits written after the fix.",
+        "path": "components/activity-feed.tsx",
+        "why": "Carrying an unchanged splitType beside changed inputs would otherwise print a spurious 'Split type: Percentages -> Percentages' row on every inputs-only edit."
+      },
+      {
+        "action": "edit",
+        "change": "In seedThroughApp, return null only when fetch throws a TypeError (connection refused — nothing listening). Rethrow timeout/abort rejections (the AbortSignal.timeout TimeoutError) so runSeed fails loudly instead of seeding a private in-process database while reporting success. Update the catch comment ('Nothing is listening...') to state the rule and which errors propagate, leaving the response.ok refusal throw untouched. Before finishing, verify against a real hanging local server (a route that never responds) that the timeout rejection is not instanceof TypeError and that runSeed rejects with the local database untouched.",
+        "path": "scripts/seed.ts",
+        "why": "A timed-out serving app currently yields exit 0 with fixtures invisible to any browser — the silent wrong-database success the function's own comment says must stop."
+      }
+    ],
+    "issue": 29,
+    "kind": "bug",
+    "out_of_scope": [
+      "Backfilling or migrating already-written inputs-only payloads to add splitType; they are immutable audit history and keep the old rendering.",
+      "Making SEED_TIMEOUT_MS configurable, adding seed retries, or distinguishing other fetch failure kinds; the ticket asks only that a timeout fails loudly.",
+      "A component test harness for components/**: vitest includes only lib/app/scripts, so the EditDetail branch is covered by browser acceptance (AC-1, AC-2, AC-4) instead."
+    ],
+    "qa_script": [
+      "Run the app (npm run sdlc:serve), then npm run db:seed and confirm it reports the app path with the seeded summary.",
+      "Sign in as ada@tabs.test (every seeded account uses the seed password), open 'Goa trip', and edit 'Groceries for the week' changing the inputs to 60/30/10 (Ada 60, Bo 30, Cy 10, split type untouched): the activity feed entry must read in percentages with no 'shares' text and no 'Split type' row.",
+      "Edit 'Cab to the airport' changing the inputs from 30/30/30 to 40/20/30 with the 90_000 total and the exact split type untouched: the feed entry must read in money amounts, not 'N shares'.",
+      "Edit an expense changing equal to percentage: the feed entry must still name the split-type change (AC-4 regression check).",
+      "Stop the app and run npm run db:seed against nothing listening: it must still seed directly and report the direct path (the refused-connection behavior is unchanged)."
+    ],
+    "reproduced": true,
+    "risks": [
+      "Feed rows written before this fix carry inputs without splitType and cannot regain their unit; only edits saved after the fix render correctly.",
+      "The seed fix assumes the timeout rejection is not instanceof TypeError while refused connections are; if a runtime wraps timeouts as TypeError the wedged-app case silently regresses — hence the mandated real-server verification in files[2].",
+      "expenseChanges payloads now carry a present-but-equal splitType when inputs move; grep confirms the only renderer is EditDetail in components/activity-feed.tsx (queries and schema pass the payload through opaquely), so no other reader needs updating."
+    ],
+    "root_cause": "Two independent defects from the PR #28 review, both confirmed on current code. (1) expenseChanges strips every unchanged field including splitType, so for an inputs-only edit each payload half has inputs but no splitType, and snapshotValue/inputValueText falls through to `${value} shares` — a 60/40-to-70/30 percentage edit renders 'Ada 6000 shares -> Ada 7000 shares' and an exact edit shows raw minor units as shares. (2) seedThroughApp maps every fetch failure to 'no app', including its own 10s AbortSignal.timeout throw, so runSeed takes the direct path and reports success while seeding a private in-process database no browser reads — exactly what the comment above the timeout says must stop.",
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "expenseChanges copies splitType into both halves when inputs move but the type does not (percentage fixture values, e.g. 6000/4000 to 7000/3000)",
+          "expenseChanges still omits splitType when neither inputs nor type moved (amount-only edit yields exactly {before:{amountMinor},after:{amountMinor}})",
+          "existing null-when-unchanged and payer-reorder cases kept green"
+        ],
+        "path": "lib/expenses/validation.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "update the 'names the split inputs it carries' expectation: the second save (percentage inputs-only) now records inputs AND splitType 'percentage' in both halves, with no participants list",
+          "keep the 'records the rule that was entered when the split type changes' case green: a type change still records before/after splitType"
+        ],
+        "path": "lib/expenses/actions.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "runSeed rejects and writes no local users when fetch rejects with a timeout/abort error (mock global fetch to reject with a TimeoutError/AbortError via vi.stubGlobal, then unstub) so the test does not wait the 10s timeout",
+          "existing refused-connection direct-path case (NO_APP) kept green, proving TypeError still falls back"
+        ],
+        "path": "scripts/seed.test.ts"
+      }
+    ],
+    "understanding": "Issue #29 batches two non-blocking review findings from PR #28 (for #8). Finding 1: inputs-only expense edits render split values with the wrong unit ('N shares') because expenseChanges drops the unchanged splitType the renderer needs. Finding 2: seedThroughApp treats a wedged app's 10s timeout like no app at all, silently seeding the wrong database with exit 0. Both were traced to exact lines (validation.ts:228-236 plus activity-feed.tsx:337-355, and seed.ts:117-129 plus runSeed :143-157) and still reproduce. This v2 directly answers the rejection: AC-1 and qa_script step 2 now describe the sum-100 triple 60/30/10 with split type untouched (no single-input change), and AC-2 plus qa_script step 3 now describe the sum-preserving exact edit 30/30/30 to 40/20/30 with the 90_000 total untouched, so every described save passes parseExpenseInput validation and writes the feed entry to be verified.",
+    "version": 2
+  },
+  "approved_too_high": false
 }

@@ -46,5 +46,7 @@
       "action": "-> planning"
     }
   ],
-  "brief_pr": 32
+  "brief_pr": 32,
+  "resume_at": null,
+  "stopped_at": "project"
 }

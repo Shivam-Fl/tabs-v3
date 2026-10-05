@@ -262,7 +262,7 @@
         "risk": "Touches the two money-writing surfaces (expense amounts with live shares, settle-up prefilled amounts); money math and payloads are unchanged and review must reject any logic change.",
         "title": "Expense editor and settle-up sheet with confirms and menus",
         "why": "Recording an expense correctly the first time and settling a suggested transfer take seconds, with the amount prominent and destructive choices confirmed.",
-        "issue": null
+        "issue": 36
       },
       {
         "acceptance": [
@@ -298,6 +298,7 @@
   "children": [
     33,
     34,
-    35
+    35,
+    36
   ]
 }

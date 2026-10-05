@@ -29,10 +29,19 @@ interface MessageState {
   message: string;
 }
 
-/** What an action came back with, in the sentence it came back with. Silent when there is none. */
+/**
+ * What an action came back with, in the sentence it came back with — and nothing at all while
+ * there is nothing to say, which is not the same as rendering nothing.
+ *
+ * The region is mounted from the first paint whether or not it has a message, because a live
+ * region inserted into the document together with the text it carries is announced unreliably:
+ * assistive technology has to be watching the node before the text arrives, and one that appears
+ * already filled is a node it was never watching. So idle renders the empty `<p role="status">`
+ * and a result fills that same node (AC-9, TR-9). The price is an empty paragraph wherever the
+ * message slot sits, deliberately paid once here rather than by every caller keeping its own
+ * always-on region in step with this one.
+ */
 export function StateMessage({ state }: { state: MessageState }) {
-  if (state.status === 'idle' || state.message === '') return null;
-
   return (
     <p
       role={state.status === 'error' ? 'alert' : 'status'}

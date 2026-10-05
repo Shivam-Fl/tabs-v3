@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { DeleteExpenseForm } from '../../../components/expense-editor';
 import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
+import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
 import { INPUT_CLASSES, QUIET_BUTTON } from '../../../components/ui';
 import { withDb } from '../../../lib/db/client';
 import {
@@ -18,7 +19,6 @@ import {
 } from '../../../lib/expenses/validation';
 import { listExpenses, type ExpenseListRow } from '../../../lib/expenses/queries';
 import { guardGroup, type GroupAccess } from '../../../lib/groups/authz';
-import { getMemberBalance } from '../../../lib/groups/members';
 import {
   ARCHIVED_NOTICE,
   ARCHIVED_NOTICE_PARAM,
@@ -28,14 +28,23 @@ import {
 } from '../../../lib/groups/validation';
 import { listMembers, type MemberRow } from '../../../lib/groups/queries';
 import { formatMinorUnits } from '../../../lib/money/format';
+import { computeNetBalances, type MemberBalance } from '../../../lib/settle/balances';
+import { listPayments, type PaymentRow } from '../../../lib/settle/queries';
+import { simplifyDebts, type Transfer } from '../../../lib/settle/simplify';
 
 export const metadata: Metadata = { title: 'Group · Tabs' };
 
 /**
- * The group detail screen: who owes whom here, and what happened recently — of which this slice
- * builds the header, the balance banner shell, the expense list with its filters, and the
- * settings section. The debts card and the activity excerpt belong to TR-9 and TR-10, and land on
- * this page rather than in a second one.
+ * The group detail screen: who owes whom here, and what happened recently — the header, the
+ * balance banner, the debts card with the simplified transfers and the settle-up payments, the
+ * expense list with its filters, and the settings section. The activity excerpt belongs to TR-10
+ * and lands on this page rather than in a second one.
+ *
+ * Every balance on it comes from the one recompute path (TR-9) and every transfer from the one
+ * simplification beside it, so the banner, the member rows, the suggested payments and the
+ * members page are four renderings of one arithmetic rather than four opinions. The card is
+ * above the expense list in the DOM, which is what makes a narrow screen stack the two the way
+ * ui.md describes.
  *
  * The guard decides everything else. A signed-out visitor is sent to sign in with the way back;
  * a stranger, a malformed id and a group that does not exist all render the same 404, because
@@ -78,12 +87,21 @@ export default async function GroupPage({
   // flight together are a queue pretending to be a race.
   const expenses = await withDb((handle) => listExpenses(handle.db, access.group.id, filters));
   const members = await withDb((handle) => listMembers(handle.db, access.group.id));
+  const balances = await withDb((handle) => computeNetBalances(handle.db, access.group.id));
+  const payments = await withDb((handle) => listPayments(handle.db, access.group.id));
+
+  // The simplification is arithmetic on the numbers above, not another read: it is the same call
+  // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
+  const transfers = simplifyDebts(balances);
 
   return (
     <GroupDetail
       access={access}
       expenses={expenses}
       members={members}
+      balances={balances}
+      transfers={transfers}
+      payments={payments}
       filters={filters}
       justArchived={query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE}
       expenseNotice={expenseNoticeText(query[EXPENSE_NOTICE_PARAM])}
@@ -95,6 +113,9 @@ function GroupDetail({
   access,
   expenses,
   members,
+  balances,
+  transfers,
+  payments,
   filters,
   justArchived,
   expenseNotice,
@@ -102,14 +123,33 @@ function GroupDetail({
   access: Extract<GroupAccess, { status: 'ok' }>;
   expenses: ExpenseListRow[];
   members: MemberRow[];
+  balances: MemberBalance[];
+  transfers: Transfer[];
+  payments: PaymentRow[];
   filters: ReturnType<typeof expenseFiltersFrom>;
   justArchived: boolean;
   expenseNotice: string | null;
 }) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
-  const balance = getMemberBalance(group.id, membership.id);
   const filtered = filters.memberId !== null || filters.category !== null || filters.search !== null;
+
+  // Every current member is on the debts card even at zero — a row that vanished would read as
+  // somebody missing — while a departed seat (ADR-0007) is only worth a row when it still holds
+  // a balance: at zero it is a name the group can do nothing about.
+  const currentIds = new Set(members.map((member) => member.id));
+  const shown = balances.filter(
+    (balance) => currentIds.has(balance.membershipId) || balance.balanceMinor !== 0,
+  );
+  const ownMinor = balances.find((balance) => balance.membershipId === membership.id)?.balanceMinor ?? 0;
+  const settled = transfers.length === 0;
+  const bannerNote = settled
+    ? 'Everyone is settled up — nobody owes anybody.'
+    : ownMinor > 0
+      ? 'You are owed in this group. The card below shows who pays you.'
+      : ownMinor < 0
+        ? 'You owe in this group. The card below shows who to pay and how much.'
+        : 'You are settled up here. The card below shows what the others owe each other.';
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
@@ -166,12 +206,77 @@ function GroupDetail({
         <h2 id="balance-heading" className="text-lg font-semibold">
           Your balance
         </h2>
-        <p data-amount className="text-xl font-semibold">
-          {formatMinorUnits(balance, group.currency)}
+        <p
+          data-amount
+          className={`text-xl font-semibold ${ownMinor > 0 ? 'text-lent' : ownMinor < 0 ? 'text-owed' : ''}`}
+        >
+          {formatMinorUnits(ownMinor, group.currency)}
         </p>
+        <p className="text-sm text-muted">{bannerNote}</p>
+      </section>
+
+      {/* The debts card sits above the expense list in the DOM, so a narrow screen stacks the two
+          in the order ui.md asks for without a second layout. */}
+      <section
+        className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4"
+        aria-labelledby="debts-heading"
+      >
+        <h2 id="debts-heading" className="text-lg font-semibold">
+          Who owes what
+        </h2>
+
+        <ul className="flex flex-col gap-2">
+          {shown.map((balance) => (
+            <li
+              key={balance.membershipId}
+              className="flex flex-wrap items-baseline justify-between gap-2"
+            >
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{balance.displayName}</span>
+                {currentIds.has(balance.membershipId) ? null : (
+                  <span className="rounded-token border border-muted/40 px-2 text-sm text-muted">
+                    No longer in the group
+                  </span>
+                )}
+                <span className="text-sm text-muted">
+                  {balance.balanceMinor > 0
+                    ? 'is owed'
+                    : balance.balanceMinor < 0
+                      ? 'owes'
+                      : 'is settled up'}
+                </span>
+              </span>
+              {balance.balanceMinor === 0 ? null : (
+                <span
+                  data-amount
+                  className={`font-semibold ${balance.balanceMinor > 0 ? 'text-lent' : 'text-owed'}`}
+                >
+                  {formatMinorUnits(Math.abs(balance.balanceMinor), group.currency)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <h3 className="text-lg font-semibold">Suggested payments</h3>
         <p className="text-sm text-muted">
-          Everyone is settled up. Balances appear here once the group records expenses.
+          {settled
+            ? 'Nothing to settle — the totals above are all zero.'
+            : 'Settle up records a payment between two people. It does not move money by itself.'}
         </p>
+        <SettleUpForm
+          groupId={group.id}
+          currency={group.currency}
+          transfers={transfers}
+          archived={group.archived}
+        />
+
+        <DeletePaymentForm
+          groupId={group.id}
+          currency={group.currency}
+          payments={payments}
+          archived={group.archived}
+        />
       </section>
 
       <section className="flex flex-col gap-4" aria-labelledby="expenses-heading">

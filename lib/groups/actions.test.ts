@@ -7,8 +7,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
  * database. Only the browser is missing.
  *
  * Two modules are mocked, both to reach a state a passing run cannot: the balance seam, so a
- * non-zero balance can be forced through it (TR-9 is what will make that real), and the token
- * generator, so a rotation can be made to fail. Everything else is the shipped code path.
+ * non-zero balance can be forced through it without building the ledger that produces one, and
+ * the token generator, so a rotation can be made to fail. Everything else is the shipped code
+ * path.
  */
 
 const jar = vi.hoisted(() => ({ entries: new Map<string, string>() }));
@@ -50,7 +51,9 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 vi.mock('./members', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./members')>();
-  return { ...actual, getMemberBalance: vi.fn(() => 0) };
+  // The seam is async and database-backed since TR-9; the mock stays a mock so a non-zero
+  // balance can still be forced through it without writing a ledger that produces one.
+  return { ...actual, getMemberBalance: vi.fn(async () => 0) };
 });
 
 vi.mock('./tokens', async (importOriginal) => {
@@ -204,7 +207,7 @@ beforeEach(async () => {
   jar.entries.clear();
 
   vi.mocked(getMemberBalance).mockReset();
-  vi.mocked(getMemberBalance).mockReturnValue(0);
+  vi.mocked(getMemberBalance).mockResolvedValue(0);
   vi.mocked(generateInviteToken).mockReset();
   vi.mocked(generateInviteToken).mockImplementation(() => randomToken());
 
@@ -750,7 +753,9 @@ describe('removing and leaving', () => {
 
     await redirectUrl(removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: seatId })));
 
-    expect(getMemberBalance).toHaveBeenCalledWith(groupId, seatId);
+    // The database handle first, since TR-9: the seam reads the group's ledger for this seat
+    // rather than answering from a constant.
+    expect(getMemberBalance).toHaveBeenCalledWith(expect.anything(), groupId, seatId);
   });
 
   it('sends a leaver home with the left group in the notice', async () => {
@@ -766,7 +771,7 @@ describe('removing and leaving', () => {
 
   it('blocks a removal whose balance is not zero, and says to settle up', async () => {
     await signInAs(ownerId);
-    vi.mocked(getMemberBalance).mockReturnValue(1250);
+    vi.mocked(getMemberBalance).mockResolvedValue(1250);
 
     const state = await removeMember(IDLE_GROUP_STATE, form({ groupId, membershipId: seatId }));
 
@@ -778,7 +783,7 @@ describe('removing and leaving', () => {
 
   it('blocks a leave whose balance is not zero, inline and with nothing changed', async () => {
     await signInAs(joinerId);
-    vi.mocked(getMemberBalance).mockReturnValue(-500);
+    vi.mocked(getMemberBalance).mockResolvedValue(-500);
 
     // Awaited directly: a refusal that redirected would throw instead of returning, so this
     // also pins that refusals stay on the form, which is still mounted to show them.

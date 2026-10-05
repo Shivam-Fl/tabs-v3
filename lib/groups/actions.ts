@@ -326,7 +326,10 @@ export async function removeMember(
     }
 
     try {
-      assertZeroBalance(getMemberBalance(access.group.id, target.id), target.displayName);
+      assertZeroBalance(
+        await getMemberBalance(handle.db, access.group.id, target.id),
+        target.displayName,
+      );
     } catch (error) {
       if (error instanceof NonZeroBalanceError) {
         // Refusals stay on the form, which is still mounted — only success unmounts it.
@@ -373,7 +376,10 @@ export async function leaveGroup(
     const { group, membership, user } = access;
 
     try {
-      assertZeroBalance(getMemberBalance(group.id, membership.id), membership.displayName);
+      assertZeroBalance(
+        await getMemberBalance(handle.db, group.id, membership.id),
+        membership.displayName,
+      );
     } catch (error) {
       if (error instanceof NonZeroBalanceError) {
         return { state: { status: 'error', message: error.message } };

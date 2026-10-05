@@ -420,7 +420,7 @@
   },
   "qa": {
     "verdict": "fail",
-    "introduced_bugs": 2,
+    "introduced_bugs": 1,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -429,21 +429,19 @@
       "AC-5",
       "AC-6",
       "AC-7",
-      "AC-8"
+      "AC-8",
+      "AC-9",
+      "AC-10"
     ],
-    "sha": "19d187498363d3a96b4d2504fbbb776ea8122865",
-    "run_id": "37255404994",
-    "work_order_version": 1,
-    "at": "2026-10-05T03:19:29.688Z"
+    "sha": "4ffa86ac2077205575ef057a6b3f3084ea988d30",
+    "run_id": "37260583824",
+    "work_order_version": 2,
+    "at": "2026-10-05T04:16:49.460Z"
   },
   "qa_open_bugs": [
     {
-      "id": "BUG-1",
-      "title": "Expense refusal sentence renders three times in the page"
-    },
-    {
-      "id": "BUG-2",
-      "title": "Saving an edit with no changes reports Expense updated"
+      "id": "BUG-3",
+      "title": "Same-date expenses list in random order instead of newest-first"
     }
   ]
 }

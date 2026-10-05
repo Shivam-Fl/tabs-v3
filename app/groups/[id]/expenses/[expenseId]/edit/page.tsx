@@ -74,9 +74,12 @@ function EditExpenseScreen({
         data={data}
       />
       {/* Outside the editor's own form: a form inside a form is not a thing HTML has, and
-          the delete is its own submission with its own action. */}
-      <section className="rounded-token border border-muted/20 bg-surface p-4">
-        <h2 className="mb-3 text-lg font-semibold">Delete this expense</h2>
+          the delete is its own submission with its own action. The confirm itself is inside a
+          dialog this section only triggers — the same one the group page's row menu opens — so the
+          question naming the expense appears over the page rather than under it, and focus comes
+          back to this button when it closes (IAC-7). */}
+      <section className="rounded-token border border-border bg-surface p-4">
+        <h2 className="mb-3 text-section font-semibold text-ink">Delete this expense</h2>
         <DeleteExpenseForm
           groupId={group.id}
           expenseId={expenseId}

@@ -41,10 +41,33 @@ export function ExpenseScreen({
 }) {
   return (
     <AppShell place={groupName} viewer={viewer}>
-      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+      {/* A form is a form's width, not a list's: ui.md fixes detail and form pages at 640px, and
+          the editor's rows of member inputs read as a column rather than as a table. */}
+      <main className="mx-auto flex w-full max-w-[640px] flex-1 flex-col gap-5 px-4 py-5">
+        {/* Where this screen sits, above the heading rather than under it: a person who arrived by
+            accident should be able to leave before reading what the page is. */}
+        <nav aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-2 text-secondary">
+            <li>
+              <Link
+                className="font-medium text-accent underline-offset-4 hover:underline"
+                href={`/groups/${groupId}`}
+              >
+                {groupName}
+              </Link>
+            </li>
+            <li aria-hidden="true" className="text-ink-subtle">
+              /
+            </li>
+            <li aria-current="page" className="truncate text-ink-muted">
+              {mode === 'new' ? 'New expense' : 'Edit expense'}
+            </li>
+          </ol>
+        </nav>
+
         <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="text-muted">{subtitle}</p>
+          <h1 className="text-page font-semibold text-ink">{title}</h1>
+          <p className="text-secondary text-ink-muted">{subtitle}</p>
         </header>
 
         {archived ? (

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ActivityFeed, type PreservedParams } from '../../../components/activity-feed';
 import { AppShell } from '../../../components/app-shell';
-import { DeleteExpenseForm } from '../../../components/expense-editor';
+import { ExpenseRowMenu } from '../../../components/expense-row-menu';
 import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
 import { INPUT_CLASSES, QUIET_BUTTON } from '../../../components/ui';
@@ -37,9 +37,18 @@ import {
 } from '../../../lib/groups/validation';
 import { listMembers, type MemberRow } from '../../../lib/groups/queries';
 import { formatMinorUnits } from '../../../lib/money/format';
+import { humanDateLabel } from '../../../lib/money/human-date';
 import { computeNetBalances, type MemberBalance } from '../../../lib/settle/balances';
 import { listPayments, type PaymentRow } from '../../../lib/settle/queries';
 import { simplifyDebts, type Transfer } from '../../../lib/settle/simplify';
+import {
+  PAYMENT_NOTICE_FROM_PARAM,
+  PAYMENT_NOTICE_PARAM,
+  PAYMENT_NOTICE_TO_PARAM,
+  directedRemainderMinor,
+  paymentNoticePair,
+  paymentNoticeText,
+} from '../../../lib/settle/validation';
 
 export const metadata: Metadata = { title: 'Group · Tabs' };
 
@@ -79,6 +88,9 @@ export default async function GroupPage({
   searchParams: Promise<{
     archived?: string;
     expense?: string;
+    payment?: string;
+    from?: string;
+    to?: string;
     activity?: string;
     member?: string;
     category?: string;
@@ -122,6 +134,32 @@ export default async function GroupPage({
   // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
   const transfers = simplifyDebts(balances);
 
+  // What a just-recorded or just-deleted payment has to say (AC-6, ADR-0008). The flag rides the
+  // redirect's query, and so does the pair it was about — because the sentence names what is still
+  // owed *between those two*, and that is a fact about the balances, not about the form that
+  // submitted. Both ids have to be seats of this group, in the same read the balances came from:
+  // anything else renders nothing at all, exactly as a forged flag does, so a hand-written URL
+  // cannot put a sentence about two strangers on somebody's screen. The remainder is recomputed
+  // here through the same simplification the suggested payments use, so the notice and the row
+  // under it can never disagree about who owes whom.
+  const seatIds = new Set(balances.map((balance) => balance.membershipId));
+  const paymentPair = paymentNoticePair(
+    { from: query[PAYMENT_NOTICE_FROM_PARAM], to: query[PAYMENT_NOTICE_TO_PARAM] },
+    seatIds,
+  );
+  const paymentNotice =
+    paymentPair === null
+      ? null
+      : paymentNoticeText(
+          query[PAYMENT_NOTICE_PARAM],
+          directedRemainderMinor(
+            transfers,
+            paymentPair.fromMembershipId,
+            paymentPair.toMembershipId,
+          ),
+          access.group.currency,
+        );
+
   return (
     <GroupDetail
       access={access}
@@ -137,6 +175,7 @@ export default async function GroupPage({
       retryHref={pageHref(access.group.id, query)}
       justArchived={query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE}
       expenseNotice={expenseNoticeText(query[EXPENSE_NOTICE_PARAM])}
+      paymentNotice={paymentNotice}
     />
   );
 }
@@ -173,6 +212,7 @@ function GroupDetail({
   retryHref,
   justArchived,
   expenseNotice,
+  paymentNotice,
 }: {
   access: Extract<GroupAccess, { status: 'ok' }>;
   expenses: ExpenseListRow[];
@@ -187,9 +227,13 @@ function GroupDetail({
   retryHref: string;
   justArchived: boolean;
   expenseNotice: string | null;
+  paymentNotice: string | null;
 }) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
+  // What "today" means to the dates in this list, read once on the server: the rows are rendered
+  // here rather than in the browser, so there is no second clock to disagree with this one.
+  const today = new Date().toISOString().slice(0, 10);
   const filtered = filters.memberId !== null || filters.category !== null || filters.search !== null;
 
   // What the chip row re-submits: the expense filter exactly as it stands, so choosing a chip
@@ -320,6 +364,20 @@ function GroupDetail({
           <h2 id="debts-heading" className="text-lg font-semibold">
             Who owes what
           </h2>
+
+          {/* This card's own slot, and the only one a payment notice is ever rendered in (AC-6):
+              recording or deleting a payment redirects here, and the row that held the form — with
+              the region that would have announced it — is gone by then. The expense notice above
+              has its own slot for the same reason, and neither borrows the other's. */}
+          {paymentNotice ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+            >
+              {paymentNotice}
+            </p>
+          ) : null}
 
           <ul className="flex flex-col gap-2">
             {shown.map((balance) => (
@@ -478,40 +536,43 @@ function GroupDetail({
               {expenses.map((expense) => (
                 <li
                   key={expense.id}
-                  className="flex flex-col gap-2 rounded-token border border-muted/20 bg-surface p-3"
+                  className="flex items-start justify-between gap-3 rounded-token border border-border bg-surface p-3"
                 >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-medium">{expense.description}</span>
-                    <span data-amount className="font-semibold">
-                      {formatMinorUnits(expense.amountMinor, group.currency)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted">
-                    <time dateTime={expense.date}>{expense.date}</time> ·{' '}
-                    {expenseCategoryLabel(expense.category)} ·{' '}
-                    {SPLIT_TYPE_LABELS[expense.splitType]} · Paid by{' '}
-                    {expense.payers
-                      .map((payer) =>
-                        expense.payers.length === 1
-                          ? payer.displayName
-                          : `${payer.displayName} ${formatMinorUnits(payer.amountMinor, group.currency)}`,
-                      )
-                      .join(', ')}
-                  </p>
-                  {group.archived ? null : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        className="inline-flex min-h-11 items-center rounded-token border border-muted/40 px-4 font-medium"
-                        href={`/groups/${group.id}/expenses/${expense.id}/edit`}
-                      >
-                        Edit
-                      </Link>
-                      <DeleteExpenseForm
-                        groupId={group.id}
-                        expenseId={expense.id}
-                        description={expense.description}
-                      />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      {/* Truncated with the whole of it in `title`: a long description must not
+                          wrap a row into three lines (ui.md). */}
+                      <span className="min-w-0 truncate font-medium text-ink" title={expense.description}>
+                        {expense.description}
+                      </span>
+                      <span data-amount className="font-semibold tabular-nums text-ink">
+                        {formatMinorUnits(expense.amountMinor, group.currency)}
+                      </span>
                     </div>
+                    <p className="text-secondary text-ink-muted">
+                      {/* What a person calls that day, with the machine-readable one still in the
+                          markup for anything that reads `datetime`. */}
+                      <time dateTime={expense.date}>{humanDateLabel(expense.date, today)}</time> ·{' '}
+                      {expenseCategoryLabel(expense.category)} ·{' '}
+                      {SPLIT_TYPE_LABELS[expense.splitType]} · Paid by{' '}
+                      {expense.payers
+                        .map((payer) =>
+                          expense.payers.length === 1
+                            ? payer.displayName
+                            : `${payer.displayName} ${formatMinorUnits(payer.amountMinor, group.currency)}`,
+                        )
+                        .join(', ')}
+                    </p>
+                  </div>
+                  {/* Edit and Delete live behind the row's overflow menu rather than on the row: a
+                      list of expenses must not read as a list of buttons, and a delete a thumb's
+                      width from an edit link is one somebody presses by accident (ui.md, IAC-7). */}
+                  {group.archived ? null : (
+                    <ExpenseRowMenu
+                      groupId={group.id}
+                      expenseId={expense.id}
+                      description={expense.description}
+                    />
                   )}
                 </li>
               ))}

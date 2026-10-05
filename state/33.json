@@ -453,5 +453,6 @@
   "deferred_criteria": {
     "IAC-2": 38,
     "IAC-4": 39
-  }
+  },
+  "implemented_version": 1
 }

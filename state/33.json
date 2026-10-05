@@ -371,5 +371,9 @@
   "work_order_version": 1,
   "work_order_posted_at": "2026-10-05T18:31:57.513Z",
   "work_order_from": "plan",
-  "work_order_comment": "6000655523"
+  "work_order_comment": "6000655523",
+  "deferred_criteria": {
+    "IAC-2": 38,
+    "IAC-4": 39
+  }
 }

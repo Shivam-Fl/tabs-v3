@@ -171,7 +171,17 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/db/errors.ts",
+    "lib/auth/actions.ts",
+    "lib/groups/actions.ts",
+    "components/auth-form.tsx",
+    "app/signin/page.tsx",
+    "app/signup/page.tsx",
+    "app/icon.svg",
+    "app/layout.tsx",
+    "lib/db/errors.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

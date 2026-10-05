@@ -66,5 +66,7 @@
       "review": "council"
     },
     "decided_at": "2026-10-05T11:13:34.667Z"
-  }
+  },
+  "stopped_at": null,
+  "dispatched_stage": "plan"
 }

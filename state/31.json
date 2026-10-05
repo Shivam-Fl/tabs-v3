@@ -72,7 +72,7 @@
   ],
   "brief_pr": 32,
   "resume_at": null,
-  "stopped_at": null,
+  "stopped_at": "project",
   "replan_requested_at": "2026-10-05T17:32:45.640Z",
   "route_notes": [
     {

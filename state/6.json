@@ -9,12 +9,12 @@
     "plan": 1,
     "ci": 1,
     "review": 1,
-    "qa": 0
+    "qa": 1
   },
   "attempt_run": {
-    "counter": "review",
+    "counter": "qa",
     "n": 1,
-    "run": "37254913496"
+    "run": "37255404994"
   },
   "halted": null,
   "pending": {
@@ -250,7 +250,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-04T16:43:34.526Z",
-  "updated_at": "2026-10-05T02:26:17.035Z",
+  "updated_at": "2026-10-05T02:26:34.761Z",
   "history": [
     {
       "at": "2026-10-05T01:20:04.912Z",
@@ -321,6 +321,11 @@
       "at": "2026-10-05T02:26:17.035Z",
       "agent": "reviewer",
       "action": "-> qa"
+    },
+    {
+      "at": "2026-10-05T02:26:34.761Z",
+      "agent": "qa",
+      "action": "qa attempt 1"
     }
   ],
   "epic": 1,

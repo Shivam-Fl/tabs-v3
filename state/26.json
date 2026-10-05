@@ -1,7 +1,7 @@
 {
   "issue": 26,
   "pr": null,
-  "state": "triage",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -24,8 +24,14 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-05T11:05:26.804Z",
-  "updated_at": "2026-10-05T11:05:26.804Z",
-  "history": [],
+  "updated_at": "2026-10-05T11:05:48.227Z",
+  "history": [
+    {
+      "at": "2026-10-05T11:05:48.227Z",
+      "agent": "intake",
+      "action": "-> planning"
+    }
+  ],
   "issue_snapshot": {
     "title": "Follow-ups from #7: 4 from the review",
     "body": "What the review and QA of PR #22 (for #7) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### Five changed paths sit outside the work order's files[] (groups-panels exports, groups/queries membershipId, settle/queries, settle/summary + its test); each is a justified enabling change, so the work order should be amended, not the code.\n\n> Five changed paths sit outside the work order's files[] (groups-panels exports, groups/queries membershipId, settle/queries, settle/summary + its test); each is a justified enabling change, so the work order should be amended, not the code.\n> \n> `lib/settle/summary.ts:1`\n> \n> Evidence: gh pr view 22 files (22 paths) vs work-order.json files[]; diff sizes: groups-panels +18/-3 export-only, groups/queries +10, settle/queries +72 new, summary +135 new with +256 of tests\n> \n> Fix: Amend work-order.json files[]/tests[] to list the five paths; leave code as is.\n\n### balances.test.ts:328 names the payment-direction convention backwards ('recipient up, payer down'); its own assertions prove sender-up/recipient-down, matching the code.\n\n> balances.test.ts:328 names the payment-direction convention backwards ('recipient up, payer down'); its own assertions prove sender-up/recipient-down, matching the code.\n> \n> `lib/settle/balances.test.ts:328`\n> \n> Evidence: PR ref balances.test.ts lines 328-352: Bo (sender) -1000 to 0, Ada (recipient) +2000 to 1000; code folds sent at +1, received at -1\n> \n> Fix: Rename to 'moves the payer of a payment up and its recipient down, and settles the group'.\n\n### A payment between two departed seats can be recorded but never deleted, stranding a mistaken write with no recourse.\n\n> A payment between two departed seats can be recorded but never deleted, stranding a mistaken write with no recourse.\n> \n> `lib/settle/actions.ts:173`\n> \n> Evidence: createPayment accepts any two ids present in the computeNetBalances map (actions.ts:102-107), and that map includes departed ledger participants (balances.ts departed fold); simplifyDebts explicitly allows transfers naming departed holders and SettleUpForm offers every suggested transfer for recording. deletePayment then requires the acting current member to be the payer or the recipient (actions.ts:173-177) — but neither endpoint is a current member, a departed seat holds no session, and there is no owner override — so the delete is refused forever and the nets stay wrong.\n> \n> Fix: Require at least one endpoint to be a current membership when creating a payment, or allow any current member to delete a payment whose endpoints are both departed.\n\n### The work order's promised transaction-atomicity case for settle writes was not written: no test fails a payment write mid-transaction.\n\n> The work order's promised transaction-atomicity case for settle writes was not written: no test fails a payment write mid-transaction.\n> \n> `lib/settle/actions.test.ts`\n> \n> Evidence: work-order.json tests for lib/settle/actions.test.ts list 'failing write leaves no payment and no activity row (transaction atomicity)'; the 711-line file (18 cases) proves refusals write nothing and proves create/delete round-trips, but grep for atomic/rollback/half-written/part-way finds nothing, while lib/expenses/actions.test.ts:692 proves the identical single-tx shape with a mid-write mock failure ('leaves nothing behind when the write fails part-way through'). The tx closure itself follows the proven pattern, so this is coverage debt, not a suspected half-write.\n> \n> Fix: Add a mid-transaction failure test mirroring the expense one (throw between the payment insert and the activity insert, assert no payment and no activity rows remain).\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #7.",

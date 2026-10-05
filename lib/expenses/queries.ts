@@ -55,10 +55,17 @@ export interface ExpenseListRow {
 /**
  * One group's expenses, newest day first, with who paid for each.
  *
- * The order is `date desc` with the id breaking a tie, which is exactly the `(group_id, date,
- * id)` index the table carries: two expenses entered on the same day come back in a stable
- * order rather than whatever the planner feels like, which matters because this list is what
- * somebody reads to check yesterday's entry.
+ * The order is `date desc`, then `created_at desc` for two on the same day, then `id desc` so
+ * that even a tie on all of it is deterministic. Creation time is the tiebreak that means
+ * something to the reader: the editor opens on today, so every expense entered without touching
+ * the date shares it, and "newest first" on a single day has to be the order somebody typed them
+ * in. The id is a random uuid, so breaking the tie on it alone ordered the day at random —
+ * which is what put this list in a different order on every read (BUG-3). It stays as the last
+ * of the three so the order is total: `created_at` defaults to `now()`, the transaction clock,
+ * so two rows written in one transaction carry it to the microsecond alike.
+ *
+ * The `(group_id, date, id)` index still narrows the read to the one group's rows; it no longer
+ * covers the whole ordering, so the same-day rows are sorted in memory rather than by the index.
  *
  * Payers are a second read rather than a join, because a join would repeat the expense row once
  * per payer and leave the caller to fold them back together. The fold happens here, once, and
@@ -93,7 +100,7 @@ export async function listExpenses(
     .select(EXPENSE_COLUMNS)
     .from(expenses)
     .where(and(...conditions))
-    .orderBy(desc(expenses.date), desc(expenses.id));
+    .orderBy(desc(expenses.date), desc(expenses.createdAt), desc(expenses.id));
 
   if (rows.length === 0) return [];
 

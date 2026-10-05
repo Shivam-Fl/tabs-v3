@@ -1240,6 +1240,43 @@ describe('the expense list', () => {
     expect(rows[0]).toMatchObject({ amountMinor: 1000, splitType: 'equal', category: 'travel' });
   });
 
+  it('reads expenses entered on one day back in the order they were entered', async () => {
+    // T-9: the editor opens on today, so every expense entered without touching the date shares
+    // it — the same-day tie is the ordinary case, not the edge. The id is a random uuid, so
+    // breaking the tie on it made this order a coin toss; creation time makes it the order
+    // somebody typed them in, which is what "newest first" means on a single day.
+    await add({ description: 'alpha', date: '2026-10-05' });
+    await add({ description: 'beta', date: '2026-10-05' });
+    await add({ description: 'gamma', date: '2026-10-05' });
+
+    expect((await listed()).map((row) => row.description)).toEqual(['gamma', 'beta', 'alpha']);
+  });
+
+  it('reads them that way when the date was left as the default today', async () => {
+    // The same case with the editor's own default rather than a literal: the T-9 spec never
+    // touched the date field, so today is the date every one of those three rows carries.
+    const today = new Date().toISOString().slice(0, 10);
+    await add({ description: 'alpha', date: today });
+    await add({ description: 'beta', date: today });
+    await add({ description: 'gamma', date: today });
+
+    expect((await listed()).map((row) => row.description)).toEqual(['gamma', 'beta', 'alpha']);
+  });
+
+  it('reads newest day first even when the days were entered out of order', async () => {
+    // The day outranks the entry time: an expense entered last but dated earlier belongs below
+    // one entered first and dated later, so the tiebreak above cannot leak across days.
+    await add({ description: 'Newest', date: '2026-10-05' });
+    await add({ description: 'Oldest', date: '2026-09-01' });
+    await add({ description: 'Middle', date: '2026-09-20' });
+
+    expect((await listed()).map((row) => row.description)).toEqual([
+      'Newest',
+      'Middle',
+      'Oldest',
+    ]);
+  });
+
   it('filters by the member, whether they paid or owe', async () => {
     await add({
       description: 'Ada paid, both owe',

@@ -164,9 +164,11 @@ export const activityEvents = pgTable(
  * not move it, and `mode: 'string'` keeps it the `YYYY-MM-DD` a date input speaks rather than a
  * Date object that has to survive JSON, a time zone and a round trip to stay the same day.
  *
- * The index is `(group_id, date, id)` because that is exactly the group page's "newest first"
- * read — one group's expenses, newest day first, with the id breaking a tie between two on the
- * same day so the order is a decision rather than whatever the planner returns.
+ * The index is `(group_id, date, id)` because that is what narrows the group page's "newest
+ * first" read to one group's rows, newest day first. It no longer covers that read end to end:
+ * two expenses on the same day are ordered by `created_at` (the order they were entered, which
+ * a random uuid cannot give) and only then by `id`, so the same-day rows are sorted after the
+ * scan rather than by the index.
  */
 export const expenses = pgTable(
   'expenses',

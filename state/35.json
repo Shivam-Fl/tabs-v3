@@ -79,5 +79,264 @@
     "decided_at": "2026-10-05T22:57:15.287Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "Group header shows avatar-mark, name, currency badge and owner-only Settings entry; summary card shows the viewer balance as hero, up to three who-owes-whom lines plus a '+N more in Balances and settle up' link whenever transfers are truncated; primary Add expense and secondary Settle up present; expense/archived/just-archived notices keep their role=status slots.",
+        "how_to_verify": "Seed, sign in, open a 5+ member group with 4+ transfers at 375px and 1280px; read header, summary card and notice slots.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Expenses, Balances and settle up, Activity and Members render as URL-driven tabs (?section=, malformed or blank defaults to expenses); Activity tab shows the 5 newest group rows with View-all linking to /activity?group=<id>; Members tab shows 5 rows with View-all to the members page; rename/archive live only in the Settings dialog, nothing settings-related on the main scroll.",
+        "how_to_verify": "Click each tab, reload each tab URL directly, open Settings as owner and confirm no entry for non-owners and no settings on the scroll.",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Expenses tab lists newest-first rows (avatar left, title plus human-date metadata middle, amount right in ink with payer words 'You paid' or 'X paid' and no direction colour); search plus member/category filters sit in a disclosure that starts collapsed on phones and open inline on desktop, active filter names show on the disclosure summary, and filters survive tab switches via the URL.",
+        "how_to_verify": "Add two expenses same-day out of order, set each filter, switch tabs and reload; check order, disclosure behaviour at 375px and desktop, and that filter plus tab params coexist in the URL.",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Rows expose Edit/Delete only inside an overflow menu; Delete confirms in a dialog naming the expense with a pending guard against double submit; no inline Edit link or red Delete button remains on any row.",
+        "how_to_verify": "Keyboard-open the menu (Enter, Escape, focus return), delete an expense, cancel once and confirm once, double-click confirm.",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Add expense is a header button on desktop and a fixed thumb-reachable button on phones (hidden for archived groups); an empty group shows a what-to-do-first empty state with an Add-expense button; a zero-balance group shows the settled banner with zero neutral; a one-member group shows sane empty states beyond just 'no expenses'.",
+        "how_to_verify": "New empty group at 375px, one-member group, settle a group to zero, open an archived group.",
+        "id": "AC-5",
+        "source": "IAC-5",
+        "verify": "browser"
+      },
+      {
+        "check": "Cold navigation paints skeleton summary card, tab bar and three expense rows with no layout shift; a failed activity read shows inline retry inside the Activity panel preserving ?section=activity; a failed main read shows a full-page error card with retry, never a half ledger; cold navigation to the expense editors never paints the group skeleton.",
+        "how_to_verify": "Throttle/block requests per panel; break the main read; cold-load the new-expense and edit-expense routes under latency; observe each state at 375px.",
+        "id": "AC-6",
+        "source": "IAC-6",
+        "verify": "browser"
+      },
+      {
+        "check": "Expense dates read as people say them computed in the viewer zone and feed times render viewer-zone relative-then-human; no UTC label appears anywhere including server HTML, no-JS render and pre-hydration paint (zone-neutral absolute first paint, viewer-zone upgrade after mount); layout holds at 375px and 1280px with no horizontal scroll; one h1, visible focus, labelled controls, reduced-motion respected.",
+        "how_to_verify": "Phone plus desktop viewports, keyboard only, forced reduced-motion, JS disabled pass; compare timestamps against the viewer clock with the server in a different zone.",
+        "id": "AC-7",
+        "source": "IAC-7",
+        "verify": "browser"
+      },
+      {
+        "check": "formatExpenseDate covers today/yesterday/week/day-year/other-year against an explicit now (no server clock) and formatViewerTimestamp covers just-now/minutes/hours/days/absolute buckets with invalid input falling back to the raw string.",
+        "how_to_verify": "Run the cases named in tests[] lib/dates.test.ts.",
+        "id": "AC-8",
+        "source": "IAC-7",
+        "verify": "test"
+      },
+      {
+        "check": "Group loading boundary streams the skeleton summary, tabs and three expense rows (Flight fallback marker plus data-skeleton attrs), announces the wait and pulses motion-safe only; the editors boundary renders a form-shaped fallback and never the group skeleton.",
+        "how_to_verify": "Run the cases named in tests[] for both loading boundaries.",
+        "id": "AC-9",
+        "source": "IAC-6",
+        "verify": "test"
+      },
+      {
+        "check": "groupSectionFrom defaults unknown/blank values to expenses and accepts only the four closed values.",
+        "how_to_verify": "Run the cases named in tests[] lib/groups/validation.test.ts.",
+        "id": "AC-10",
+        "source": "IAC-2",
+        "verify": "test"
+      },
+      {
+        "check": "Guard behaviour is unchanged: signed-out redirects to signin with next, stranger/malformed/missing ids 404 identically, members see the page.",
+        "how_to_verify": "Signed-out fetch, cross-user fetch of another user's group, malformed id.",
+        "id": "AC-11",
+        "source": "TR-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Every balance and transfer on the page comes from computeNetBalances plus simplifyDebts with no new arithmetic; summary hero, member rows and Balances tab agree with each other and with the members page; a departed seat holding a balance keeps its 'No longer in the group' label wherever it renders.",
+        "how_to_verify": "Multi-member group with partial settle-up plus a departed seat with balance: compare hero, member balances and suggested transfers across tabs and the members page.",
+        "id": "AC-12",
+        "source": "TR-9",
+        "verify": "browser"
+      },
+      {
+        "check": "Activity excerpt shows the newest 5 group events with actor, action and viewer-zone time identical to the same rows on /activity; no read signature, endpoint or schema changed (group scoping is an in-page filter on ?group=, not a query change); ActivityFeed props and ActivityFeedSkeleton exports are unchanged so app/activity/loading.tsx keeps working.",
+        "how_to_verify": "Produce expense/payment/member events, compare excerpt rows against /activity and /activity?group=<id>; review the diff for query/action/schema changes.",
+        "id": "AC-13",
+        "source": "TR-10",
+        "verify": "browser"
+      },
+      {
+        "check": "Each screen state (ideal/empty/loading/partial/error) is designed per ui.md; amounts render in group currency tabular with direction in words plus colour only where a real net is shown, zero neutral; main screen interactive under 1s.",
+        "how_to_verify": "Walk empty/one/many/long-name/large-amount fixtures; time the load; check zero balances never render debt red and no expense row carries direction colour.",
+        "id": "AC-14",
+        "source": "TR-11",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Client-side tab state (useState tab, all four sections fetched and toggled without navigation).",
+        "rejected_because": "Breaks the bookmarkable filter-URL contract the page documents, hides three sections from no-JS readers, and splits filter state across tabs; URL tabs keep every panel linkable and server-rendered."
+      },
+      {
+        "approach": "A new per-group full activity route that the excerpt links to.",
+        "rejected_because": "A new route plus reads for what /activity already shows; excerpt (newest 5, sliced in the page, no read change) plus a View-all link to /activity scoped by ?group= satisfies 'excerpt linking to the full feed' with zero new surface."
+      },
+      {
+        "approach": "Desktop side-card layout (summary card beside the main column at 1024px, which IAC-7 permits).",
+        "rejected_because": "Optional per the issue ('may'), and it doubles the loading-skeleton sync surface and the responsive QA matrix for a cosmetic gain; single centred column keeps every state trivially in sync."
+      }
+    ],
+    "approach": "Restyle and reorganise the group page in place, reusing every read, action and validation module unchanged, with the critique's confirmed defects designed out: (1) add GROUP_SECTION_PARAM/GROUP_SECTIONS/groupSectionFrom to lib/groups/validation.ts (closed values expenses|balances|activity|members, default expenses) with tests; (2) add lib/dates.ts as pure presenters only — formatExpenseDate(dateStr, todayStr) takes an explicit day so no server clock ever decides Today/Yesterday, formatViewerTimestamp formats relative bucket plus local absolute — with tests; (3) rewrite app/groups/[id]/page.tsx around URL tabs: breadcrumb, header (Avatar 40 + h1 + currency Badge + owner-only Settings entry), summary Card (hero viewer balance, first 3 transfer lines plus '+N more in Balances' link, settled lent-tint banner at zero, Add expense primary + Settle-up-to-balances secondary), tab nav preserving all filter params with aria-current, Expenses panel (disclosure collapsed on phones and open inline from sm: up with active-filter names on the summary, existing GET filter form + hidden section input, ListRow rows with payer Avatar, human-date meta via ExpenseDate island, amounts in ink with payer words and no direction colour), Balances panel (debts Card + SettleUpForm + DeletePaymentForm untouched, departed seats keep their label), Activity panel (excerpt slice(0,5) via shared ActivityRows, no chips in the excerpt, View-all to /activity?group=<id>, existing isolated try/catch kept with retry href preserving section, full-page try/catch around main reads rendering an error card with retry), Members panel (5-row excerpt with Avatar/Badge/balance + View-all link), owner Settings dialog only, fixed bottom Add-expense CTA on phones with main bottom padding, all three notice slots preserved in their role=status form; (4) new components/group-page.tsx islands: ExpenseRowMenu (menu button aria-expanded, Escape/outside close, focus return; Edit link; Delete opening shared Dialog with ConfirmStep naming the expense, wired to deleteExpense with pending + inline refusal) and GroupSettingsEntry (Settings button opening Dialog hosting RenameGroupForm + ArchiveGroupForm unchanged + members link) — no Timestamp here; (5) new components/timestamp.tsx neutral client islands: Timestamp (zone-neutral absolute first paint, effect upgrade to viewer-zone relative+absolute inside time dateTime) and ExpenseDate (server absolute first paint, viewer-zone Today/Yesterday upgrade), imported by the group page, the feed and /activity alike; (6) edit components/activity-feed.tsx to extract shared ActivityRows used by ActivityFeed and the excerpt and to render timestamps via Timestamp (chips, props, copy, order, empty text and ActivityFeedSkeleton exports untouched); (7) edit app/activity/page.tsx to accept an optional ?group= filter applied in the page (no read/signature change, default all groups) and to render through the shared rows; (8) add app/groups/[id]/loading.tsx group skeleton boundary plus app/groups/[id]/expenses/loading.tsx minimal editor boundary so the editors never inherit the group skeleton, with tests asserting the streamed Flight fallback marker plus data-skeleton attrs per the QA environment notes. DeleteExpenseForm, settle panels, editor internals and all lib reads stay untouched.",
+    "assumptions": [
+      "PGlite single-connection sequential reads stay as-is; tab switches cost one server navigation, fast enough locally to meet the 1s budget.",
+      "lucide-react and next/font Inter are already adopted per package.json and docs/ui.md, so no new dependency is needed; the exact icon export names (MoreVertical vs EllipsisVertical, Plus, Settings, Search) are verified at build time rather than asserted here.",
+      "Linking the Activity excerpt to /activity scoped by ?group= counts as 'the full feed': the group scope is preserved without a new route, and the unscoped cross-group feed remains one click away.",
+      "Excerpt sizes (5 activity rows, 5 members, 3 transfer lines plus overflow link) are presentation choices needing no product decision.",
+      "Whether reviewers prefer the ?group= default filter vs an unfiltered /activity landing is left to review; the scoped link is the default because the reader came from a group."
+    ],
+    "confidence": 76,
+    "confidence_rationale": "Every read, action and validation path is reused verbatim and the risky shared components (settle panels, delete form, feed exports, /activity loading skeleton) are either untouched or constrained by explicit no-change criteria; the critique's five major defects were each verified against the code (editors without a boundary, server-clock relative dates, UTC first paint, cross-group link target, payer-colour direction) and designed out rather than patched. What keeps this below 90 is judgment rather than fact: the ?group= scoping choice, the ink-amount semantics and the disclosure responsive behaviour are sound readings of ui.md but a reviewer may still prefer differently, and the loading-stream test pattern depends on real-latency behaviour QA must confirm.",
+    "debate_summary": "The critique was right on five majors and I rewrote the plan around them: (1) the [id]/loading.tsx boundary would wrap the editor routes, so the work order adds a minimal expenses/loading.tsx boundary; (2) server-rendered Today/Yesterday uses the server clock, so relative labels move to a client ExpenseDate island with a zone-neutral server first paint; (3) the UTC-labelled first paint re-ships exactly what ui.md bans, so first paints are zone-neutral absolute dates; (4) the excerpt diagnosis was factually right but the prescription (keep the full group feed with chips on the group page) contradicts IAC-2 and the issue's own 'activity-excerpt reads' contract, so the excerpt stays and the scope loss is fixed the other way with a ?group= filter on /activity applied in the page; (5) payer-coloured row totals assert a direction the ledger does not support, so row amounts render in ink with payer words and colour is reserved for real nets. Minor findings adopted: disclosure open-inline on desktop with active filters on the summary, Timestamp moved to a neutral components/timestamp.tsx module, app/activity/page.tsx named in files[], the missing validation test path supplied, a '+N more' overflow link on the summary, and loading tests pinned on the streamed Flight fallback per the QA environment notes. Dismissed: renaming lucide icon imports (unverified without node_modules; package.json confirms the dependency and the build is the check), and keeping chips plus the full filterable feed inside the Activity tab (the issue and ui.md both specify an excerpt linking out). Residual no-JS disclosure re-collapse and feed-row reflow after mount are recorded as risks, not silently dropped.",
+    "evidence": [],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Restructure into header/summary/URL-tabbed sections per ui.md Group page: breadcrumb, avatar-mark header with currency badge and owner-only Settings entry, summary card with hero balance plus '+N more' overflow link, tab nav preserving filter params, redesigned expense rows (ink amounts, payer words, ExpenseDate island, overflow menus), Balances/Activity-excerpt/Members-excerpt panels, settings moved to dialog, fixed mobile CTA, full-failure error card with section-preserving retry, human dates; reuse listExpenses/listMembers/computeNetBalances/simplifyDebts/listPayments/listGroupActivity unchanged; all notice slots and the departed-seat label preserved.",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "This is the screen the issue rebuilds; all IAC-1..7 land here."
+      },
+      {
+        "action": "create",
+        "change": "Group skeleton boundary only: AppShell with place null, skeleton summary card, tab bar and three expense rows with data-skeleton attrs, role=status wait announcement, aria-busy main, motion-safe pulse only; scoped so it cannot leak onto the editor routes.",
+        "path": "app/groups/[id]/loading.tsx",
+        "why": "IAC-6 loading state with no layout shift for the group page itself."
+      },
+      {
+        "action": "create",
+        "change": "Minimal editor-shaped loading boundary (form skeleton, never the group summary/tabs/rows) covering the new-expense and edit-expense segments so they do not inherit the group skeleton.",
+        "path": "app/groups/[id]/expenses/loading.tsx",
+        "why": "Critique finding 1: without this, the [id] boundary paints a ledger skeleton over a form."
+      },
+      {
+        "action": "create",
+        "change": "Client islands: ExpenseRowMenu (overflow menu with Edit link and Dialog delete-confirm naming the expense via deleteExpense + ConfirmStep with pending guard) and GroupSettingsEntry (Settings button opening Dialog hosting existing rename/archive forms); timestamps deliberately not here.",
+        "path": "components/group-page.tsx",
+        "why": "IAC-4 overflow actions and IAC-2 settings-behind-entry need client behaviour the server page cannot render."
+      },
+      {
+        "action": "create",
+        "change": "Neutral client time islands: Timestamp (zone-neutral absolute first paint, effect upgrade to viewer-zone relative+absolute inside time dateTime, never a UTC label) and ExpenseDate (server absolute first paint, viewer-zone Today/Yesterday upgrade); shared by group page, feed and /activity.",
+        "path": "components/timestamp.tsx",
+        "why": "IAC-7 viewer-zone times without the banned UTC first paint and without making a screen module a dependency of shared code."
+      },
+      {
+        "action": "edit",
+        "change": "Extract shared ActivityRows list used by ActivityFeed and the group excerpt; render row timestamps through Timestamp. Props, chips, copy, order, empty text and ActivityFeedSkeleton exports unchanged so /activity and its skeleton cannot break.",
+        "path": "components/activity-feed.tsx",
+        "why": "The excerpt must reuse the feed rendering (contract face) without duplicating row markup; timestamps must move to the viewer zone per IAC-7."
+      },
+      {
+        "action": "edit",
+        "change": "Accept optional ?group= to scope the feed to one group (filter applied in the page on row.groupId, no read/signature change, default all groups); render through the shared rows so times are zone-correct; retry preserves filter and group params.",
+        "path": "app/activity/page.tsx",
+        "why": "The group excerpt's View-all target must preserve group scope; this page's rendered output also changes via Timestamp so it must be named."
+      },
+      {
+        "action": "edit",
+        "change": "Add GROUP_SECTION_PARAM, GROUP_SECTIONS closed set and groupSectionFrom parser (unknown/blank defaults to expenses) beside the existing filter-param pattern.",
+        "path": "lib/groups/validation.ts",
+        "why": "Tab state lives in the URL like the existing filters, so parser and key live with the other boundary constants and cannot drift."
+      },
+      {
+        "action": "create",
+        "change": "Pure date presenters with no clock of their own: formatExpenseDate for YYYY-MM-DD against an explicit today string to Today/Yesterday/weekday/3 Oct/3 Oct 2025, and formatViewerTimestamp for relative bucket plus local-zone absolute with raw-string fallback. No backend branch, no timezone input needed.",
+        "path": "lib/dates.ts",
+        "why": "IAC-7 human dates; relative labels are decided with a viewer-supplied day so the server clock can never mislabel them."
+      }
+    ],
+    "issue": 35,
+    "kind": "feature",
+    "out_of_scope": [
+      "Expense editor form internals and settle-up sheet internals (next piece): SettleUpForm/DeletePaymentForm render unchanged inside the Balances tab; inline per-transfer forms are NOT converted to the dialog/sheet flow here.",
+      "Balance math, simplification, filter semantics and activity-writing changes: no split, balance, simplify or feed-writer code is touched; ?group= filters already-read rows in the page.",
+      "Dark mode: tokens stay light-only per ui.md.",
+      "Approved docs and framework paths (.sdlc/**, docs/**, .github/**): untouched; no ADR is recorded by this plan.",
+      "A separate per-group full activity route: group scoping is a ?group= filter on /activity instead.",
+      "Desktop side-card summary layout: single centred column kept (IAC-7 allows either)."
+    ],
+    "qa_script": [
+      "Seed and sign in as two users in different zones; open a group with several expenses, payments and member events.",
+      "At 375px and 1280px: header, hero balance, transfer lines plus '+N more' link, Add expense (fixed bottom button on phone, header button on desktop), Settle up jumps to Balances tab.",
+      "Switch all four tabs; reload each tab URL directly; try malformed ?section=; set expense filters then switch tabs and confirm filters survive.",
+      "Keyboard only: tab bar, filter disclosure, overflow menu open/Edit/Escape/Delete confirm with focus return, Settings dialog open/close.",
+      "Delete an expense from the menu (cancel once, confirm once, confirm names the expense); edit via the menu link.",
+      "Empty group: what-to-do-first state with Add button; settled group: settled banner, no red zero; one-member group sane.",
+      "Block the activity read on ?section=activity: inline retry keeps the tab; break the main read: full-page error with retry; cold-load editors under latency: never the group skeleton.",
+      "JS disabled: no UTC text anywhere, absolute dates readable, GET filter forms work; reduced motion on: no pulse/spin; screenshots at 375x812 and 1280x800 compared with landing/auth screens."
+    ],
+    "residual_risks": [
+      "Timestamp first paint is a zone-neutral absolute date that upgrades to viewer-zone text after mount; on a fast connection it may flicker once and feed rows may reflow slightly — the time element keeps its dateTime so assistive tech reads one stable value.",
+      "No-JS readers get the zone-neutral absolute date (correct) but never the relative upgrade, and submitting the GET filter form re-collapses the phone disclosure; the disclosure summary names the active filters so the state is still communicated.",
+      "The ?group= scoping on /activity is a product judgment (scoped by default from a group entry, unscoped feed one click away); review may prefer the unfiltered landing."
+    ],
+    "risks": [
+      "The delete-confirm question sentence is duplicated between DeleteExpenseForm (edit page) and the row menu confirm; a future copy change must touch both — flagged here rather than refactored, to avoid changing the edit page caller.",
+      "A departed seat with a balance renders in balance/transfer lists but has no member row in the Members excerpt; the excerpt links to the members page where it is labelled, and the label rule is pinned in AC-12 rather than special-cased here.",
+      "Icon export names are verified at build time; if the installed lucide-react has removed the MoreVertical alias, use the current vertical-ellipsis export with identical placement and size."
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "today/yesterday render as words against an explicit now, never the server clock",
+          "same-week date renders weekday, same-year renders '3 Oct', prior year renders '3 Oct 2025'",
+          "viewer timestamp buckets: just now, minutes, hours, days, then absolute; invalid input falls back to the raw string"
+        ],
+        "path": "lib/dates.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "streamed Flight fallback carries the skeleton summary, tabs and at least three expense rows, not a blank page",
+          "announces the wait (role=status, aria-busy) and every skeleton block pulses motion-safe only",
+          "does not render inside the expenses segments (editors keep their own boundary)"
+        ],
+        "path": "app/groups/[id]/loading.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "renders a form-shaped fallback with no group summary, tabs or expense rows",
+          "announces the wait motion-safe only"
+        ],
+        "path": "app/groups/[id]/expenses/loading.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "groupSectionFrom accepts each of the four closed values",
+          "blank/unknown/missing section defaults to expenses"
+        ],
+        "path": "lib/groups/validation.test.ts"
+      }
+    ],
+    "understanding": "The group page is still the pre-redesign stacked screen: breadcrumb, plain h1 header, Your-balance and Who-owes-what sections, inline Edit links plus red Delete buttons on every expense row, owner rename/archive forms inline on the main scroll, raw YYYY-MM-DD dates and UTC-labelled feed times, and no loading boundary. The issue rebuilds it into the ui.md Group page (organised, tabbed, summary-first, Add expense always reachable, settings behind a Settings entry) reusing the piece-1 component set and the existing group/expense-list/balance/activity-excerpt reads with no endpoint or schema change; editor and settle-up internals belong to the next piece. The critique's diagnosis is right but five of its major findings change the plan: the new loading boundary would wrap the editor routes, server-rendered Today/Yesterday uses the wrong clock, the UTC first paint re-ships what ui.md bans, the excerpt link drops group scope, and payer-coloured row totals assert a direction the ledger does not support.",
+    "unknowns": [
+      "Exact QA seed fixture shape for the manual walk (group sizes, currencies) — the qa_script assumes the standard seed with multiple split types and a placeholder.",
+      "Whether reviewers prefer the scoped /activity?group=<id> landing or the unfiltered /activity feed as the excerpt target; scoped is chosen because the reader came from a group."
+    ],
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-05T23:08:12.589Z",
+  "validated_ac_changes": []
 }

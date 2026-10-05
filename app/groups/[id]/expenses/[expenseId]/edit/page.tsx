@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { DeleteExpenseForm, ExpenseEditor } from '../../../../../../components/expense-editor';
+import { ExpenseScreen } from '../../../../../../components/expense-screen';
 import { withDb } from '../../../../../../lib/db/client';
 import { getExpenseEditorData, type ExpenseEditorData } from '../../../../../../lib/expenses/queries';
 import { expenseScope } from '../../../../../../lib/expenses/validation';
@@ -58,42 +58,30 @@ function EditExpenseScreen({
   const { group } = access;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{`Edit “${data.description}”`}</h1>
-        <p className="text-muted">{`${group.name} · amounts in ${group.currency}`}</p>
-      </header>
-
-      {group.archived ? (
-        <p role="status" className="rounded-token border border-muted/40 bg-surface p-3 text-sm">
-          This group is archived, so this expense cannot be changed.
-        </p>
-      ) : (
-        <>
-          <ExpenseEditor
-            groupId={group.id}
-            expenseId={expenseId}
-            currency={group.currency}
-            data={data}
-          />
-          {/* Outside the editor's own form: a form inside a form is not a thing HTML has, and
-              the delete is its own submission with its own action. */}
-          <section className="rounded-token border border-muted/20 bg-surface p-4">
-            <h2 className="mb-3 text-lg font-semibold">Delete this expense</h2>
-            <DeleteExpenseForm
-              groupId={group.id}
-              expenseId={expenseId}
-              description={data.description}
-            />
-          </section>
-        </>
-      )}
-
-      <p className="text-muted">
-        <Link className="text-accent underline" href={`/groups/${group.id}`}>
-          Back to {group.name}
-        </Link>
-      </p>
-    </main>
+    <ExpenseScreen
+      mode="edit"
+      groupId={group.id}
+      groupName={group.name}
+      title={`Edit “${data.description}”`}
+      subtitle={`${group.name} · amounts in ${group.currency}`}
+      archived={group.archived}
+    >
+      <ExpenseEditor
+        groupId={group.id}
+        expenseId={expenseId}
+        currency={group.currency}
+        data={data}
+      />
+      {/* Outside the editor's own form: a form inside a form is not a thing HTML has, and
+          the delete is its own submission with its own action. */}
+      <section className="rounded-token border border-muted/20 bg-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold">Delete this expense</h2>
+        <DeleteExpenseForm
+          groupId={group.id}
+          expenseId={expenseId}
+          description={data.description}
+        />
+      </section>
+    </ExpenseScreen>
   );
 }

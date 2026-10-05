@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ExpenseEditor } from '../../../../../components/expense-editor';
+import { ExpenseScreen } from '../../../../../components/expense-screen';
 import { withDb } from '../../../../../lib/db/client';
 import { getExpenseEditorData, type ExpenseEditorData } from '../../../../../lib/expenses/queries';
 import { guardGroup, type GroupAccess } from '../../../../../lib/groups/authz';
@@ -50,32 +50,15 @@ function NewExpenseScreen({
   const { group, user } = access;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[1024px] flex-col gap-5 p-4">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{`Add an expense to ${group.name}`}</h1>
-        <p className="text-muted">
-          {`Amounts are in ${group.currency}. Recorded by ${user.displayName}.`}
-        </p>
-      </header>
-
-      {group.archived ? (
-        <p role="status" className="rounded-token border border-muted/40 bg-surface p-3 text-sm">
-          This group is archived, so nothing can be added to it.
-        </p>
-      ) : (
-        <ExpenseEditor
-          groupId={group.id}
-          expenseId={null}
-          currency={group.currency}
-          data={data}
-        />
-      )}
-
-      <p className="text-muted">
-        <Link className="text-accent underline" href={`/groups/${group.id}`}>
-          Back to {group.name}
-        </Link>
-      </p>
-    </main>
+    <ExpenseScreen
+      mode="new"
+      groupId={group.id}
+      groupName={group.name}
+      title={`Add an expense to ${group.name}`}
+      subtitle={`Amounts are in ${group.currency}. Recorded by ${user.displayName}.`}
+      archived={group.archived}
+    >
+      <ExpenseEditor groupId={group.id} expenseId={null} currency={group.currency} data={data} />
+    </ExpenseScreen>
   );
 }

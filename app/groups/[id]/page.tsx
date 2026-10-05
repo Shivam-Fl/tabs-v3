@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { DeleteExpenseForm } from '../../../components/expense-editor';
 import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
+import { INPUT_CLASSES, QUIET_BUTTON } from '../../../components/ui';
 import { withDb } from '../../../lib/db/client';
 import {
   EXPENSE_CATEGORY_PARAM,
@@ -32,10 +33,6 @@ import { listPayments, type PaymentRow } from '../../../lib/settle/queries';
 import { simplifyDebts, type Transfer } from '../../../lib/settle/simplify';
 
 export const metadata: Metadata = { title: 'Group · Tabs' };
-
-const QUIET_BUTTON = 'min-h-11 rounded-token border border-muted/40 px-4 font-medium';
-const INPUT_CLASSES =
-  'min-h-11 w-full rounded-token border border-muted/40 bg-surface px-3 text-ink placeholder:text-muted';
 
 /**
  * The group detail screen: who owes whom here, and what happened recently — the header, the

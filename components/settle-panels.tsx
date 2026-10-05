@@ -6,7 +6,7 @@ import { minorUnitsText, parseMinorUnits } from '../lib/money/splits';
 import { createPayment, deletePayment } from '../lib/settle/actions';
 import type { Transfer } from '../lib/settle/simplify';
 import { IDLE_PAYMENT_STATE, type PaymentActionState } from '../lib/settle/validation';
-import { ConfirmStep, StateMessage } from './groups-panels';
+import { ConfirmStep, INPUT_CLASSES, QUIET_BUTTON, StateMessage } from './ui';
 
 /**
  * The settle-up islands (TR-9, AC-3).
@@ -30,10 +30,6 @@ import { ConfirmStep, StateMessage } from './groups-panels';
  * name — the same three functions the expense editor uses, so a partial payment means there what
  * it means here.
  */
-
-const INPUT_CLASSES =
-  'min-h-11 w-full rounded-token border border-muted/40 bg-surface px-3 text-ink placeholder:text-muted';
-const QUIET_BUTTON = 'min-h-11 rounded-token border border-muted/40 px-4 font-medium';
 
 /** A recorded payment, as this panel needs it — the row the server read, plus nothing else. */
 interface RecordedPayment {

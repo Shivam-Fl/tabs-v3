@@ -20,9 +20,18 @@ import {
   GROUP_TYPE_LABELS,
   IDLE_GROUP_STATE,
   PLACEHOLDER_NAME_MAX,
-  type GroupActionState,
 } from '../lib/groups/validation';
 import { formatMinorUnits } from '../lib/money/format';
+import {
+  ConfirmStep,
+  DANGER_BUTTON,
+  FieldError,
+  INPUT_CLASSES,
+  LABEL_CLASSES,
+  PRIMARY_BUTTON,
+  QUIET_BUTTON,
+  StateMessage,
+} from './ui';
 
 /**
  * The client islands of the group screens. Every page around them is a Server Component; these
@@ -36,84 +45,10 @@ import { formatMinorUnits } from '../lib/money/format';
  * Destructive actions (remove, leave, archive, rotate, disable) go through a confirm step that
  * names the object and stays on the page: a native dialog would be the one control a keyboard
  * user can dismiss with a stray Escape and a browser agent cannot drive reliably.
- */
-
-const INPUT_CLASSES =
-  'min-h-11 w-full rounded-token border border-muted/40 bg-surface px-3 text-ink placeholder:text-muted';
-const LABEL_CLASSES = 'text-sm font-medium';
-const PRIMARY_BUTTON =
-  'min-h-11 rounded-token bg-accent px-4 font-medium text-surface disabled:opacity-60';
-const QUIET_BUTTON = 'min-h-11 rounded-token border border-muted/40 px-4 font-medium';
-const DANGER_BUTTON = 'min-h-11 rounded-token border border-danger/50 px-4 font-medium text-danger';
-
-/**
- * What a live region needs from an action state: a status and the sentence to announce. Typed
- * structurally rather than as `GroupActionState` so the settle-up islands — whose state is
- * declared beside their own boundary — can share this one region instead of a second copy of it.
- */
-export interface StatusMessageState {
-  status: 'idle' | 'error' | 'success';
-  message: string;
-}
-
-export function StateMessage({ state }: { state: StatusMessageState }) {
-  if (state.status === 'idle' || state.message === '') return null;
-
-  return (
-    <p
-      role={state.status === 'error' ? 'alert' : 'status'}
-      aria-live="polite"
-      className={state.status === 'error' ? 'text-sm text-danger' : 'text-sm text-lent'}
-    >
-      {state.message}
-    </p>
-  );
-}
-
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-  return (
-    <p id={id} className="text-sm text-danger">
-      {message}
-    </p>
-  );
-}
-
-/**
- * The confirm step every destructive action shares: a question naming the object, then a pair.
  *
- * Exported because the settle-up islands need the same step and the same reasoning (AC-3): one
- * confirm implementation, so a delete cannot be the one action that forgot to ask.
+ * The class strings and the three small components the forms are built from live in
+ * `components/ui.tsx`, shared with the other screens' forms; what is left here is the behaviour.
  */
-export function ConfirmStep({
-  question,
-  confirmLabel,
-  pendingLabel,
-  isPending,
-  onCancel,
-}: {
-  question: string;
-  confirmLabel: string;
-  pendingLabel: string;
-  isPending: boolean;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 rounded-token border border-danger/40 p-3">
-      <p role="alert" className="text-sm">
-        {question}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={isPending} aria-busy={isPending} className={DANGER_BUTTON}>
-          {isPending ? pendingLabel : confirmLabel}
-        </button>
-        <button type="button" onClick={onCancel} className={QUIET_BUTTON}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export function CreateGroupForm({ defaultCurrency }: { defaultCurrency: string }) {
   const [state, formAction, isPending] = useActionState(createGroup, IDLE_GROUP_STATE);

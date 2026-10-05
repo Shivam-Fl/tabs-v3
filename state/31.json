@@ -289,7 +289,7 @@
         ],
         "title": "Members, activity and profile plus display and accessibility sweep",
         "why": "Inviting, rostering, following what changed, and editing a profile all look like the same product, with money, dates, and states reading consistently everywhere.",
-        "issue": null
+        "issue": 37
       }
     ],
     "understanding": "Epic #31 is UI-only: docs/ui.md plus Inter via next/font and lucide-react were decided and approved in #32, and the three human decisions freeze stack, data model, money rules, TRs, and every other decision, so this split covers only TR-11/S-8 presentation with zero behaviour change. Clubbing test (budget: maintainer.club_if_under_files=6; high overlap + low standalone value + small combined size = club): pair 1-2 foundation/shell/landing/auth vs home -> split (low file overlap: layout plus components plus landing/auth routes vs home route; each demoable alone as first paint plus sign-in versus balance overview; combined far exceeds one reviewable PR). Pair 2-3 home vs group page -> split (different routes: home summary/people/groups rows vs group header/summary/tabs/expense rows/filters; each independently shippable overview versus detail; combined two full screens exceeds one work order). Pair 3-4 group page vs expense-editor-plus-settle-up -> split (moderate pattern overlap in dialogs and money inputs but distinct surfaces: section organisation and lists versus two interactive money forms with live shares, prefill, and validation; each demoable with the other on old styling; combined list restructure plus two forms exceeds one PR). Pair 4-5 money forms vs members/activity/profile-plus-sweep -> split (low overlap: expense and payment form files vs member, feed, and profile routes; core write loop versus roster/feed/settings plus formatting sweep; combined far too large). Clubbed inside the pieces rather than between them: expense editor with settle-up sheet is ONE issue (high overlap in money inputs, dialogs/sheets, validation and confirm patterns on adjacent group files; settle-up has no user meaning without the balances context; together still one form-focused work order, hence two AC groups); members with activity with profile is ONE issue (each alone is 2-4 files, together under the ~6-file budget in one reviewable PR; separate QA cycles for three thin screens would triple overhead for no separable user value, hence three AC groups plus the sweep). No other open sdlc:epic exists (issues.json holds only #31 plus coverage #24), so no epic_links; chain is kept to depends_on piece 1 only so slices 2-5 can build in parallel once the foundation lands.",
@@ -299,6 +299,7 @@
     33,
     34,
     35,
-    36
+    36,
+    37
   ]
 }

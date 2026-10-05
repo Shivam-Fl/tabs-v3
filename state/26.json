@@ -75,5 +75,111 @@
     "decided_at": "2026-10-05T11:10:08.457Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "The payment-direction case in lib/settle/balances.test.ts is titled 'moves the payer of a payment up and its recipient down, and settles the group' and the suite passes.",
+        "how_to_verify": "CI runs npm run test:ci; locally npx vitest run lib/settle/balances.test.ts — the renamed case passes with its assertions unchanged (sender Bo -1000 to 0, recipient Ada +2000 to 1000).",
+        "id": "AC-1",
+        "verify": "test"
+      },
+      {
+        "check": "Submitting a payment whose payer and recipient are both departed seats is refused with 'A payment must include someone still in the group.' and writes no payment row and no activity row.",
+        "how_to_verify": "npx vitest run lib/settle/actions.test.ts — the new case 'refuses a payment between two departed seats without writing anything' passes. Not browser-driven: leave/remove is blocked by a non-zero balance (TR-7), so QA cannot arrange two departed seats with a suggested transfer through the live UI.",
+        "id": "AC-2",
+        "verify": "test"
+      },
+      {
+        "check": "A payment write that fails between the payment insert and the activity insert leaves no payment row and no activity row behind.",
+        "how_to_verify": "npx vitest run lib/settle/actions.test.ts — the new case 'leaves no payment and no activity row when the write fails part-way through' passes (mirrors lib/expenses/actions.test.ts:692).",
+        "id": "AC-3",
+        "verify": "test"
+      },
+      {
+        "check": "On the group page, recording a suggested settle-up payment shows a success message in the panel and moves both balances toward zero, and deleting that payment behind its confirm restores the balances.",
+        "how_to_verify": "Boot via npm run sdlc:serve, sign up at /signup, create a group at /groups/new, add an expense, use Settle up on the debts card, then Delete on the recorded payment; both outcomes announce in the panel live region (components/settle-panels.tsx StateMessage).",
+        "id": "AC-4",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Allow any current member to delete a payment whose endpoints are both departed.",
+        "rejected_because": "Widens delete beyond TR-9 'deletable by involved members' and breaks the not-involved-reads-as-not-there property pinned at lib/settle/actions.test.ts:625; prevention at create is a smaller diff that preserves the rule."
+      },
+      {
+        "approach": "Refuse both-departed creates with the existing GROUP_NOT_FOUND_MESSAGE.",
+        "rejected_because": "Misnames the failure: the group exists and both seats are known ledger participants already shown on the balances screen, so nothing leaks and conventions require an error that names what is off."
+      }
+    ],
+    "approach": "Fix the one real defect at its source and pay down the two coverage debts in the same slice, with no UI component change. In lib/settle/actions.ts createPayment, after the existing endpoint-belongs-to-group check, load the group's current membership ids and refuse with a new explicit message when neither endpoint is current — placeholders count as current because their membership row exists (null userId is not the test; row existence is). To make the promised atomicity case writable, move the pure paymentSubject helper verbatim from actions.ts to lib/settle/validation.ts and import it in both tx closures, mirroring how the expense test mocks splitAmount; the test then throws between the payment insert and the activity insert. Rename the backwards test title in balances.test.ts. The settle panels need no change: the new refusal renders through the existing panel-level StateMessage live region, and one-departed payments (the ADR-0007 settle-a-departed-seat flow) keep working.",
+    "assumptions": [
+      "Unit tests on PGlite are the proof surface for the guard and the atomicity case: leave/remove is blocked by a non-zero balance (TR-7), so QA cannot arrange two departed seats with a suggested transfer through the live UI."
+    ],
+    "confidence": 85,
+    "confidence_rationale": "All three defects reproduced to exact lines; the fixes reuse proven in-repo patterns (the expense mid-transaction mock, the existing refusal shapes); no UI, migration, or cross-module changes.",
+    "evidence": [
+      "lib/settle/balances.test.ts:328 titles the case recipient-up/payer-down while lines 341-352 show sender Bo -1000 to 0 (up) and recipient Ada +2000 to 1000 (down), matching sent:+1/received:-1 in lib/settle/balances.ts:157-158.",
+      "lib/settle/actions.ts:102-107 accepts any id in the balances map, which includes departed participants per lib/settle/balances.ts:168-182; deletePayment at actions.ts:173-177 requires the viewer to be payer or recipient, which is impossible when both endpoints are departed and hold no session.",
+      "lib/settle/actions.test.ts has refusal and round-trip cases but no mid-transaction failure; lib/expenses/actions.test.ts:692 proves the mirror pattern with a mock thrown inside the transaction.",
+      "PR #22's five extra paths (groups-panels exports, groups/queries membershipId, settle/queries, settle/summary plus its test) are already-merged enabling code; amending that historical work order is not a code change."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add exported const PAYMENT_BOTH_DEPARTED_MESSAGE = 'A payment must include someone still in the group.' beside the other payment messages, and add the exported pure helper paymentSubject(snapshot: PaymentSnapshot): string returning `${snapshot.fromDisplayName} paid ${snapshot.toDisplayName}` moved verbatim from lib/settle/actions.ts:79-81 (no template change) so tests can mock the seam inside the transaction.",
+        "path": "lib/settle/validation.ts",
+        "why": "The new refusal needs a user-safe sentence that names what is off, and the atomicity test needs a mockable import inside the tx closure — both live beside PaymentSnapshot, which this module already owns."
+      },
+      {
+        "action": "edit",
+        "change": "Import paymentSubject and PAYMENT_BOTH_DEPARTED_MESSAGE from ./validation and memberships from ../db/schema; delete the local paymentSubject function and call the import at both existing call sites (create and delete paths, behavior unchanged). In createPayment, after the fromName/toName undefined check, select current membership ids for the group, build a Set, and return { status: 'error', message: PAYMENT_BOTH_DEPARTED_MESSAGE } when neither draft endpoint is in it. Update the module doc comment (both-endpoints rule): endpoints may be current or departed ledger participants, but at least one endpoint must be a current membership, because a payment between two departed seats could never be deleted. Current means the membership row exists — a placeholder (null userId) is current.",
+        "path": "lib/settle/actions.ts",
+        "why": "One guard in the shared write path closes the record-but-never-delete asymmetry for every caller (form submits and crafted requests alike) without widening the delete permission."
+      }
+    ],
+    "issue": 26,
+    "kind": "bug",
+    "out_of_scope": [
+      "Finding 1 (five changed paths outside PR #22's work-order files[]): historical work-order bookkeeping with no code change — dropped, the merged code stays as is.",
+      "Filtering both-departed transfers out of simplifyDebts suggestions or SettleUpForm rows: the server refusal covers the edge through the existing live region; a suggestion filter would ship on its own if wanted.",
+      "A delete-path atomicity case: delete commits in the same single-transaction shape, so the create-path case proves the pattern.",
+      "Docs (.sdlc/memory, docs/*) and framework paths (.github, .sdlc): untouched per reserved-path rules."
+    ],
+    "qa_script": [
+      "npx vitest run lib/settle/actions.test.ts lib/settle/balances.test.ts — all pass, including the two new cases and the renamed case.",
+      "npm run typecheck — the helper move keeps every import exact.",
+      "Browser regression: sign up at /signup, create a group at /groups/new, add an expense, record a suggested payment from the debts card and delete it behind its confirm; both steps confirm in the panel live region and the balances move then restore."
+    ],
+    "reproduced": true,
+    "risks": [
+      "The current-membership check must key on membership-row existence: placeholders (null userId, e.g. Dee in the test fixture) are current members and must keep passing the guard.",
+      "Mocking ./validation in actions.test.ts must spread the actual module so payment parsing and the other message constants behave exactly as in production.",
+      "No forbidden paths touched; the change sends data to no new host (api_allowlist stays localhost-only)."
+    ],
+    "root_cause": "createPayment validates endpoints against the ledger (current members plus departed participants) while deletePayment authorizes against current involvement only — the two rules admit a write nobody can undo. Alongside it sit two coverage debts: a backwards test title hiding the true sender-up/recipient-down convention, and the missing mid-transaction failure case the last work order promised.",
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "refuses a payment between two departed seats without writing anything: recordDinner, delete the Bo and Cy membership rows, sign in as Ada, submit fromMembershipId=Bo toMembershipId=Cy amount 10.00, expect status error with PAYMENT_BOTH_DEPARTED_MESSAGE and zero payment rows plus zero activity rows (existing one-departed success case at 'clears what a departed seat owes' stays green, proving the guard is not over-broad)",
+          "leaves no payment and no activity row when the write fails part-way through: vi.mock ./validation spreading actual with paymentSubject as vi.fn, mockImplementationOnce throw, submit a valid Bo-to-Ada 10.00 payment, expect the action to reject, then assert zero payment rows and zero activity rows — mirroring lib/expenses/actions.test.ts:692"
+        ],
+        "path": "lib/settle/actions.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "renamed case 'moves the payer of a payment up and its recipient down, and settles the group' passes with assertions untouched (Bo 0, Ada 1000, Cy -1000, zero-sum)"
+        ],
+        "path": "lib/settle/balances.test.ts"
+      }
+    ],
+    "understanding": "Issue #26 bundles four review findings from PR #22 (for #7); plan/brief.md records no human decisions and no prior plan was rejected, and every comment heading on the issue is data, not a decision. Three findings reproduce in the current code: (a) lib/settle/balances.test.ts:328 titles the payment-direction convention backwards versus its own assertions and the sent:+1/received:-1 folds; (b) a payment between two departed seats is recordable via createPayment's ledger-membership check yet permanently undeletable via deletePayment's involved-member check; (c) the promised settle mid-transaction atomicity test was never written. The fourth finding (five changed paths outside the old work order's files[]) asks to amend the historical work order, not the code — there is nothing to implement, so it is dropped in out_of_scope rather than built.",
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-05T11:14:55.407Z",
+  "validated_ac_changes": []
 }

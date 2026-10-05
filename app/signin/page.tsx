@@ -58,6 +58,7 @@ export default async function SignInPage({
         <AuthForm
           mode="signin"
           action={signin}
+          next={next}
           submitLabel="Sign in"
           pendingLabel="Signing in…"
         />

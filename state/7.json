@@ -549,17 +549,18 @@
       "AC-5",
       "AC-6",
       "AC-7",
-      "AC-8"
+      "AC-8",
+      "AC-9"
     ],
-    "sha": "b4b745f2edb9c02f07b2d6e3418151421a3577a9",
-    "run_id": "37275789022",
-    "work_order_version": 1,
-    "at": "2026-10-05T07:48:27.132Z"
+    "sha": "7a8caf23a4213d622c331723790c5fad94424b7b",
+    "run_id": "37286692154",
+    "work_order_version": 2,
+    "at": "2026-10-05T09:47:02.640Z"
   },
   "qa_open_bugs": [
     {
-      "id": "BUG-1",
-      "title": "Settle-up live region missing until first submit; first announcement may not reach screen readers"
+      "id": "BUG-2",
+      "title": "Partial settle-up leaves the paid fragment in the row amount field instead of the remainder"
     }
   ],
   "rejected_artifacts": {

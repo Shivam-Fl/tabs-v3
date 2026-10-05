@@ -1,5 +1,5 @@
 {
-  "source_sha": "4167626eae9ade135422e499be82bab39e70a288",
+  "source_sha": "fa6ac76fdda1addec6c50d48a172ea34c3dc9845",
   "source_repo": "Shivam-Fl/automated-ai-sdlc",
   "files": {
     ".github/workflows/ci-verify.yml": "18fb181e5e566cd5cff134f670b6a0d5b5b62d1acc475de9003ffd421619a4a7",
@@ -68,7 +68,7 @@
     ".sdlc/bin/agent-trial.mjs": "75245a8917e750a27fcd7b100c5528548343ad0a66946639bc38709efea6b0e5",
     ".sdlc/bin/already-implemented.mjs": "a842088d7f12fbbc2bfe7a0188ce4b239f30b9cc604c5f3d8629a0d4fb992ac4",
     ".sdlc/bin/apply-plan-review.mjs": "9d5bf3839879b87fb034a27ad6cb937be65ef7df110846e2940b366a1e7c2b1c",
-    ".sdlc/bin/apply-project-brief.mjs": "94e179f932d3df1027767289b6b3b851804d32b484e7182bf52ae1cc1884bf57",
+    ".sdlc/bin/apply-project-brief.mjs": "f0fec61f3c1dcd066f57e9f60c7f19f8c0636ab22051c6d7223109186a26c72d",
     ".sdlc/bin/apply-route.mjs": "5c6524f12a13dfcd44b89e4b3800a172746e64241782b73d2a9118c99d9bacc4",
     ".sdlc/bin/apply-triage.mjs": "03e673706334e1cebef64d2a7693e354cd64a574c2259edd25a64d081ca9709e",
     ".sdlc/bin/bump-version.mjs": "23196dc5953edf0ac47c770db2fd9209e5b101bfc19e186b45fc8d3f8f8a76ec",

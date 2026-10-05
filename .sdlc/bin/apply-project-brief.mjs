@@ -73,7 +73,19 @@ writeFileSync('.sdlc/memory/project.md', renderProjectMd(brief, { stubbed }));
 //
 // The QA notes only on the first brief. After that they are what QA learned about this product,
 // and a pivot through `/sdlc replan-project` changes the stack, not the login recipe.
-writeFileSync('.sdlc/memory/conventions.md', renderConventions(brief, { issue }));
+//
+// The rules review and QA have taught this project since — sections the librarian added below the
+// generated ones — survive a pivot too. tabs-v3's UI redesign rewrote the file from the brief alone
+// and dropped "Added by review and QA", the fortnight's lessons with the PRs that were evidence.
+const conventionsPath = '.sdlc/memory/conventions.md';
+let conventions = renderConventions(brief, { issue });
+if (!firstBrief && existsSync(conventionsPath)) {
+  const generated = new Set(conventions.match(/^## .+$/gm) ?? []);
+  const learned = readFileSync(conventionsPath, 'utf8').split(/^(?=## )/m)
+    .filter((section) => section.startsWith('## ') && !generated.has(section.split('\n')[0]));
+  if (learned.length) conventions = `${conventions.trimEnd()}\n\n${learned.map((l) => l.trimEnd()).join('\n\n')}\n`;
+}
+writeFileSync(conventionsPath, conventions);
 if (firstBrief) {
   mkdirSync('.sdlc/memory/qa', { recursive: true });
   writeFileSync('.sdlc/memory/qa/selectors.md', qaStub('Stable selectors',
@@ -125,11 +137,19 @@ for (const [file, body] of [
 const indexPath = '.sdlc/memory/index.md';
 writeFileSync(indexPath, indexWithDocs(existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : null, docs));
 
+// Only the decisions not already recorded. A pivot's brief restates the ones it keeps, often under
+// their old number ("ADR-0001: Next.js App Router on Vercel"), and each was written again as a new
+// ADR: tabs-v3's UI redesign arrived with eight copies of its stack beside the one new decision.
+const adrTitle = (t) => String(t).replace(/^\s*ADR[-\s]?\d+\s*[:—–-]\s*/i, '').trim();
+const adrSlug = (t) => adrTitle(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+const recorded = new Set(readdirSync('.sdlc/memory/decisions')
+  .map((f) => f.match(/^ADR-\d+-(.+)\.md$/)?.[1]).filter(Boolean).map((s) => s.replace(/^adr-\d+-/, '')));
 const adrs = [];
 for (const d of brief.decisions ?? []) {
-  const file = `.sdlc/memory/decisions/ADR-${String(n).padStart(4, '0')}-${
-    d.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)}.md`;
-  writeFileSync(file, renderAdr(d, { number: n, issue, date: today }));
+  if (recorded.has(adrSlug(d.title))) continue;
+  const file = `.sdlc/memory/decisions/ADR-${String(n).padStart(4, '0')}-${adrSlug(d.title)}.md`;
+  writeFileSync(file, renderAdr({ ...d, title: adrTitle(d.title) }, { number: n, issue, date: today }));
+  recorded.add(adrSlug(d.title));
   adrs.push(file);
   n++;
 }

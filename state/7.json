@@ -23,9 +23,9 @@
     "requested_at_head": null,
     "qa_run": "37275789022",
     "from": "qa",
-    "pr": "22",
+    "pr": 22,
     "work_order_version": 1,
-    "at": "2026-10-05T07:48:32.182Z"
+    "at": "2026-10-05T07:58:42.710Z"
   },
   "work_order": {
     "acceptance": [

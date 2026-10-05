@@ -506,7 +506,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-05T05:19:46.756Z"
   },
-  "resume_at": null,
+  "resume_at": "root-cause",
   "flow_plan": {
     "kind": "feature",
     "confidence": 88,
@@ -517,7 +517,7 @@
     },
     "decided_at": "2026-10-05T05:22:43.645Z"
   },
-  "stopped_at": null,
+  "stopped_at": "root-cause",
   "dispatched_stage": "root-cause",
   "validated_from": "plan",
   "validated_at": "2026-10-05T05:32:30.997Z",

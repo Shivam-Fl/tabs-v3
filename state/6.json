@@ -348,5 +348,28 @@
   "work_order_posted_at": "2026-10-05T01:49:20.047Z",
   "work_order_from": "plan",
   "work_order_comment": "5986736118",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Scope: lib/money/format.ts (new formatBasisPoints helper) is in the PR but in neither work-order.json files[] nor tests[].",
+        "detail": "Scope: lib/money/format.ts (new formatBasisPoints helper) is in the PR but in neither work-order.json files[] nor tests[].\n\n`lib/money/format.ts:15`\n\nEvidence: gh pr diff 20 --name-only lists 14 files including lib/money/format.ts; work-order.json files[] names 10 source paths and tests[] names 3 test paths, none of them lib/money/format.ts.\n\nFix: Record it as in-scope support for AC-2's percentage shortfall sentence; no code change needed.",
+        "severity": "minor",
+        "file": "lib/money/format.ts"
+      },
+      {
+        "title": "Reinvention: the editor's local parseValue re-implements lib/money/splits.ts parseSplitValue with identical dispatch.",
+        "detail": "Reinvention: the editor's local parseValue re-implements lib/money/splits.ts parseSplitValue with identical dispatch.\n\n`components/expense-editor.tsx:108`\n\nEvidence: Editor lines 108-113 dispatch exact->parseMinorUnits, percentage->parseBasisPoints, shares->parseShares, else null; splits.ts parseSplitValue does exactly the same.\n\nFix: Import parseSplitValue from ../lib/money/splits and delete the local parseValue.",
+        "severity": "minor",
+        "file": "components/expense-editor.tsx"
+      },
+      {
+        "title": "A no-change edit tells the user 'Expense updated.' although nothing was written.",
+        "detail": "A no-change edit tells the user 'Expense updated.' although nothing was written.\n\n`lib/expenses/actions.ts:400`\n\nEvidence: updateExpense returns redirectTo expenseNoticePath(..., EXPENSE_UPDATED) for both the 'updated' and 'unchanged' kinds (actions.ts:400-402); expenseNoticeText maps EXPENSE_UPDATED to 'Expense updated.', so the group page shows that for a no-op save while the 'Nothing to change.' state is discarded by the redirect.\n\nFix: When unchanged, return the success state with no redirectTo (the form is still on screen to show it), or add a distinct notice value for it.",
+        "severity": "minor",
+        "file": "lib/expenses/actions.ts"
+      }
+    ],
+    "pr": "20"
+  }
 }

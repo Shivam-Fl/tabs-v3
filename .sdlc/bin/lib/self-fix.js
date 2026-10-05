@@ -58,6 +58,8 @@ export const RULES = [
   '.sdlc/bin/verify-is-real.mjs',
   // what an agent is given as the issue, and what memory it may learn from
   '.sdlc/bin/lib/issue-text.js', '.sdlc/bin/issue-text.mjs', '.sdlc/bin/librarian-inputs.mjs',
+  // what an agent's demo may put on a PR, and how the runner records it
+  '.sdlc/bin/lib/pr-demo.js', '.sdlc/bin/pr-demo-post.mjs', '.sdlc/bin/pr-demo-record.sh',
   // the state machine, its budgets, and what may start a stage
   '.sdlc/bin/lib/ledger.js', '.sdlc/bin/lib/state-io.js', '.sdlc/bin/lib/advance.js',
   '.sdlc/bin/lib/route-io.js', '.sdlc/bin/lib/deps.js', '.sdlc/bin/lib/failure.js',

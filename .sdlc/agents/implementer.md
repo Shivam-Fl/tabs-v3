@@ -144,7 +144,30 @@ the PR from a job that runs none of it.
    fix it within the work order's scope, or stop and say what you found. The cheapest place
    to catch a fix that does not fix anything is here, before a CI run, a review and a QA cycle
    have all been spent on it.
-6. Commit. The workflow opens the PR — its body links the issue and lists every acceptance
+6. **Show the change, if the app has a screen it changes.** Write `pr-demo.spec.ts` at the repository
+   root — a Playwright test file, not committed — that walks what you changed, the way a person
+   would. A job with no agent records it twice, on the base branch and on your branch, and posts
+   both recordings and their last frames on the PR as **Before / after**, for a bug and a feature
+   alike. Keep it short and honest:
+
+   ```ts
+   import { test, expect } from '@playwright/test';
+   test('settle up records a partial payment', async ({ page }) => {
+     await page.goto(process.env.DEMO_URL!);
+     // sign up a fresh account if the flow needs one: a new email each run (Date.now())
+     // ...the steps that reach the change, then end on the screen that shows it
+     await expect(page.getByText('₹50 still owed')).toBeVisible();
+   });
+   ```
+
+   - One to three `test()`s, one per thing a reviewer should see, each under thirty seconds; the
+     title is the row's label, so say what it shows.
+   - Start from `process.env.DEMO_URL` on an empty database: create what the walk needs through
+     the UI. Use roles and visible text, never your own new test ids — the base branch has none.
+   - It must run on the base too. Where your change is new, the base run fails at the step that
+     reaches it — that failure is the "before"; do not guard it away.
+   - A change with nothing on screen (a migration, a job, an API-only fix) gets no demo: skip this.
+7. Commit. The workflow opens the PR — its body links the issue and lists every acceptance
    criterion — and posts your `implementer-reply.md` on it.
 
 ## When to stop rather than correct

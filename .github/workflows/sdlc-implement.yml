@@ -223,6 +223,7 @@ jobs:
       pull-requests: read
     outputs:
       bundled: ${{ steps.bundle.outputs.bundled }}
+      demo: ${{ steps.bundle.outputs.demo }}
     env:
       ISSUE: ${{ github.event.issue.number || inputs.issue }}
       BRANCH: sdlc/issue-${{ github.event.issue.number || inputs.issue }}
@@ -290,7 +291,7 @@ jobs:
             git checkout -B "$BRANCH" "origin/$BASE"
           fi
           printf '%s\n' work-order.json failure-packet.json rework-context.md \
-            implementer-note.md implementer-reply.md >> .git/info/exclude
+            implementer-note.md implementer-reply.md pr-demo.spec.ts >> .git/info/exclude
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -442,7 +443,11 @@ jobs:
             If $PREVIEW_URL is set, it serves the branch as it was before your changes, and you
             cannot restart it from your shell. Build and start your working tree on port 3100 the
             way the project serves it, and walk the work order's qa_script there once before
-            you finish, watching the console. You are answering one question — does the change
+            you finish, watching the console.
+
+            If the change shows on a screen, also write pr-demo.spec.ts at the repository root
+            (step 6 of your pack): the pipeline records it on the base branch and on your branch
+            and posts both on the PR as Before / after. You are answering one question — does the change
             work — not hunting edge cases; an adversarial agent does that later. If it does not
             work, fix it within scope or stop and say so. Do not commit and hope QA sorts it out.
 
@@ -487,6 +492,8 @@ jobs:
           for f in implementer-note.md implementer-reply.md; do
             [ -s "$f" ] && cp "$f" "$RUNNER_TEMP/out/"
           done
+          # The walk through the change the demo job records, before and after (implementer.md).
+          if [ -s pr-demo.spec.ts ]; then cp pr-demo.spec.ts "$RUNNER_TEMP/out/"; echo "demo=true" >> "$GITHUB_OUTPUT"; fi
           ls -l "$RUNNER_TEMP/out"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
@@ -521,6 +528,9 @@ jobs:
           || (needs.build.result == 'failure' && needs.build.outputs.bundled == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+      head: ${{ steps.push.outputs.head }}
     env:
       ISSUE: ${{ github.event.issue.number || inputs.issue }}
       BRANCH: sdlc/issue-${{ github.event.issue.number || inputs.issue }}
@@ -642,6 +652,89 @@ jobs:
       - name: Start the gate on the PR
         if: steps.pr.outputs.pr != ''
         run: node .sdlc/bin/dispatch.mjs sdlc-gate.yml -f pr="${{ steps.pr.outputs.pr }}"
+
+  # The change, recorded: the implementer's demo script run on the base branch and on the PR's head,
+  # each booted the way QA boots it, with no agent and a read-only token — it runs the branch's code
+  # and an agent's script. Never in `failed`'s needs: a demo that cannot run is a PR without
+  # pictures, not a failure to triage.
+  demo:
+    needs: [prepare, build, publish]
+    if: >-
+      always() && needs.publish.result == 'success' && needs.publish.outputs.pr != ''
+      && needs.publish.outputs.head != '' && needs.build.outputs.demo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      media: ${{ steps.record.outputs.media }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 22
+      - name: Kill switch
+        run: node .sdlc/bin/sdlc-ctl.mjs guard
+        env: { SDLC_ENABLED: "${{ vars.SDLC_ENABLED }}" }
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16   # v4
+        with: { name: implement-output, path: _out }
+      - name: Only where the app runs on the runner
+        id: mode
+        run: echo "compose=$([ "$(node .sdlc/bin/read-config.mjs env.mode)" = compose ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        if: steps.mode.outputs.compose == 'true'
+        with: { ref: "${{ needs.prepare.outputs.base }}", path: _base, persist-credentials: false }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        if: steps.mode.outputs.compose == 'true'
+        with: { ref: "${{ needs.publish.outputs.head }}", path: _head, persist-credentials: false }
+      - name: Playwright and ffmpeg
+        if: steps.mode.outputs.compose == 'true'
+        run: |
+          mkdir -p qa-run/tests
+          echo '{ "private": true }' > qa-run/package.json
+          npm install --prefix qa-run --no-audit --no-fund --no-package-lock @playwright/test
+          cp .sdlc/qa/playwright.config.mjs qa-run/
+          qa-run/node_modules/.bin/playwright install --with-deps chromium
+          command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg; }
+      - name: Record before and after
+        id: record
+        if: steps.mode.outputs.compose == 'true'
+        run: |
+          bash .sdlc/bin/pr-demo-record.sh before _base _out/pr-demo.spec.ts _demo/before
+          bash .sdlc/bin/pr-demo-record.sh after _head _out/pr-demo.spec.ts _demo/after
+          ls _demo/after/*.png _demo/after/*.mp4 >/dev/null 2>&1 && echo "media=true" >> "$GITHUB_OUTPUT" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        if: steps.record.outputs.media == 'true'
+        with: { name: pr-demo, path: _demo/, retention-days: 14 }
+
+  # Puts the recording on the PR. A write token, so no product code and no agent: it takes the
+  # demo's files as files, checks each is the PNG or MP4 it claims to be, and comments.
+  demo-post:
+    needs: [publish, demo]
+    if: always() && needs.demo.result == 'success' && needs.demo.outputs.media == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write         # the sdlc-media branch, when gh cannot attach
+      pull-requests: write    # the comment
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { ref: "${{ github.event.repository.default_branch }}" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 22
+      - name: Kill switch
+        run: node .sdlc/bin/sdlc-ctl.mjs guard
+        env: { SDLC_ENABLED: "${{ vars.SDLC_ENABLED }}" }
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16   # v4
+        with: { name: pr-demo, path: _demo }
+      - name: Before and after, on the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.publish.outputs.pr }}
+          SHA: ${{ needs.publish.outputs.head }}
+        run: node .sdlc/bin/pr-demo-post.mjs _demo
 
   cleanup:
     needs: [prepare, build, publish]

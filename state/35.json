@@ -275,7 +275,21 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "app/groups/[id]/page.tsx",
+    "app/groups/[id]/loading.tsx",
+    "app/groups/[id]/expenses/loading.tsx",
+    "components/group-page.tsx",
+    "components/timestamp.tsx",
+    "components/activity-feed.tsx",
+    "app/activity/page.tsx",
+    "lib/groups/validation.ts",
+    "lib/dates.ts",
+    "lib/dates.test.ts",
+    "app/groups/[id]/loading.test.ts",
+    "app/groups/[id]/expenses/loading.test.ts",
+    "lib/groups/validation.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

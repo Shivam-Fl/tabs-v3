@@ -505,8 +505,8 @@
     "pr": "22"
   },
   "qa": {
-    "verdict": "pass",
-    "introduced_bugs": 0,
+    "verdict": "fail",
+    "introduced_bugs": 1,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -517,10 +517,15 @@
       "AC-7",
       "AC-8"
     ],
-    "sha": "817dd1e9a135024d3e568b2f0a478dffd96e87b5",
-    "run_id": "37270912581",
+    "sha": "b4b745f2edb9c02f07b2d6e3418151421a3577a9",
+    "run_id": "37275789022",
     "work_order_version": 1,
-    "at": "2026-10-05T06:49:25.152Z"
+    "at": "2026-10-05T07:48:27.132Z"
   },
-  "qa_open_bugs": []
+  "qa_open_bugs": [
+    {
+      "id": "BUG-1",
+      "title": "Settle-up live region missing until first submit; first announcement may not reach screen readers"
+    }
+  ]
 }

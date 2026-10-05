@@ -15,6 +15,7 @@
 // that never appeared was filtered out rather than waited for, so the other checks going green
 // passed the PR without the one the repo named.
 
+import { execFileSync } from 'node:child_process';
 import { ghJson, setOutput, loadConfig, die } from './lib/actions.js';
 import { classifyRollup, checkName, expectsCi } from './lib/checks.js';
 
@@ -28,7 +29,7 @@ const deadline = Date.now() + timeoutMin * 60_000;
 // still empty — and concluding from that marked a PR red while its CI was still booting.
 // Absent is not the same as absent-for-good, so a missing check gets a grace period before it
 // is allowed to mean anything.
-const EMPTY_GRACE_MS = 3 * 60_000;
+const EMPTY_GRACE_MS = Number(process.env.SDLC_EMPTY_GRACE_MS ?? 3 * 60_000);
 let emptySince = null;
 
 // The runs ensure-ci re-ran for a flake ("id:attempt-before", comma-separated), waited for within
@@ -43,6 +44,15 @@ async function settleReruns() {
     if (r?.status === 'completed' && (before == null || r.attempt > before)) rerun.delete(id);
   }
 }
+
+// This PR's ci-verify, by the run name ci-verify.yml gives it. A run still queued has posted
+// nothing, and a hosted runner can take far longer than the grace to pick it up: tabs-v3 PR #40's
+// waited fifteen minutes and ended "not acquired by Runner ... after multiple attempts", and the
+// gate had already stopped the issue for a person with no error to hand anyone. Waited for within
+// the deadline; one that ended without ever reporting is started once more.
+const ciRuns = () => ghJson(['run', 'list', '--workflow', 'ci-verify.yml', '--limit', '20', '--json', 'databaseId,status,conclusion,displayTitle'])
+  .then((rs) => rs.filter((r) => r.displayTitle === `ci-verify #${pr}`)).catch(() => []);
+let restarted = false;
 
 let last = '';
 while (Date.now() < deadline) {
@@ -93,12 +103,28 @@ while (Date.now() < deadline) {
     process.exit(0);
   }
 
+  const ciMissing = missing.some((m) => /ci-verify/i.test(m));
+  if (ciMissing && (await ciRuns()).some((r) => r.status !== 'completed')) {
+    process.stdout.write('ci-verify has not reported: its run is still queued or starting — waiting\n');
+    emptySince = null;
+    await new Promise((r) => setTimeout(r, 30_000));
+    continue;
+  }
+
   if (missing.length) {
     emptySince ??= Date.now();
     const waited = Date.now() - emptySince;
     if (waited < EMPTY_GRACE_MS) {
       process.stdout.write(`not reporting yet: ${missing.join(', ')} — waiting (${Math.round(waited / 1000)}s of ${EMPTY_GRACE_MS / 1000}s)\n`);
       await new Promise((r) => setTimeout(r, 15_000));
+      continue;
+    }
+
+    if (ciMissing && !restarted && (await ciRuns()).length) {
+      restarted = true;
+      process.stdout.write('ci-verify ended without reporting — starting it once more\n');
+      try { execFileSync('node', ['.sdlc/bin/dispatch.mjs', 'ci-verify.yml', '-f', `pr=${pr}`], { stdio: 'inherit' }); } catch {}
+      emptySince = Date.now();
       continue;
     }
 

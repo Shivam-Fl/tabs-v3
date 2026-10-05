@@ -53,6 +53,35 @@ export function scenarios(dir) {
     .map((name) => ({ name, before: before[name] ?? {}, after: after[name] }));
 }
 
+const slug = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 60).replace(/-+$/, '');
+
+/**
+ * The tests a Playwright JSON report ran, at most MAX_SCENARIOS, each with the name its files go
+ * under, its video and its last screenshot. Named from the test's own title: the result folders
+ * Playwright names cut a long title and hash its middle ("a group page wears 47f99 lace", PR #40).
+ */
+export function recordedTests(report) {
+  const out = [];
+  const seen = new Set();
+  const walk = (suite) => {
+    for (const spec of suite.specs ?? []) {
+      for (const t of spec.tests ?? []) {
+        const r = t.results?.at(-1);
+        if (!r) continue;
+        const base = slug(spec.title) || 'scenario';
+        let name = base;
+        for (let i = 2; seen.has(name); i++) name = `${base.slice(0, 57)}-${i}`;
+        seen.add(name);
+        const of = (type) => (r.attachments ?? []).filter((a) => a.contentType === type && a.path).map((a) => a.path);
+        out.push({ name, video: of('video/webm')[0], shot: of('image/png').at(-1) });
+      }
+    }
+    for (const s of suite.suites ?? []) walk(s);
+  };
+  for (const s of report?.suites ?? []) walk(s);
+  return out.slice(0, MAX_SCENARIOS);
+}
+
 export const MARK = '<!-- sdlc:demo -->';
 
 export const title = (name) => name.replace(/^pr-demo-/, '').replace(/-/g, ' ');
@@ -62,6 +91,7 @@ export const title = (name) => name.replace(/^pr-demo-/, '').replace(/-/g, ' ');
  * after the table. `link(side, file)` is where a file is reachable from the comment — its local
  * path for `gh --attach`, which uploads it and rewrites the reference, or a URL on the media branch.
  * `videos` says whether the recordings render as players (attached) or only as links (branch).
+ * Every file is referenced in the body, so gh appends nothing of its own.
  */
 export function demoComment({ sha, list, link, videos = true }) {
   const shot = (side, files) => (files.png ? `![${side}](${link(side, files.png)})` : '_nothing yet: new in this PR_');
@@ -76,10 +106,14 @@ export function demoComment({ sha, list, link, videos = true }) {
     '|---|---|---|',
     ...list.map((s) => `| ${title(s.name)} | ${shot('before', s.before)} | ${shot('after', s.after)} |`),
   ];
-  if (!videos) {
-    const recs = list.flatMap((s) => ['before', 'after'].filter((side) => s[side].mp4)
-      .map((side) => `[${side}: ${title(s.name)}](${link(side, s[side].mp4)})`));
-    if (recs.length) lines.push('', `Recordings: ${recs.join(' · ')}`);
+  const recs = list.flatMap((s) => ['before', 'after'].filter((side) => s[side].mp4).map((side) => [s, side]));
+  if (recs.length && videos) {
+    // gh turns an attached video's `![](./file)` alone in a paragraph into its bare URL, which
+    // GitHub renders as a player; anything else about it becomes a link.
+    lines.push('', '### Recordings');
+    for (const [s, side] of recs) lines.push('', `**${title(s.name)}** — ${side}`, '', `![${side}: ${title(s.name)}](${link(side, s[side].mp4)})`);
+  } else if (recs.length) {
+    lines.push('', `Recordings: ${recs.map(([s, side]) => `[${side}: ${title(s.name)}](${link(side, s[side].mp4)})`).join(' · ')}`);
   }
   return lines.join('\n');
 }

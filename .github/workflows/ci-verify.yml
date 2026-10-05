@@ -1,6 +1,9 @@
 # Tier 0 — deterministic CI. No model, no cost beyond runner minutes.
 # Runs BEFORE any agent is allowed near the PR: never pay a model for what tsc finds free.
 name: ci-verify
+# The PR in the run's name, so the gate can find this PR's run while it is still queued
+# before it reports: a run that has not got a runner yet has posted nothing to read.
+run-name: "ci-verify #${{ inputs.pr || github.event.pull_request.number }}"
 
 on:
   pull_request:

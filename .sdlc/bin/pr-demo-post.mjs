@@ -36,7 +36,8 @@ const files = list.flatMap((s) => ['before', 'after'].flatMap((side) =>
 const body = demoComment({ sha, list, link: local, videos: true });
 writeFileSync('demo-comment.md', `${body}\n`);
 const attached = spawnSync('gh', ['pr', 'comment', String(pr), '--body-file', 'demo-comment.md',
-  ...files.flatMap((f) => ['--attach', `${f.path}#${f.alt}`])], { encoding: 'utf8' });
+  // A video plays and has no alt text: gh refuses one ("cannot set alt text on video", PR #40).
+  ...files.flatMap((f) => ['--attach', f.path.endsWith('.mp4') ? f.path : `${f.path}#${f.alt}`])], { encoding: 'utf8' });
 if (attached.status === 0) {
   process.stdout.write(`PR #${pr}: before and after for ${list.length} scenario(s), attached\n`);
   process.exit(0);

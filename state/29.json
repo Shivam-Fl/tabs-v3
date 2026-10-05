@@ -143,7 +143,14 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/expenses/validation.ts",
+    "components/activity-feed.tsx",
+    "scripts/seed.ts",
+    "lib/expenses/validation.test.ts",
+    "lib/expenses/actions.test.ts",
+    "scripts/seed.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "debug",

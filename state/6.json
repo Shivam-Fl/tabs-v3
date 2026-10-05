@@ -153,11 +153,9 @@
     "version": 3
   },
   "touch_paths": [
-    "components/expense-editor.tsx",
-    "lib/expenses/validation.ts",
-    "lib/expenses/actions.ts",
-    "lib/expenses/actions.test.ts",
-    "lib/expenses/validation.test.ts"
+    "lib/expenses/queries.ts",
+    "lib/db/schema.ts",
+    "lib/expenses/actions.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

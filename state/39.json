@@ -223,5 +223,9 @@
   "work_order_posted_at": "2026-10-05T22:40:50.959Z",
   "work_order_from": "plan",
   "work_order_comment": "6004646899",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [],
+    "pr": "42"
+  }
 }

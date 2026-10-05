@@ -317,6 +317,14 @@
       "attempt": 2,
       "at": "2026-10-05T07:53:27.500Z",
       "digest": "The root-cause stage failed and no known error pattern matched. The raw output is below."
+    },
+    {
+      "stage": "root-cause",
+      "error_signature": "f352e195609f32e8",
+      "error_type": "unknown",
+      "attempt": 3,
+      "at": "2026-10-05T08:02:39.224Z",
+      "digest": "The root-cause stage failed and no known error pattern matched. The raw output is below."
     }
   ],
   "review_history": [],

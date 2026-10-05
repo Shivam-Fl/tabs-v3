@@ -19,6 +19,23 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const jar = vi.hoisted(() => ({ entries: new Map<string, string>() }));
 
+/**
+ * The seam inside the payment transaction. `paymentSubject` builds the feed row's sentence, so it
+ * is the call that sits between the payment insert and the activity insert; mocking it is how the
+ * atomicity case fails the write at that exact point, the way the expense suite mocks
+ * `splitAmount`. The actual module is spread back in, so parsing and every message constant behave
+ * exactly as they do in production.
+ */
+const paymentSubjectBox = vi.hoisted(() => ({
+  real: undefined as unknown as typeof import('./validation').paymentSubject,
+}));
+
+vi.mock('./validation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./validation')>();
+  paymentSubjectBox.real = actual.paymentSubject;
+  return { ...actual, paymentSubject: vi.fn(actual.paymentSubject) };
+});
+
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (name: string) =>
@@ -64,8 +81,10 @@ const {
   PAYMENT_AMOUNT_INVALID_MESSAGE,
   PAYMENT_AMOUNT_POSITIVE_MESSAGE,
   PAYMENT_AMOUNT_TOO_LARGE_MESSAGE,
+  PAYMENT_BOTH_DEPARTED_MESSAGE,
   PAYMENT_NOT_FOUND_MESSAGE,
   PAYMENT_SAME_MEMBER_MESSAGE,
+  paymentSubject,
 } = await import('./validation');
 
 const PASSWORD = 'correct horse battery staple';
@@ -268,6 +287,8 @@ beforeEach(async () => {
   });
   jar.entries.clear();
   vi.mocked(revalidatePath).mockClear();
+  vi.mocked(paymentSubject).mockReset();
+  vi.mocked(paymentSubject).mockImplementation(paymentSubjectBox.real);
 
   adaId = await createAccount('ada@example.co', 'Ada');
   boId = await createAccount('bo@example.co', 'Bo');
@@ -543,6 +564,54 @@ describe('createPayment', () => {
 
     const nets = await netsOf(fixture.groupId);
     expect([...nets.values()].every((net) => net === 0)).toBe(true);
+  });
+
+  it('refuses a payment between two departed seats without writing anything', async () => {
+    await recordDinner(fixture);
+    // Both ends leave, keeping their ledger rows: to the balances map they are still participants,
+    // which is exactly why the endpoint check alone let this through.
+    await withDb(async (handle) => {
+      await handle.db.delete(memberships).where(eq(memberships.id, fixture.bo));
+      await handle.db.delete(memberships).where(eq(memberships.id, fixture.cy));
+    });
+
+    const state = await createPayment(
+      IDLE_PAYMENT_STATE,
+      paymentForm({
+        groupId: fixture.groupId,
+        fromMembershipId: fixture.bo,
+        toMembershipId: fixture.cy,
+        amount: '10.00',
+      }),
+    );
+
+    // Nobody is left who could ever delete it — the delete rule needs one endpoint to still be a
+    // current member — so the write is refused rather than recorded undeletable.
+    expect(state).toMatchObject({ status: 'error', message: PAYMENT_BOTH_DEPARTED_MESSAGE });
+    expect(await paymentRows(fixture.groupId)).toHaveLength(0);
+    expect(await eventsOf(fixture.groupId)).toHaveLength(0);
+  });
+
+  it('leaves no payment and no activity row when the write fails part-way through', async () => {
+    vi.mocked(paymentSubject).mockImplementationOnce(() => {
+      throw new Error('the write failed after the payment was inserted');
+    });
+
+    await expect(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.bo,
+          toMembershipId: fixture.ada,
+          amount: '10.00',
+        }),
+      ),
+    ).rejects.toThrow('the write failed after the payment was inserted');
+
+    // The payment row was written before the failure: the transaction is what takes it back.
+    expect(await paymentRows(fixture.groupId)).toHaveLength(0);
+    expect(await eventsOf(fixture.groupId)).toHaveLength(0);
   });
 });
 

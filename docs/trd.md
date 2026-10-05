@@ -1,6 +1,6 @@
 # Technical requirements
 
-_Generated from `project-brief.json` for #1. Edit the brief, not this file._
+_Generated from `project-brief.json` for #31. Edit the brief, not this file._
 
 ## Requirements
 
@@ -86,7 +86,7 @@ _Generated from `project-brief.json` for #1. Edit the brief, not this file._
 
 ### TR-11 — Mobile-first responsive UI from the token set; one h1 and heading hierarchy, labelled controls, keyboard access and visible focus; designed empty/loading/error states; group-currency formatting; main screens interactive under 1s.
 
-**Why.** A product people choose needs mobile-first, accessible, fast screens — not a prototype.
+**Why.** A product people choose needs mobile-first, accessible, fast screens held to one design system — not a prototype.
 
 **Priority.** must
 
@@ -181,7 +181,7 @@ getDb(): Drizzle instance over PGlite (no DATABASE_URL) or over a neon-serverles
 ### GET /api/health
 
 ```
-{ status: ok|degraded, db: ok|down, latencyMs } — checks database reachability with a live query
+{ status: ok|degraded, db: ok|down, latencyMs } — checks database reachability with a live query; never linked from product surfaces
 ```
 
 **On failure.** Health returns degraded status naming the failing check

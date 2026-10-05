@@ -87,6 +87,7 @@ const {
   EXPENSE_ADDED,
   EXPENSE_DELETED,
   EXPENSE_NOT_FOUND_MESSAGE,
+  EXPENSE_UNCHANGED,
   EXPENSE_UPDATED,
   IDLE_EXPENSE_STATE,
   UNKNOWN_MEMBER_MESSAGE,
@@ -862,7 +863,9 @@ describe('updateExpense', () => {
       ),
     );
 
-    expect(url).toBe(`/groups/${groupId}?expense=${EXPENSE_UPDATED}`);
+    // The notice says the save did nothing rather than claiming an edit that never happened: the
+    // unchanged notice is what the group page turns into "Nothing to change." (AC-10).
+    expect(url).toBe(`/groups/${groupId}?expense=${EXPENSE_UNCHANGED}`);
     // Pressing Save twice must not put two "edited" rows in the feed for one edit.
     expect((await eventsOf(groupId)).map((event) => event.kind)).toEqual(['expense-created']);
   });

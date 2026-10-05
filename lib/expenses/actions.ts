@@ -19,6 +19,7 @@ import {
   EXPENSE_DELETED,
   EXPENSE_NOT_FOUND_MESSAGE,
   EXPENSE_NOTICE_PARAM,
+  EXPENSE_UNCHANGED,
   EXPENSE_UPDATED,
   UNKNOWN_MEMBER_MESSAGE,
   expenseChanges,
@@ -394,12 +395,16 @@ export async function updateExpense(
       return { state: { status: 'error', message: UNKNOWN_MEMBER_MESSAGE } };
     }
 
+    // An unchanged save is still a success — the expense the caller asked for is stored — but it
+    // says so rather than claiming an update that never happened (AC-10).
+    const updated = result.kind === 'updated';
+
     return {
       state: {
         status: 'success',
-        message: result.kind === 'updated' ? 'Expense updated.' : 'Nothing to change.',
+        message: updated ? 'Expense updated.' : 'Nothing to change.',
       },
-      redirectTo: expenseNoticePath(access.group.id, EXPENSE_UPDATED),
+      redirectTo: expenseNoticePath(access.group.id, updated ? EXPENSE_UPDATED : EXPENSE_UNCHANGED),
       groupId: access.group.id,
     };
   });

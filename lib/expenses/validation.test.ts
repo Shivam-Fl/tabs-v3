@@ -7,6 +7,7 @@ import {
   DUPLICATE_MEMBER_MESSAGE,
   EXPENSE_ADDED,
   EXPENSE_DELETED,
+  EXPENSE_UNCHANGED,
   EXPENSE_UPDATED,
   NO_PARTICIPANT_MESSAGE,
   NO_PAYER_MESSAGE,
@@ -483,10 +484,17 @@ describe('expenseScope', () => {
 });
 
 describe('expenseNoticeText', () => {
-  it('turns the three notice values into their sentences', () => {
+  it('turns the four notice values into their sentences', () => {
     expect(expenseNoticeText(EXPENSE_ADDED)).toBe('Expense added.');
     expect(expenseNoticeText(EXPENSE_UPDATED)).toBe('Expense updated.');
     expect(expenseNoticeText(EXPENSE_DELETED)).toBe('Expense deleted.');
+  });
+
+  // The unchanged notice is what AC-10 asks for: saving an edit that moves nothing must say so
+  // rather than report an update, and the sentence is the one the action already words.
+  it('says nothing changed for a save that moved nothing', () => {
+    expect(expenseNoticeText(EXPENSE_UNCHANGED)).toBe('Nothing to change.');
+    expect(expenseNoticeText(EXPENSE_UNCHANGED)).not.toBe(expenseNoticeText(EXPENSE_UPDATED));
   });
 
   it('says nothing for anything else, so nothing a caller sends is reflected back', () => {

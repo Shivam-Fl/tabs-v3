@@ -230,8 +230,18 @@ export function ExpenseEditor({
     return { tone: 'ok', text: `${shares} shares between ${included.length}.` };
   }
 
-  const paidNote = payerNote();
-  const splitLiveNote = splitNote();
+  /**
+   * The lines under the payer rows and the split rows: advice while typing, in the same sentences
+   * the server refuses with. A section the server has just refused stands down here, because the
+   * `FieldError` above it is already carrying that sentence — the refusal and the live line are
+   * the same words, and one failed rule gets one sentence in the page (AC-9).
+   */
+  const paidNote = errors.payers
+    ? null
+    : payers.length === 0
+      ? { tone: 'bad' as const, text: NO_PAYER_MESSAGE }
+      : payerNote();
+  const splitLiveNote = errors.splits ? null : splitNote();
 
   return (
     <form action={formAction} noValidate className="flex flex-col gap-5">
@@ -413,11 +423,7 @@ export function ExpenseEditor({
         ) : null}
 
         <FieldError id="expense-payers-error" message={errors.payers} />
-        {payers.length === 0 ? (
-          <LiveNote tone="bad" text={NO_PAYER_MESSAGE} />
-        ) : paidNote ? (
-          <LiveNote tone={paidNote.tone} text={paidNote.text} />
-        ) : null}
+        {paidNote ? <LiveNote tone={paidNote.tone} text={paidNote.text} /> : null}
       </section>
 
       <section className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4">
@@ -517,7 +523,11 @@ export function ExpenseEditor({
         <Link className="text-accent underline" href={`/groups/${groupId}`}>
           Cancel
         </Link>
-        <StateMessage state={state} />
+        {/* A refusal is already on screen by the time this row renders — beside the field it is
+            about, or in the summary above when it is about the form as a whole — so the submit row
+            never repeats it. The only message left for it is a success one, and a success leaves
+            this page entirely (AC-9). */}
+        {state.status === 'error' ? null : <StateMessage state={state} />}
       </div>
     </form>
   );

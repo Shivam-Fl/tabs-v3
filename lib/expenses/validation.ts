@@ -606,11 +606,14 @@ export const IDLE_EXPENSE_STATE: ExpenseActionState = { status: 'idle', message:
 export const EXPENSE_NOTICE_PARAM = 'expense';
 export const EXPENSE_ADDED = 'added';
 export const EXPENSE_UPDATED = 'updated';
+/** A save that found the stored expense already equal to what was submitted, so nothing moved. */
+export const EXPENSE_UNCHANGED = 'unchanged';
 export const EXPENSE_DELETED = 'deleted';
 
 export function expenseNoticeText(raw: string | undefined): string | null {
   if (raw === EXPENSE_ADDED) return 'Expense added.';
   if (raw === EXPENSE_UPDATED) return 'Expense updated.';
+  if (raw === EXPENSE_UNCHANGED) return 'Nothing to change.';
   if (raw === EXPENSE_DELETED) return 'Expense deleted.';
   return null;
 }

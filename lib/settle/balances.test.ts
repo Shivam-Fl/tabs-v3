@@ -325,7 +325,7 @@ describe('computeNetBalances', () => {
     expect(await netOf(bo)).toBe(-1000);
   });
 
-  it('moves the recipient of a payment up and its payer down, and settles the group', async () => {
+  it('moves the payer of a payment up and its recipient down, and settles the group', async () => {
     await recordExpense({
       description: 'Dinner',
       amountMinor: 3000,

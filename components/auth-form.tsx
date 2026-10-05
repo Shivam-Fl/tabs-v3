@@ -30,9 +30,35 @@ export interface AuthFormProps {
   action: AuthAction;
   submitLabel: string;
   pendingLabel: string;
+  /**
+   * Where a successful **sign-in** goes, already validated by the page that read it out of the
+   * query (`parseNextPath`) — `null`, or omitted, means Home. Sign-up is handed the same value so
+   * the two screens stay the same shape, but never navigates on it: both of sign-up's outcomes
+   * come back identical, so only the server page may decide whether there is now a session.
+   */
+  next?: string | null;
 }
 
-export function AuthForm({ mode, action, submitLabel, pendingLabel }: AuthFormProps) {
+/**
+ * What the island does the moment an auth action reports success.
+ *
+ * It is its own function for the reason `menuKeyIntent` is (app/app-shell.test.ts): the effect
+ * that calls it drives a router, and this tree has no jsdom to drive one with, so the decision is
+ * exported as data and asserted directly.
+ *
+ * Sign-in navigates to the destination the page already validated — the invite link it arrived
+ * through, or Home — which is what makes landing on Home a fact of the click rather than of when
+ * the just-set session cookie becomes readable to a server render (IAC-1). Sign-up never
+ * navigates: a fresh address and a taken one answer byte-identically and the island cannot tell
+ * them apart, so it refreshes and lets the server page redirect the one that now holds a session.
+ */
+export type PostAuthIntent = { kind: 'push'; href: string } | { kind: 'refresh' };
+
+export function postAuthIntent(mode: AuthFormProps['mode'], next: string | null): PostAuthIntent {
+  return mode === 'signin' ? { kind: 'push', href: next ?? '/' } : { kind: 'refresh' };
+}
+
+export function AuthForm({ mode, action, submitLabel, pendingLabel, next = null }: AuthFormProps) {
   const [state, formAction, isPending] = useActionState(action, IDLE_AUTH_STATE);
   const router = useRouter();
 
@@ -48,12 +74,15 @@ export function AuthForm({ mode, action, submitLabel, pendingLabel }: AuthFormPr
     password: `${mode}-password`,
   };
 
-  // Both actions answer success the same way for a fresh and an existing address, so the
-  // island cannot branch on the response — it refreshes, and the page itself decides whether
-  // a session now exists and where that leads.
+  // On success the island follows postAuthIntent: sign-in navigates to the destination its page
+  // validated (Home when there was none), and sign-up refreshes so the server page decides —
+  // both of sign-up's answers for an address are the same, so the island must not choose.
   useEffect(() => {
-    if (state.status === 'success') router.refresh();
-  }, [state, router]);
+    if (state.status !== 'success') return;
+    const intent = postAuthIntent(mode, next);
+    if (intent.kind === 'push') router.push(intent.href);
+    else router.refresh();
+  }, [state, mode, next, router]);
 
   return (
     <form

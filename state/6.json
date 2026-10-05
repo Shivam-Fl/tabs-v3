@@ -381,5 +381,33 @@
       }
     ],
     "pr": "20"
-  }
+  },
+  "qa": {
+    "verdict": "fail",
+    "introduced_bugs": 2,
+    "ac_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7",
+      "AC-8"
+    ],
+    "sha": "19d187498363d3a96b4d2504fbbb776ea8122865",
+    "run_id": "37255404994",
+    "work_order_version": 1,
+    "at": "2026-10-05T03:19:29.688Z"
+  },
+  "qa_open_bugs": [
+    {
+      "id": "BUG-1",
+      "title": "Expense refusal sentence renders three times in the page"
+    },
+    {
+      "id": "BUG-2",
+      "title": "Saving an edit with no changes reports Expense updated"
+    }
+  ]
 }

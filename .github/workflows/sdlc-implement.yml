@@ -279,6 +279,8 @@ jobs:
       - name: Check out the issue branch
         run: |
           cp .sdlc/agents/implementer.md "$RUNNER_TEMP/implementer.md"
+          # Run after the agent, so taken from here, before the branch and the agent's edits.
+          cp .sdlc/bin/apply-protected.mjs "$RUNNER_TEMP/apply-protected.mjs"
           # The paths no agent may change, ignored while untracked. A tool that writes one on its
           # own — `next dev` writes AGENTS.md and CLAUDE.md when it detects an agent, and their text
           # says to commit them — no longer lands in a `git add -A`, the agent's or the bundle's
@@ -291,7 +293,7 @@ jobs:
             git checkout -B "$BRANCH" "origin/$BASE"
           fi
           printf '%s\n' work-order.json failure-packet.json rework-context.md \
-            implementer-note.md implementer-reply.md pr-demo.spec.ts >> .git/info/exclude
+            implementer-note.md implementer-reply.md sdlc-protected/ pr-demo.spec.ts >> .git/info/exclude
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -445,6 +447,10 @@ jobs:
             way the project serves it, and walk the work order's qa_script there once before
             you finish, watching the console.
 
+            package.json, the lockfiles and scripts/ are read-only to your commands: a change to
+            package.json or scripts/ goes under sdlc-protected/ ("Some files your commands cannot
+            write" in your pack), and the pipeline puts it in place and rebuilds the lockfile.
+
             If the change shows on a screen, also write pr-demo.spec.ts at the repository root
             (step 6 of your pack): the pipeline records it on the base branch and on your branch
             and posts both on the PR as Before / after. You are answering one question — does the change
@@ -456,6 +462,14 @@ jobs:
       - name: Stop the developer's app
         if: always()
         run: '[ -f /tmp/devapp.pid ] && kill "$(cat /tmp/devapp.pid)" || true'
+
+      # The files the sandbox kept read-only for the agent's commands (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB):
+      # the root package.json, lockfiles, scripts/. The agent staged what it wants under
+      # sdlc-protected/; this copies what it accepts, rebuilds the lockfile with install scripts off,
+      # stages both for the bundle, and removes the sandbox's empty stand-ins. No agent, no key.
+      - name: Put in place what the sandbox kept read-only
+        if: ${{ !cancelled() }}
+        run: node "$RUNNER_TEMP/apply-protected.mjs"
 
       # The agent's whole output: its commits past the base, as a bundle, and what it has to
       # say. A branch with nothing past the base gets no bundle, and publish says so.
@@ -479,8 +493,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           if git rev-parse -q --verify "refs/heads/$BRANCH" >/dev/null; then
             if [ "$(git rev-list --count "origin/$BASE..$BRANCH")" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
-              git add -A && git commit -q --no-verify -m 'implementer: changes the agent left uncommitted'
+              git add -A
             fi
+            # Also what the step above staged, after commits the agent made.
+            git diff --cached --quiet || git commit -q --no-verify -m 'implementer: changes the agent left uncommitted'
             if [ "$(git rev-list --count "origin/$BASE..$BRANCH")" -gt 0 ]; then
               git bundle create "$RUNNER_TEMP/out/branch.bundle" "$BRANCH" "^origin/$BASE"
               echo "bundled=true" >> "$GITHUB_OUTPUT"

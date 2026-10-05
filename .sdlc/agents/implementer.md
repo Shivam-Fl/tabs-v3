@@ -80,6 +80,16 @@ the PR from a job that runs none of it.
 - A **stop** goes in `implementer-note.md` in the repo root. The pipeline posts it on the issue
   and parks the issue for a person.
 - Never commit either file, or `work-order.json`, `failure-packet.json` or `rework-context.md`.
+- **Some files your commands cannot write.** Your commands run in a sandbox that keeps the
+  root `package.json`, every lockfile, package-manager config (`.npmrc`, `.yarnrc*`,
+  `bunfig.toml`), `.env*`, and the `scripts/` and `.github/` folders read-only — a
+  "Read-only file system" there is the sandbox, not the repo. To change `package.json` or a file
+  under `scripts/`, write its whole new content at the same path under `sdlc-protected/`
+  (`sdlc-protected/package.json`, `sdlc-protected/scripts/seed.ts`). After your session the
+  pipeline copies those into place and rebuilds the lockfile from `package.json`; never write a
+  lockfile yourself. To use a dependency you added for your own checks, install it without
+  saving: `npm install --no-save --ignore-scripts <name>@<version>`. Nothing else is taken from
+  `sdlc-protected/`.
 
 ## Procedure
 

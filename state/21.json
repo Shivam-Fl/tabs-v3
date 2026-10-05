@@ -18,7 +18,142 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "issue": 21,
+    "version": 1,
+    "kind": "chore",
+    "understanding": "Issue #21 batches 8 non-blocking review findings from PR #20 (for #6). I read each cited line on main: 7 still reproduce, 1 does not. The no-change-edit finding claims updateExpense returns EXPENSE_UPDATED for both kinds, but lib/expenses/actions.ts:400-408 already returns a distinct state ('Nothing to change.') with a distinct EXPENSE_UNCHANGED notice value, covered by lib/expenses/validation.test.ts:496-497 and lib/expenses/actions.test.ts:868 -- a later round fixed it, so it is dropped from this plan per the issue's own instruction and its behavior is kept only as a regression criterion. The live 7: (1) lib/money/format.ts formatBasisPoints exists, is used by percentPartsMessage (lib/expenses/validation.ts:140), and has no direct test file; (2) components/expense-editor.tsx:108 duplicates lib/money/splits.ts parseSplitValue dispatch exactly while the boundary (validation.ts:464,512) already uses the shared helper; (3) style constants + StateMessage/FieldError are byte-identical across expense-editor.tsx, groups-panels.tsx, auth-form.tsx and app/groups/[id]/page.tsx; (4) ConfirmStep is module-private in groups-panels.tsx while DeleteExpenseForm hand-rolls the same shape; (5) the new-expense and edit-expense pages share wrapper/header/banner/Back-link shell; (6) the floorDivide comment (splits.ts:152-156) claims the numerator passes 2^53, but the percentage max is 2147483647x10000=2.1e13 (exact in a double) -- BigInt is genuinely needed only because the shares numerator is total x summed shares, which exceeds 2^53 with a handful of large share counts; (7) splits.test.ts:262-283 sweeps nine fixed totals with no generative input, while TR-4 is proved by property tests over generated splits.",
+    "approach": "One behavior-preserving cleanup slice: add a shared presentational module (components/ui.tsx) holding the five byte-identical class constants plus generic StateMessage, FieldError and the existing ConfirmStep, and import it in all four current declaration sites; replace the editor's local parseValue with the already-tested parseSplitValue (identical dispatch, boundary already uses it) and render ConfirmStep inside DeleteExpenseForm with identical copy; extract the new/edit expense shell into components/expense-screen.tsx with a mode prop driving the two archived-banner sentences, and thin both pages to it; correct the floorDivide comment to the true bounds (comment-only, BigInt stays); add a seeded-PRNG generative sweep to splits.test.ts asserting sum preservation and remainder placement; add lib/money/format.test.ts covering formatBasisPoints (the scope finding needs tests, not source changes). No validation, auth, transaction or money-math behavior changes.",
+    "files": [
+      {
+        "path": "components/ui.tsx",
+        "action": "create",
+        "change": "Create shared presentational module exporting byte-identical INPUT_CLASSES, LABEL_CLASSES, PRIMARY_BUTTON, QUIET_BUTTON, DANGER_BUTTON string constants; generic StateMessage({state:{status,message}}) rendering null on idle/empty message else the same role/class markup; FieldError({id,message?}); and ConfirmStep({question,confirmLabel,pendingLabel,isPending,onCancel}) with the exact groups-panels markup. No 'use client' directive (pure presentational, importable from client islands and server pages)."
+      },
+      {
+        "path": "components/groups-panels.tsx",
+        "action": "edit",
+        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES/PRIMARY_BUTTON/QUIET_BUTTON/DANGER_BUTTON/StateMessage/FieldError/ConfirmStep and import all of them from './ui'; every other line and all call sites unchanged."
+      },
+      {
+        "path": "components/expense-editor.tsx",
+        "action": "edit",
+        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES/PRIMARY_BUTTON/QUIET_BUTTON/DANGER_BUTTON/StateMessage/FieldError and import them plus ConfirmStep from './ui'; delete local parseValue and import parseSplitValue from '../lib/money/splits' (drop now-unused parseBasisPoints/parseShares imports, keep parseMinorUnits for amount/payer parsing), updating the single splitNote call site; rewrite DeleteExpenseForm's confirming branch to render ConfirmStep with the identical question copy, confirmLabel 'Delete expense', pendingLabel 'Deleting…' and onCancel closing the confirm, keeping hidden inputs and StateMessage placement."
+      },
+      {
+        "path": "components/auth-form.tsx",
+        "action": "edit",
+        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES and import them from './ui'; markup unchanged."
+      },
+      {
+        "path": "app/groups/[id]/page.tsx",
+        "action": "edit",
+        "change": "Delete local INPUT_CLASSES/QUIET_BUTTON and import them from '../../../components/ui'; markup unchanged."
+      },
+      {
+        "path": "components/expense-screen.tsx",
+        "action": "create",
+        "change": "Create server-component ExpenseScreen({mode:'new'|'edit',groupId,groupName,title,subtitle,archived,children}) rendering the shared shell: main wrapper, header (h1 title + muted subtitle), archived role=status banner whose sentence is chosen by mode, children in the non-archived branch, and Back-to-group link."
+      },
+      {
+        "path": "app/groups/[id]/expenses/new/page.tsx",
+        "action": "edit",
+        "change": "Replace NewExpenseScreen's inline main/header/banner/Back-link shell with ExpenseScreen mode='new', passing title, subtitle, archived flag, and the ExpenseEditor as children; guard/redirect/data-reading logic unchanged."
+      },
+      {
+        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
+        "action": "edit",
+        "change": "Replace EditExpenseScreen's inline main/header/banner/Back-link shell with ExpenseScreen mode='edit', passing title, subtitle, archived flag, and the ExpenseEditor plus delete section as children; guard/scope/data-reading logic unchanged."
+      },
+      {
+        "path": "lib/money/splits.ts",
+        "action": "edit",
+        "change": "Comment-only: replace the floorDivide justification with the true bounds -- percentage numerator tops out at 2147483647x10000=2.1e13 (exact in a double), while the shares numerator is total x summed member shares and passes 2^53 with a few large counts, which is why BigInt stays for both under one rule. No code change."
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "New-expense page shows 'Add an expense to <group>' heading with currency/recorded-by subline; edit page shows stored split type with each member input as entered, and the delete section; both show the correct archived sentence when archived and a working Back link otherwise."
+      },
+      {
+        "id": "AC-2",
+        "check": "Delete-expense confirm (edit page and group-list rows) asks naming the expense with Delete expense / Cancel buttons styled as before; Cancel closes it, Delete removes the expense and the group page confirms."
+      },
+      {
+        "id": "AC-3",
+        "check": "Saving an expense with zero changes shows 'Nothing to change.' on the group page; a real edit still shows 'Expense updated.'."
+      },
+      {
+        "id": "AC-4",
+        "check": "Typing an invalid percentage or payer part in the editor shows the same inline error sentences as before; valid splits show the same live sum/percentage/shares notes."
+      },
+      {
+        "id": "AC-5",
+        "check": "Sign-in/sign-up card, group detail filters, and both expense screens render with unchanged styling, labelled controls and visible focus; full keyboard path still works."
+      },
+      {
+        "id": "AC-6",
+        "check": "formatBasisPoints unit cases print whole, fractional, trailing-zero and negative basis points exactly.",
+        "how_to_verify": "CI runs lib/money/format.test.ts cases listed in tests[]",
+        "verify": "test"
+      },
+      {
+        "id": "AC-7",
+        "check": "Seeded generative sweep proves every generated equal/percentage/shares/exact split sums to its total with the remainder on the stated recipient.",
+        "how_to_verify": "CI runs the new lib/money/splits.test.ts seeded-sweep cases listed in tests[]",
+        "verify": "test"
+      }
+    ],
+    "tests": [
+      {
+        "path": "lib/money/format.test.ts",
+        "action": "create",
+        "cases": [
+          "prints whole percentages with no decimals (10000 -> '100%', 0 -> '0%')",
+          "prints two decimals and drops trailing zeroes (3333 -> '33.33%', 9950 -> '99.5%', 9900 -> '99%')",
+          "keeps the sign on negative gaps (-50 -> '-0.5%') for shortfall sentences",
+          "matches the percentage shortfall sentence wording used by percentPartsMessage"
+        ]
+      },
+      {
+        "path": "lib/money/splits.test.ts",
+        "action": "edit",
+        "cases": [
+          "seeded-PRNG sweep (fixed seed, 200 iterations per type): random totals 1..2147483647 and 1..6 members with valid exact/percentage/shares inputs always sum to the total",
+          "same sweep asserts the rounding remainder lands on the first payer in the split, else the first included member",
+          "keeps all existing fixed-total cases untouched"
+        ]
+      }
+    ],
+    "qa_script": [
+      "Sign up, create a group, add one expense of each split type plus a multi-payer one.",
+      "Open the edit page: confirm stored split type and inputs reopen as entered; save with no changes and expect 'Nothing to change.'; change the amount and expect 'Expense updated.'.",
+      "Exercise the Delete confirm (Cancel closes, Delete removes + notice) from both the edit page and the group list.",
+      "Type invalid split/payer values and confirm identical inline error sentences; check archived-group banners on both expense pages."
+    ],
+    "risks": [
+      "Touches class-constant declarations used by nearly every form: the moved strings must be byte-identical or every screen restyles silently; mitigated by no-markup-changes rule and AC-5.",
+      "New components/ui.tsx is imported by both client islands and server pages; it must stay free of client-only and server-only APIs.",
+      "Refactor-only except tests; any behavior drift (parse dispatch, notice copy, remainder rule) fails AC-1..AC-4."
+    ],
+    "out_of_scope": [
+      "No-change edit notice wording: already distinct on main (EXPENSE_UNCHANGED/'Nothing to change.' with unit coverage), so no code change ships here; kept only as regression criterion AC-3.",
+      "No validation, authorization, transaction or money-math behavior changes; no new split types, currencies, or screens."
+    ],
+    "confidence": 85,
+    "confidence_rationale": "Every finding was verified line-by-line on main (including the arithmetic behind the floorDivide correction and the already-fixed notice path); all changes are moves, deletions of duplicates, or comment/test-only, with the shared parse helper already covered by boundary tests.",
+    "reproduced": true,
+    "evidence": [
+      "expense-editor.tsx:108-113 dispatches exact->parseMinorUnits/percentage->parseBasisPoints/shares->parseShares/else-null, identical to splits.ts:93-98",
+      "actions.ts:400-408 returns EXPENSE_UNCHANGED/'Nothing to change.' for unchanged saves, covered by validation.test.ts:496-497 and actions.test.ts:868",
+      "INPUT_CLASSES/QUIET_BUTTON byte-identical in expense-editor.tsx:51-57, groups-panels.tsx:41-47, auth-form.tsx:31-32, group page:33-35",
+      "ConfirmStep module-private in groups-panels.tsx:73; DeleteExpenseForm:570-588 hand-rolls the same shape",
+      "new/page.tsx:53-79 vs edit/page.tsx:61-97 share wrapper/header/banner/Back-link shell",
+      "splits.test.ts:264 loops nine fixed totals with no PRNG input"
+    ],
+    "mode": "committed"
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -77,278 +212,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "plan",
-  "validated_work_order": {
-    "issue": 21,
-    "version": 1,
-    "kind": "chore",
-    "understanding": "Issue #21 batches 8 non-blocking review findings from PR #20 (for #6). I read each cited line on main: 7 still reproduce, 1 does not. The no-change-edit finding claims updateExpense returns EXPENSE_UPDATED for both kinds, but lib/expenses/actions.ts:400-408 already returns a distinct state ('Nothing to change.') with a distinct EXPENSE_UNCHANGED notice value, covered by lib/expenses/validation.test.ts:496-497 and lib/expenses/actions.test.ts:868 -- a later round fixed it, so it is dropped from this plan per the issue's own instruction and its behavior is kept only as a regression criterion. The live 7: (1) lib/money/format.ts formatBasisPoints exists, is used by percentPartsMessage (lib/expenses/validation.ts:140), and has no direct test file; (2) components/expense-editor.tsx:108 duplicates lib/money/splits.ts parseSplitValue dispatch exactly while the boundary (validation.ts:464,512) already uses the shared helper; (3) style constants + StateMessage/FieldError are byte-identical across expense-editor.tsx, groups-panels.tsx, auth-form.tsx and app/groups/[id]/page.tsx; (4) ConfirmStep is module-private in groups-panels.tsx while DeleteExpenseForm hand-rolls the same shape; (5) the new-expense and edit-expense pages share wrapper/header/banner/Back-link shell; (6) the floorDivide comment (splits.ts:152-156) claims the numerator passes 2^53, but the percentage max is 2147483647x10000=2.1e13 (exact in a double) -- BigInt is genuinely needed only because the shares numerator is total x summed shares, which exceeds 2^53 with a handful of large share counts; (7) splits.test.ts:262-283 sweeps nine fixed totals with no generative input, while TR-4 is proved by property tests over generated splits.",
-    "approach": "One behavior-preserving cleanup slice: add a shared presentational module (components/ui.tsx) holding the five byte-identical class constants plus generic StateMessage, FieldError and the existing ConfirmStep, and import it in all four current declaration sites; replace the editor's local parseValue with the already-tested parseSplitValue (identical dispatch, boundary already uses it) and render ConfirmStep inside DeleteExpenseForm with identical copy; extract the new/edit expense shell into components/expense-screen.tsx with a mode prop driving the two archived-banner sentences, and thin both pages to it; correct the floorDivide comment to the true bounds (comment-only, BigInt stays); add a seeded-PRNG generative sweep to splits.test.ts asserting sum preservation and remainder placement; add lib/money/format.test.ts covering formatBasisPoints (the scope finding needs tests, not source changes). No validation, auth, transaction or money-math behavior changes.",
-    "files": [
-      {
-        "path": "components/ui.tsx",
-        "action": "create",
-        "change": "Create shared presentational module exporting byte-identical INPUT_CLASSES, LABEL_CLASSES, PRIMARY_BUTTON, QUIET_BUTTON, DANGER_BUTTON string constants; generic StateMessage({state:{status,message}}) rendering null on idle/empty message else the same role/class markup; FieldError({id,message?}); and ConfirmStep({question,confirmLabel,pendingLabel,isPending,onCancel}) with the exact groups-panels markup. No 'use client' directive (pure presentational, importable from client islands and server pages)."
-      },
-      {
-        "path": "components/groups-panels.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES/PRIMARY_BUTTON/QUIET_BUTTON/DANGER_BUTTON/StateMessage/FieldError/ConfirmStep and import all of them from './ui'; every other line and all call sites unchanged."
-      },
-      {
-        "path": "components/expense-editor.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES/PRIMARY_BUTTON/QUIET_BUTTON/DANGER_BUTTON/StateMessage/FieldError and import them plus ConfirmStep from './ui'; delete local parseValue and import parseSplitValue from '../lib/money/splits' (drop now-unused parseBasisPoints/parseShares imports, keep parseMinorUnits for amount/payer parsing), updating the single splitNote call site; rewrite DeleteExpenseForm's confirming branch to render ConfirmStep with the identical question copy, confirmLabel 'Delete expense', pendingLabel 'Deleting…' and onCancel closing the confirm, keeping hidden inputs and StateMessage placement."
-      },
-      {
-        "path": "components/auth-form.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES and import them from './ui'; markup unchanged."
-      },
-      {
-        "path": "app/groups/[id]/page.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/QUIET_BUTTON and import them from '../../../components/ui'; markup unchanged."
-      },
-      {
-        "path": "components/expense-screen.tsx",
-        "action": "create",
-        "change": "Create server-component ExpenseScreen({mode:'new'|'edit',groupId,groupName,title,subtitle,archived,children}) rendering the shared shell: main wrapper, header (h1 title + muted subtitle), archived role=status banner whose sentence is chosen by mode, children in the non-archived branch, and Back-to-group link."
-      },
-      {
-        "path": "app/groups/[id]/expenses/new/page.tsx",
-        "action": "edit",
-        "change": "Replace NewExpenseScreen's inline main/header/banner/Back-link shell with ExpenseScreen mode='new', passing title, subtitle, archived flag, and the ExpenseEditor as children; guard/redirect/data-reading logic unchanged."
-      },
-      {
-        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
-        "action": "edit",
-        "change": "Replace EditExpenseScreen's inline main/header/banner/Back-link shell with ExpenseScreen mode='edit', passing title, subtitle, archived flag, and the ExpenseEditor plus delete section as children; guard/scope/data-reading logic unchanged."
-      },
-      {
-        "path": "lib/money/splits.ts",
-        "action": "edit",
-        "change": "Comment-only: replace the floorDivide justification with the true bounds -- percentage numerator tops out at 2147483647x10000=2.1e13 (exact in a double), while the shares numerator is total x summed member shares and passes 2^53 with a few large counts, which is why BigInt stays for both under one rule. No code change."
-      }
-    ],
-    "acceptance": [
-      {
-        "id": "AC-1",
-        "check": "New-expense page shows 'Add an expense to <group>' heading with currency/recorded-by subline; edit page shows stored split type with each member input as entered, and the delete section; both show the correct archived sentence when archived and a working Back link otherwise."
-      },
-      {
-        "id": "AC-2",
-        "check": "Delete-expense confirm (edit page and group-list rows) asks naming the expense with Delete expense / Cancel buttons styled as before; Cancel closes it, Delete removes the expense and the group page confirms."
-      },
-      {
-        "id": "AC-3",
-        "check": "Saving an expense with zero changes shows 'Nothing to change.' on the group page; a real edit still shows 'Expense updated.'."
-      },
-      {
-        "id": "AC-4",
-        "check": "Typing an invalid percentage or payer part in the editor shows the same inline error sentences as before; valid splits show the same live sum/percentage/shares notes."
-      },
-      {
-        "id": "AC-5",
-        "check": "Sign-in/sign-up card, group detail filters, and both expense screens render with unchanged styling, labelled controls and visible focus; full keyboard path still works."
-      },
-      {
-        "id": "AC-6",
-        "check": "formatBasisPoints unit cases print whole, fractional, trailing-zero and negative basis points exactly.",
-        "how_to_verify": "CI runs lib/money/format.test.ts cases listed in tests[]",
-        "verify": "test"
-      },
-      {
-        "id": "AC-7",
-        "check": "Seeded generative sweep proves every generated equal/percentage/shares/exact split sums to its total with the remainder on the stated recipient.",
-        "how_to_verify": "CI runs the new lib/money/splits.test.ts seeded-sweep cases listed in tests[]",
-        "verify": "test"
-      }
-    ],
-    "tests": [
-      {
-        "path": "lib/money/format.test.ts",
-        "action": "create",
-        "cases": [
-          "prints whole percentages with no decimals (10000 -> '100%', 0 -> '0%')",
-          "prints two decimals and drops trailing zeroes (3333 -> '33.33%', 9950 -> '99.5%', 9900 -> '99%')",
-          "keeps the sign on negative gaps (-50 -> '-0.5%') for shortfall sentences",
-          "matches the percentage shortfall sentence wording used by percentPartsMessage"
-        ]
-      },
-      {
-        "path": "lib/money/splits.test.ts",
-        "action": "edit",
-        "cases": [
-          "seeded-PRNG sweep (fixed seed, 200 iterations per type): random totals 1..2147483647 and 1..6 members with valid exact/percentage/shares inputs always sum to the total",
-          "same sweep asserts the rounding remainder lands on the first payer in the split, else the first included member",
-          "keeps all existing fixed-total cases untouched"
-        ]
-      }
-    ],
-    "qa_script": [
-      "Sign up, create a group, add one expense of each split type plus a multi-payer one.",
-      "Open the edit page: confirm stored split type and inputs reopen as entered; save with no changes and expect 'Nothing to change.'; change the amount and expect 'Expense updated.'.",
-      "Exercise the Delete confirm (Cancel closes, Delete removes + notice) from both the edit page and the group list.",
-      "Type invalid split/payer values and confirm identical inline error sentences; check archived-group banners on both expense pages."
-    ],
-    "risks": [
-      "Touches class-constant declarations used by nearly every form: the moved strings must be byte-identical or every screen restyles silently; mitigated by no-markup-changes rule and AC-5.",
-      "New components/ui.tsx is imported by both client islands and server pages; it must stay free of client-only and server-only APIs.",
-      "Refactor-only except tests; any behavior drift (parse dispatch, notice copy, remainder rule) fails AC-1..AC-4."
-    ],
-    "out_of_scope": [
-      "No-change edit notice wording: already distinct on main (EXPENSE_UNCHANGED/'Nothing to change.' with unit coverage), so no code change ships here; kept only as regression criterion AC-3.",
-      "No validation, authorization, transaction or money-math behavior changes; no new split types, currencies, or screens."
-    ],
-    "confidence": 85,
-    "confidence_rationale": "Every finding was verified line-by-line on main (including the arithmetic behind the floorDivide correction and the already-fixed notice path); all changes are moves, deletions of duplicates, or comment/test-only, with the shared parse helper already covered by boundary tests.",
-    "reproduced": true,
-    "evidence": [
-      "expense-editor.tsx:108-113 dispatches exact->parseMinorUnits/percentage->parseBasisPoints/shares->parseShares/else-null, identical to splits.ts:93-98",
-      "actions.ts:400-408 returns EXPENSE_UNCHANGED/'Nothing to change.' for unchanged saves, covered by validation.test.ts:496-497 and actions.test.ts:868",
-      "INPUT_CLASSES/QUIET_BUTTON byte-identical in expense-editor.tsx:51-57, groups-panels.tsx:41-47, auth-form.tsx:31-32, group page:33-35",
-      "ConfirmStep module-private in groups-panels.tsx:73; DeleteExpenseForm:570-588 hand-rolls the same shape",
-      "new/page.tsx:53-79 vs edit/page.tsx:61-97 share wrapper/header/banner/Back-link shell",
-      "splits.test.ts:264 loops nine fixed totals with no PRNG input"
-    ]
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-05T05:46:01.614Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "issue": 21,
-    "version": 1,
-    "kind": "chore",
-    "understanding": "Issue #21 batches 8 non-blocking review findings from PR #20 (for #6). I read each cited line on main: 7 still reproduce, 1 does not. The no-change-edit finding claims updateExpense returns EXPENSE_UPDATED for both kinds, but lib/expenses/actions.ts:400-408 already returns a distinct state ('Nothing to change.') with a distinct EXPENSE_UNCHANGED notice value, covered by lib/expenses/validation.test.ts:496-497 and lib/expenses/actions.test.ts:868 -- a later round fixed it, so it is dropped from this plan per the issue's own instruction and its behavior is kept only as a regression criterion. The live 7: (1) lib/money/format.ts formatBasisPoints exists, is used by percentPartsMessage (lib/expenses/validation.ts:140), and has no direct test file; (2) components/expense-editor.tsx:108 duplicates lib/money/splits.ts parseSplitValue dispatch exactly while the boundary (validation.ts:464,512) already uses the shared helper; (3) style constants + StateMessage/FieldError are byte-identical across expense-editor.tsx, groups-panels.tsx, auth-form.tsx and app/groups/[id]/page.tsx; (4) ConfirmStep is module-private in groups-panels.tsx while DeleteExpenseForm hand-rolls the same shape; (5) the new-expense and edit-expense pages share wrapper/header/banner/Back-link shell; (6) the floorDivide comment (splits.ts:152-156) claims the numerator passes 2^53, but the percentage max is 2147483647x10000=2.1e13 (exact in a double) -- BigInt is genuinely needed only because the shares numerator is total x summed shares, which exceeds 2^53 with a handful of large share counts; (7) splits.test.ts:262-283 sweeps nine fixed totals with no generative input, while TR-4 is proved by property tests over generated splits.",
-    "approach": "One behavior-preserving cleanup slice: add a shared presentational module (components/ui.tsx) holding the five byte-identical class constants plus generic StateMessage, FieldError and the existing ConfirmStep, and import it in all four current declaration sites; replace the editor's local parseValue with the already-tested parseSplitValue (identical dispatch, boundary already uses it) and render ConfirmStep inside DeleteExpenseForm with identical copy; extract the new/edit expense shell into components/expense-screen.tsx with a mode prop driving the two archived-banner sentences, and thin both pages to it; correct the floorDivide comment to the true bounds (comment-only, BigInt stays); add a seeded-PRNG generative sweep to splits.test.ts asserting sum preservation and remainder placement; add lib/money/format.test.ts covering formatBasisPoints (the scope finding needs tests, not source changes). No validation, auth, transaction or money-math behavior changes.",
-    "files": [
-      {
-        "path": "components/ui.tsx",
-        "action": "create",
-        "change": "Create shared presentational module exporting byte-identical INPUT_CLASSES, LABEL_CLASSES, PRIMARY_BUTTON, QUIET_BUTTON, DANGER_BUTTON string constants; generic StateMessage({state:{status,message}}) rendering null on idle/empty message else the same role/class markup; FieldError({id,message?}); and ConfirmStep({question,confirmLabel,pendingLabel,isPending,onCancel}) with the exact groups-panels markup. No 'use client' directive (pure presentational, importable from client islands and server pages)."
-      },
-      {
-        "path": "components/groups-panels.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES/PRIMARY_BUTTON/QUIET_BUTTON/DANGER_BUTTON/StateMessage/FieldError/ConfirmStep and import all of them from './ui'; every other line and all call sites unchanged."
-      },
-      {
-        "path": "components/expense-editor.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES/PRIMARY_BUTTON/QUIET_BUTTON/DANGER_BUTTON/StateMessage/FieldError and import them plus ConfirmStep from './ui'; delete local parseValue and import parseSplitValue from '../lib/money/splits' (drop now-unused parseBasisPoints/parseShares imports, keep parseMinorUnits for amount/payer parsing), updating the single splitNote call site; rewrite DeleteExpenseForm's confirming branch to render ConfirmStep with the identical question copy, confirmLabel 'Delete expense', pendingLabel 'Deleting…' and onCancel closing the confirm, keeping hidden inputs and StateMessage placement."
-      },
-      {
-        "path": "components/auth-form.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/LABEL_CLASSES and import them from './ui'; markup unchanged."
-      },
-      {
-        "path": "app/groups/[id]/page.tsx",
-        "action": "edit",
-        "change": "Delete local INPUT_CLASSES/QUIET_BUTTON and import them from '../../../components/ui'; markup unchanged."
-      },
-      {
-        "path": "components/expense-screen.tsx",
-        "action": "create",
-        "change": "Create server-component ExpenseScreen({mode:'new'|'edit',groupId,groupName,title,subtitle,archived,children}) rendering the shared shell: main wrapper, header (h1 title + muted subtitle), archived role=status banner whose sentence is chosen by mode, children in the non-archived branch, and Back-to-group link."
-      },
-      {
-        "path": "app/groups/[id]/expenses/new/page.tsx",
-        "action": "edit",
-        "change": "Replace NewExpenseScreen's inline main/header/banner/Back-link shell with ExpenseScreen mode='new', passing title, subtitle, archived flag, and the ExpenseEditor as children; guard/redirect/data-reading logic unchanged."
-      },
-      {
-        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
-        "action": "edit",
-        "change": "Replace EditExpenseScreen's inline main/header/banner/Back-link shell with ExpenseScreen mode='edit', passing title, subtitle, archived flag, and the ExpenseEditor plus delete section as children; guard/scope/data-reading logic unchanged."
-      },
-      {
-        "path": "lib/money/splits.ts",
-        "action": "edit",
-        "change": "Comment-only: replace the floorDivide justification with the true bounds -- percentage numerator tops out at 2147483647x10000=2.1e13 (exact in a double), while the shares numerator is total x summed member shares and passes 2^53 with a few large counts, which is why BigInt stays for both under one rule. No code change."
-      }
-    ],
-    "acceptance": [
-      {
-        "id": "AC-1",
-        "check": "New-expense page shows 'Add an expense to <group>' heading with currency/recorded-by subline; edit page shows stored split type with each member input as entered, and the delete section; both show the correct archived sentence when archived and a working Back link otherwise."
-      },
-      {
-        "id": "AC-2",
-        "check": "Delete-expense confirm (edit page and group-list rows) asks naming the expense with Delete expense / Cancel buttons styled as before; Cancel closes it, Delete removes the expense and the group page confirms."
-      },
-      {
-        "id": "AC-3",
-        "check": "Saving an expense with zero changes shows 'Nothing to change.' on the group page; a real edit still shows 'Expense updated.'."
-      },
-      {
-        "id": "AC-4",
-        "check": "Typing an invalid percentage or payer part in the editor shows the same inline error sentences as before; valid splits show the same live sum/percentage/shares notes."
-      },
-      {
-        "id": "AC-5",
-        "check": "Sign-in/sign-up card, group detail filters, and both expense screens render with unchanged styling, labelled controls and visible focus; full keyboard path still works."
-      },
-      {
-        "id": "AC-6",
-        "check": "formatBasisPoints unit cases print whole, fractional, trailing-zero and negative basis points exactly.",
-        "how_to_verify": "CI runs lib/money/format.test.ts cases listed in tests[]",
-        "verify": "test"
-      },
-      {
-        "id": "AC-7",
-        "check": "Seeded generative sweep proves every generated equal/percentage/shares/exact split sums to its total with the remainder on the stated recipient.",
-        "how_to_verify": "CI runs the new lib/money/splits.test.ts seeded-sweep cases listed in tests[]",
-        "verify": "test"
-      }
-    ],
-    "tests": [
-      {
-        "path": "lib/money/format.test.ts",
-        "action": "create",
-        "cases": [
-          "prints whole percentages with no decimals (10000 -> '100%', 0 -> '0%')",
-          "prints two decimals and drops trailing zeroes (3333 -> '33.33%', 9950 -> '99.5%', 9900 -> '99%')",
-          "keeps the sign on negative gaps (-50 -> '-0.5%') for shortfall sentences",
-          "matches the percentage shortfall sentence wording used by percentPartsMessage"
-        ]
-      },
-      {
-        "path": "lib/money/splits.test.ts",
-        "action": "edit",
-        "cases": [
-          "seeded-PRNG sweep (fixed seed, 200 iterations per type): random totals 1..2147483647 and 1..6 members with valid exact/percentage/shares inputs always sum to the total",
-          "same sweep asserts the rounding remainder lands on the first payer in the split, else the first included member",
-          "keeps all existing fixed-total cases untouched"
-        ]
-      }
-    ],
-    "qa_script": [
-      "Sign up, create a group, add one expense of each split type plus a multi-payer one.",
-      "Open the edit page: confirm stored split type and inputs reopen as entered; save with no changes and expect 'Nothing to change.'; change the amount and expect 'Expense updated.'.",
-      "Exercise the Delete confirm (Cancel closes, Delete removes + notice) from both the edit page and the group list.",
-      "Type invalid split/payer values and confirm identical inline error sentences; check archived-group banners on both expense pages."
-    ],
-    "risks": [
-      "Touches class-constant declarations used by nearly every form: the moved strings must be byte-identical or every screen restyles silently; mitigated by no-markup-changes rule and AC-5.",
-      "New components/ui.tsx is imported by both client islands and server pages; it must stay free of client-only and server-only APIs.",
-      "Refactor-only except tests; any behavior drift (parse dispatch, notice copy, remainder rule) fails AC-1..AC-4."
-    ],
-    "out_of_scope": [
-      "No-change edit notice wording: already distinct on main (EXPENSE_UNCHANGED/'Nothing to change.' with unit coverage), so no code change ships here; kept only as regression criterion AC-3.",
-      "No validation, authorization, transaction or money-math behavior changes; no new split types, currencies, or screens."
-    ],
-    "confidence": 85,
-    "confidence_rationale": "Every finding was verified line-by-line on main (including the arithmetic behind the floorDivide correction and the already-fixed notice path); all changes are moves, deletions of duplicates, or comment/test-only, with the shared parse helper already covered by boundary tests.",
-    "reproduced": true,
-    "evidence": [
-      "expense-editor.tsx:108-113 dispatches exact->parseMinorUnits/percentage->parseBasisPoints/shares->parseShares/else-null, identical to splits.ts:93-98",
-      "actions.ts:400-408 returns EXPENSE_UNCHANGED/'Nothing to change.' for unchanged saves, covered by validation.test.ts:496-497 and actions.test.ts:868",
-      "INPUT_CLASSES/QUIET_BUTTON byte-identical in expense-editor.tsx:51-57, groups-panels.tsx:41-47, auth-form.tsx:31-32, group page:33-35",
-      "ConfirmStep module-private in groups-panels.tsx:73; DeleteExpenseForm:570-588 hand-rolls the same shape",
-      "new/page.tsx:53-79 vs edit/page.tsx:61-97 share wrapper/header/banner/Back-link shell",
-      "splits.test.ts:264 loops nine fixed totals with no PRNG input"
-    ]
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-05T05:49:17.353Z",
+  "work_order_from": "plan",
+  "work_order_comment": "5988872481"
 }

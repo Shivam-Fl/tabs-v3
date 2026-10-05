@@ -40,9 +40,13 @@ export type GroupRole = (typeof GROUP_ROLES)[number];
 /**
  * The member events this slice records (AC-8). Anything an expense or a payment does to a feed
  * belongs to their tickets — this list is closed on purpose, so the writer in `actions.ts` and
- * the reader TR-10 will add agree on what a member row can be.
+ * the reader TR-10 added agree on what a member row can be.
+ *
+ * `member-added` is the seat somebody holds for a person who has no account yet: it is the one
+ * membership change with no user behind it, which is why it is the one whose `subject_user_id`
+ * is null and whose name can only ever come from the snapshot on the row.
  */
-export const MEMBERSHIP_EVENTS = ['join', 'claim', 'leave', 'remove'] as const;
+export const MEMBERSHIP_EVENTS = ['join', 'claim', 'leave', 'remove', 'member-added'] as const;
 export type MembershipEvent = (typeof MEMBERSHIP_EVENTS)[number];
 
 /**

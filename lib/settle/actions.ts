@@ -77,9 +77,14 @@ function field(formData: FormData, name: string): string {
   return typeof value === 'string' ? value : '';
 }
 
-/** The group page and home, refreshed after anything that moves a balance. */
+/**
+ * The group page, home and the cross-group feed, refreshed after anything that moves a balance.
+ * The feed is on the list because a recorded or deleted payment is what puts its row there: the
+ * balances and the record of what moved them have to move together.
+ */
 function revalidateBalances(groupId: string): void {
   revalidatePath('/');
+  revalidatePath('/activity');
   revalidatePath(`/groups/${groupId}`);
   revalidatePath(`/groups/${groupId}/members`);
 }

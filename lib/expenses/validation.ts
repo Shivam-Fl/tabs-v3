@@ -166,6 +166,15 @@ export interface ExpenseParticipantSnapshot {
 
 export interface ExpenseInputSnapshot {
   membershipId: string;
+  /**
+   * The name this member carried when the input was written.
+   *
+   * An input names its own member rather than being resolved through the participants stored
+   * beside it, for the same reason a payer and a participant do: the payload holds only the
+   * fields that moved, so an edit that changed one split value and nothing else carries no
+   * participant list to look a name up in — and the row still has to say whose share moved.
+   */
+  displayName: string;
   /** Minor units, basis points or a share count, per the expense's split type. */
   value: number | null;
 }

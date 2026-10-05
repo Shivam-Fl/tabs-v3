@@ -36,16 +36,18 @@ QA_EVIDENCE_DIR="$RUN" PREVIEW_URL="$URL" DEMO_URL="$URL" \
   || echo "the demo did not pass on $SIDE — expected where the change is new"
 stop
 
-n=0
-for d in "$RUN"/test-results/*/; do
-  [ -d "$d" ] || continue
-  n=$((n + 1)); [ "$n" -le 3 ] || break
-  name=$(basename "$d" | tr 'A-Z' 'a-z' | sed -e 's/-chromium$//' -e 's/[^a-z0-9-]/-/g' | cut -c1-60)
-  if [ -f "$d/video.webm" ]; then
-    ffmpeg -loglevel error -y -t 30 -i "$d/video.webm" -c:v libx264 -pix_fmt yuv420p \
+# Named from each test's title in the run's JSON report (lib/pr-demo.js recordedTests).
+node --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  import { recordedTests } from "./.sdlc/bin/lib/pr-demo.js";
+  let report; try { report = JSON.parse(readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+  for (const t of recordedTests(report)) console.log([t.name, t.video ?? "", t.shot ?? ""].join("\t"));
+' "$RUN/results.json" | while IFS=$'\t' read -r name video shot; do
+  if [ -n "$video" ] && [ -f "$video" ]; then
+    # -nostdin: ffmpeg otherwise reads this loop's input and the next scenarios vanish.
+    ffmpeg -nostdin -loglevel error -y -t 30 -i "$video" -c:v libx264 -pix_fmt yuv420p \
       -vf "scale=1280:-2" -movflags +faststart "$OUT/$name.mp4" || rm -f "$OUT/$name.mp4"
   fi
-  shot=$(ls "$d"/*.png 2>/dev/null | tail -1)
-  [ -n "$shot" ] && cp "$shot" "$OUT/$name.png"
+  if [ -n "$shot" ] && [ -f "$shot" ]; then cp "$shot" "$OUT/$name.png"; fi
 done
 ls -la "$OUT"

@@ -262,7 +262,25 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/expense-editor.tsx",
+    "lib/money/human-date.ts",
+    "components/settle-panels.tsx",
+    "lib/settle/validation.ts",
+    "lib/settle/actions.ts",
+    "app/groups/[id]/page.tsx",
+    "components/expense-screen.tsx",
+    "components/ui-interactive.tsx",
+    "components/account-menu.tsx",
+    "components/expense-row-menu.tsx",
+    "lib/settle/actions.test.ts",
+    "app/groups/[id]/settle-row-identity.test.ts",
+    "app/groups/[id]/debts-live-region.test.ts",
+    "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
+    "lib/money/human-date.test.ts",
+    "lib/settle/validation.test.ts",
+    "components/dialog-contract.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

@@ -230,5 +230,158 @@
   },
   "validated_from": "plan",
   "validated_at": "2026-10-05T01:28:08.519Z",
-  "validated_ac_changes": []
+  "validated_ac_changes": [],
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Sign out, open a live invite link, sign in: the browser lands back on the invite URL and the signin page source contains no input[name=next]",
+        "how_to_verify": "Drive /join/<token> signed out -> /signin?next=/join/<token> -> sign in -> land on /join/<token>; view source shows no hidden next field",
+        "id": "AC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Every page load shows a tab icon with zero failed favicon requests in the console",
+        "how_to_verify": "Open / with devtools console open: no 404 for /favicon.ico; document.querySelector('link[rel=icon]') exists; GET /icon.svg returns 200 with image/svg+xml",
+        "id": "AC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Duplicate-signup and double-claim races answer exactly as before (neutral success, already-member redirect)",
+        "how_to_verify": "CI runs lib/auth/actions.test.ts duplicate-email case and lib/groups/actions.test.ts double-claim race cases unchanged",
+        "id": "AC-3",
+        "verify": "test"
+      },
+      {
+        "check": "Shared unique-violation walker classifies top-level, nested-cause and message-only driver errors and rejects anything else",
+        "how_to_verify": "CI runs the lib/db/errors.test.ts cases",
+        "id": "AC-4",
+        "verify": "test"
+      },
+      {
+        "check": "Group rename as owner still saves on one click with no confirm step",
+        "how_to_verify": "Open a group settings page as owner, edit the name, press Save name: the new name persists with no confirm dialog",
+        "id": "AC-5",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Add a ConfirmStep naming the group to RenameGroupForm",
+        "rejected_because": "docs/ui.md destructive-actions (remove/rotate/disable/archive) deliberately excludes rename; rename is reversible and non-destructive, so a confirm would contradict the approved spec and add friction for no safety gain"
+      },
+      {
+        "approach": "Fold formatMinorUnits away until TR-9 puts real amounts behind it",
+        "rejected_because": "It has live call sites (components/groups-panels.tsx renders balances through it) and is the TR-11 render-time formatter seam; removing it now just re-adds it later"
+      },
+      {
+        "approach": "Thread the next value through the signup/signin server actions instead of deleting it",
+        "rejected_because": "The page-level mechanism (parseNextPath plus signed-in redirect plus router.refresh re-render) already preserves invite links; server-side consumption would add open-redirect surface for a value nobody reads"
+      },
+      {
+        "approach": "Add a binary public/favicon.ico",
+        "rejected_because": "A binary is unreviewable in diff; the app/icon.svg file convention is text, reviewable, and needs no new dependency"
+      }
+    ],
+    "approach": "Do the smallest change that removes the three verified defects and locks in the two correct non-changes. Create lib/db/errors.ts holding the single isUniqueViolation walker (constants plus cause-walk) and repoint lib/auth/actions.ts and lib/groups/actions.ts at it with no behavior change. Strip the dead next prop, its JSDoc and its hidden input from components/auth-form.tsx and delete the two now-dangling next={} passes in app/signin/page.tsx and app/signup/page.tsx, keeping parseNextPath, the signed-in redirect and the signin<->signup cross-links that are the live invite-preserving mechanism. Add app/icon.svg (accent rounded square with white T, title Tabs) and register it via icons metadata in app/layout.tsx so browsers request it instead of /favicon.ico. Cover the shared walker with a colocated unit test; the prop removal deletes a branch rather than adding one, so typecheck plus the invite-survives-auth browser path proves it, and the favicon is browser-chrome only. Run tsc, the full vitest suite and next build.",
+    "assumptions": [
+      "The router.refresh()-driven post-login landing keeps working after the hidden input is removed, because no code ever read that input (verified by grep over lib/auth/actions.ts)"
+    ],
+    "confidence": 85,
+    "confidence_rationale": "All three fixes are mechanical and fully located: the duplicated walker is byte-identical in both files, the next prop has exactly two call sites and zero readers, and the favicon fix uses the stock Next file convention. The only residual risk is an import-path typo in the two action modules, which tsc plus the existing action suites catch immediately.",
+    "evidence": [
+      "lib/auth/actions.ts:37-60 defines UNIQUE_VIOLATION, DUPLICATE_KEY_MESSAGE, MAX_ERROR_CAUSES and isUniqueViolation",
+      "lib/groups/actions.ts:73-94 defines the identical walker with a comment admitting it ('The same walk as lib/auth/actions.ts')",
+      "components/auth-form.tsx:75 renders the hidden next input; lib/auth/actions.ts contains no next reference outside next/* imports",
+      "app/signin/page.tsx:26-29 and app/signup/page.tsx:26-28 validate next via parseNextPath and redirect from their own query string; the cross-links at signin:46-48 and signup:46-48 preserve it across screens",
+      "app/layout.tsx:5-8 has no icons metadata; public/ holds no files; app/icon.* and app/favicon.* do not exist",
+      "components/groups-panels.tsx:196-236 RenameGroupForm renders only a Save name button; docs/ui.md destructive-actions pattern lists remove/rotate/disable/archive, not rename",
+      "app/not-found.tsx, lib/groups/queries.ts and lib/money/format.ts all exist on main; format.ts has live call sites at components/groups-panels.tsx:25 and :592"
+    ],
+    "files": [
+      {
+        "action": "create",
+        "change": "New shared module exporting UNIQUE_VIOLATION code constant, duplicate-key message regex, max cause-walk depth, and isUniqueViolation(error: unknown): boolean with the exact cause-walk both callers use today, plus a doc comment naming lib/auth/actions.ts and lib/groups/actions.ts as its two callers",
+        "path": "lib/db/errors.ts",
+        "why": "Single home for the walker so the next driver error-shape fix lands once and the double-claim race mapping cannot diverge from the signup one"
+      },
+      {
+        "action": "edit",
+        "change": "Delete the local UNIQUE_VIOLATION, DUPLICATE_KEY_MESSAGE, MAX_ERROR_CAUSES constants and the isUniqueViolation function (lines 37-60) and import { isUniqueViolation } from '../db/errors' instead; the signup catch at line 113 calls the import with identical semantics",
+        "path": "lib/auth/actions.ts",
+        "why": "Remove one of the two copies without changing signup behavior"
+      },
+      {
+        "action": "edit",
+        "change": "Delete the local UNIQUE_VIOLATION, DUPLICATE_KEY_MESSAGE, MAX_ERROR_CAUSES constants and the isUniqueViolation function (lines 73-94, including the 'same walk' comment) and import { isUniqueViolation } from '../db/errors' instead; the joinByToken and claimPlaceholder catches at lines 580 and 680 call the import with identical semantics",
+        "path": "lib/groups/actions.ts",
+        "why": "Remove the second copy without changing join/claim race behavior"
+      },
+      {
+        "action": "edit",
+        "change": "Remove the next?: string prop and its JSDoc (lines 29-35), drop next from the AuthForm destructured props (line 43), and delete the hidden-input line 75; the success useEffect with router.refresh() stays untouched",
+        "path": "components/auth-form.tsx",
+        "why": "The input is never read by any action, so it is dead weight on both forms"
+      },
+      {
+        "action": "edit",
+        "change": "Delete the next={next ?? undefined} pass on the AuthForm element (line 40); keep the parseNextPath call, the signed-in redirect and the signup cross-link href that together preserve the invite link",
+        "path": "app/signin/page.tsx",
+        "why": "Remove the dangling prop pass left by the AuthForm cleanup"
+      },
+      {
+        "action": "edit",
+        "change": "Delete the next={next ?? undefined} pass on the AuthForm element (line 42); keep the parseNextPath call, the signed-in redirect and the signin cross-link href",
+        "path": "app/signup/page.tsx",
+        "why": "Remove the dangling prop pass left by the AuthForm cleanup"
+      },
+      {
+        "action": "create",
+        "change": "64x64 SVG file-convention icon: <title>Tabs</title>, rounded-square background #0E6B4F (the --color-accent token), centered white bold letter T (system sans, text-anchor middle), no emoji and no external references",
+        "path": "app/icon.svg",
+        "why": "Gives every page a real icon so browsers stop requesting /favicon.ico"
+      },
+      {
+        "action": "edit",
+        "change": "Add icons: { icon: '/icon.svg' } to the exported metadata object so pages emit <link rel=icon href=/icon.svg>",
+        "path": "app/layout.tsx",
+        "why": "Points browsers at the new icon instead of the default /favicon.ico request"
+      }
+    ],
+    "issue": 18,
+    "kind": "chore",
+    "out_of_scope": [
+      "Rename confirm deliberately NOT added: docs/ui.md destructive-actions requires confirms for remove/rotate/disable/archive only, rename is reversible and non-destructive, and the approved spec cannot be edited by this plan",
+      "The finding-2 files are kept as-is: app/not-found.tsx (the shared TR-3 404), lib/groups/queries.ts (the single listing-query module) and lib/money/format.ts (the TR-11 formatter seam with live call sites) all exist on main and are the right call",
+      "No dark-mode icon variant: docs/ui.md explicitly defers dark mode, so no ticket invents one",
+      "No new server-action handling of next and no migration; no host outside env.api_allowlist is contacted"
+    ],
+    "qa_script": [
+      "npm run typecheck, then npx vitest run lib/db/errors.test.ts lib/auth/actions.test.ts lib/groups/actions.test.ts, then npm run build",
+      "Boot with npm run sdlc:serve; open / with devtools console open and confirm zero /favicon.ico 404s plus a visible tab icon",
+      "Signed out, open /join/<live-token>: confirm redirect to /signin?next=/join/<token>; sign in and confirm landing back on the join page; view source on /signin?next=/join/x and confirm no input[name=next]",
+      "As owner on a group settings page, rename the group and confirm one-click save with no confirm step"
+    ],
+    "reproduced": true,
+    "risks": [
+      "Both action modules are edited at their imports: a wrong relative path breaks every auth and group write, but tsc plus the existing lib/auth/actions.test.ts and lib/groups/actions.test.ts suites catch it before QA",
+      "No forbidden paths are touched (.sdlc/**, docs/**, .github/**); no migration; no new dependency; no new network host, so env.api_allowlist is unaffected"
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "top-level error with code 23505 returns true",
+          "Drizzle-wrapped error with the code two .cause links down returns true",
+          "error with duplicate-key/unique-constraint message but no code returns true",
+          "unrelated driver error (different code and message) returns false",
+          "null, string and message-less objects return false without throwing",
+          "chain longer than the depth cap and cyclic chains terminate and return false"
+        ],
+        "path": "lib/db/errors.test.ts"
+      }
+    ],
+    "understanding": "Issue #18 bundles five follow-ups from the PR #16 review and QA. Verified each against main: (1) RenameGroupForm saves with no confirm, which matches docs/ui.md destructive-actions (remove/rotate/disable/archive, not rename), so it is correct as-is; (2) app/not-found.tsx, lib/groups/queries.ts and lib/money/format.ts all exist on main and are the right call, so there is nothing to build; (3) the isUniqueViolation cause-walk is still copy-pasted in lib/auth/actions.ts:37-60 and lib/groups/actions.ts:73-94; (4) AuthForm still renders a hidden next input (components/auth-form.tsx:75) that no action reads while the signin/signup pages preserve invite links from their own query strings; (5) there is no icon anywhere (no app/icon.*, no public files, no icons metadata), so every page load 404s /favicon.ico. This plan fixes 3, 4 and 5 and explicitly drops 1 and 2 with reasons instead of implementing things that were never wrong.",
+    "version": 1
+  },
+  "approved_too_high": false
 }

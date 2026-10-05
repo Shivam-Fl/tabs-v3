@@ -260,10 +260,17 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
  * the submitted one, and it holds only the fields that moved. This renders whatever is in it —
  * so an edit that changed a note shows a note, and an edit that moved the amount and one split
  * input shows those two, which is what makes the entry evidence rather than summary.
+ *
+ * A field is rendered when its two halves' **values differ**, not merely when it is present:
+ * `splitType` rides beside the inputs it gives a unit to, and printing it would claim a change
+ * to the split rule on an edit that made none. A field only one half carries still renders — an
+ * absent side never equals a present one — so rows written before the inputs carried their type
+ * read exactly as they did.
  */
 function EditDetail({ payload, currency }: { payload: ExpenseEditPayload; currency: string }) {
   const changed = EXPENSE_SNAPSHOT_FIELDS.filter(
-    (field) => field in payload.before || field in payload.after,
+    (field) =>
+      JSON.stringify(payload.before[field]) !== JSON.stringify(payload.after[field]),
   );
   if (changed.length === 0) return null;
 

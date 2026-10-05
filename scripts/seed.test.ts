@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { eq, isNull } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyPassword } from '../lib/auth/password';
 import { withDb } from '../lib/db/client';
 import { runMigrations } from '../lib/db/migrate';
@@ -392,6 +392,29 @@ describe('which way it seeds', () => {
     expect(
       await withDb((handle) => handle.db.select({ id: users.id }).from(users)),
     ).toHaveLength(EXPECTED.users);
+  });
+
+  // The case the timeout exists for, and the one that used to report success: an app that is
+  // listening but wedged. Refused connections are a TypeError and fall through to the direct
+  // path above; a timeout is not, and must not. Taking the direct path here would write the
+  // fixtures into this process's own database, which no browser reads — an exit 0 over a seed
+  // nobody can see. The rejection is stubbed rather than waited for, because the real one takes
+  // the full ten seconds; the runner is what the runtime actually throws, so it is the real
+  // class and not a lookalike.
+  it('fails loudly, and writes nothing locally, when the app does not answer', async () => {
+    const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    expect(timeout).not.toBeInstanceOf(TypeError);
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(timeout));
+
+    try {
+      await expect(runSeed({ appUrl: NO_APP })).rejects.toThrow(/timeout/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    // Not seeded directly, and not reported as a success: the whole point of the distinction.
+    expect(await withDb((handle) => handle.db.select({ id: users.id }).from(users))).toEqual([]);
   });
 
   it('refuses in production before it reaches either path', async () => {

@@ -26,9 +26,10 @@ import {
  *   migrations first. That is the CI and deployed case, where the script and the app are either
  *   the only thing running or pointed at the same durable database.
  *
- * Only a connection that never got an answer falls back. An app that *answered* and refused is a
- * failure, loudly and immediately: the two paths write different databases in the embedded case,
- * so quietly taking the other one would report a success that no screen would ever show.
+ * Only a connection that was **refused** falls back — nothing listening at that address at all.
+ * An app that answered and refused, and an app that never answered because it is wedged, are
+ * both failures, and loudly: the two paths write different databases in the embedded case, so
+ * quietly taking the other one would report a success that no screen would ever show.
  *
  * Production is refused before either path — the loader deletes what is there.
  *
@@ -123,9 +124,14 @@ async function seedThroughApp(appUrl: string): Promise<SeedSummary | null> {
       headers: { [SEED_REQUEST_HEADER]: SEED_REQUEST_VALUE },
       signal: AbortSignal.timeout(SEED_TIMEOUT_MS),
     });
-  } catch {
-    // Nothing is listening on that port, so there is no app whose database this could be.
-    return null;
+  } catch (error) {
+    // Nothing is listening on that port, so there is no app whose database this could be — and
+    // that is exactly what a refused connection looks like: fetch rejects with a TypeError.
+    // Every other rejection is an app that is there but did not answer, the timeout above
+    // being the one this function's whole shape is about. Taking the direct path for that would
+    // write a database no browser reads and report success, so it propagates and runSeed fails.
+    if (error instanceof TypeError) return null;
+    throw error;
   }
 
   if (!response.ok) {

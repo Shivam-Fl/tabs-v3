@@ -879,15 +879,20 @@ describe('updateExpense', () => {
     const edit = edits[edits.length - 1];
 
     // One field moved, and it is the inputs — nobody joined or left the split, so there is no
-    // participants list here for a reader to name them out of.
+    // participants list here for a reader to name them out of. The split type comes with them
+    // and did not move: 6000 is a percentage because the halves say so, and neither half has
+    // any other field a renderer could read the unit out of. Its two values are equal, which is
+    // how the feed knows it is context rather than a change.
     expect(edit?.payload).toEqual({
       before: {
+        splitType: 'percentage',
         inputs: [
           { membershipId: ada, displayName: 'Ada', value: 6000 },
           { membershipId: bo, displayName: 'Bo', value: 4000 },
         ],
       },
       after: {
+        splitType: 'percentage',
         inputs: [
           { membershipId: ada, displayName: 'Ada', value: 7000 },
           { membershipId: bo, displayName: 'Bo', value: 3000 },

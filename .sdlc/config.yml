@@ -67,6 +67,16 @@ runtime:
   # truncating it. limits.attempts and timeout-minutes already stop runaway beforehand.
   max_turns: {}
 
+# Project skills (.claude/skills/<name>/SKILL.md) a step must load before it starts. Every step may
+# load any of them anyway; a council member takes its stage's list unless it names its own.
+skills:
+  project:       [frontend-design, ux]
+  plan:          [frontend-design, ux]
+  implement:     [frontend-design, ux]
+  self_fix:      []                     # fixes pipeline plumbing, never UI
+  review_design: [frontend-design, ux]
+  qa:            [ux]
+
 # single = one agent. council = several in sequence, each reading the last one's output.
 # A council costs roughly 3x the turns. Start single; switch the stage that actually
 # produces bad output.

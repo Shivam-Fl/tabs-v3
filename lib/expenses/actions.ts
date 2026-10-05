@@ -94,8 +94,15 @@ function expenseNoticePath(groupId: string, notice: string): string {
   return `${groupPath(groupId)}?${EXPENSE_NOTICE_PARAM}=${notice}`;
 }
 
+/**
+ * The group list, the group's own pages and the cross-group feed. The feed is on the list
+ * because every expense write records a row in it: a create, an edit and a delete each add one,
+ * and a feed still rendering the state before the write would be the record disagreeing with the
+ * ledger it records.
+ */
 function revalidateGroup(groupId?: string): void {
   revalidatePath('/');
+  revalidatePath('/activity');
   if (groupId) {
     revalidatePath(groupPath(groupId));
     revalidatePath(`${groupPath(groupId)}/members`);
@@ -174,7 +181,11 @@ function storedSnapshot(record: ExpenseRecord): ExpenseSnapshot {
       included: line.included,
     })),
     splitType: record.splitType,
-    inputs: byName.map((line) => ({ membershipId: line.membershipId, value: line.inputValue })),
+    inputs: byName.map((line) => ({
+      membershipId: line.membershipId,
+      displayName: line.displayName,
+      value: line.inputValue,
+    })),
     category: record.category,
     note: record.note,
   };
@@ -205,6 +216,7 @@ function draftSnapshot(draft: ExpenseDraft, names: ReadonlyMap<string, string>):
     splitType: draft.splitType,
     inputs: byName.map((line) => ({
       membershipId: line.membershipId,
+      displayName: names.get(line.membershipId) ?? '',
       value: line.value,
     })),
     category: draft.category,

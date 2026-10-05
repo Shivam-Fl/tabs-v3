@@ -330,10 +330,13 @@ describe('createPayment', () => {
     });
 
     // Both screens show the number this moved, and the card the form lives on is on the group
-    // page: the refresh has to reach them or the balance beside the button would be stale.
+    // page: the refresh has to reach them or the balance beside the button would be stale. The
+    // cross-group feed is on the list for the same reason at one remove — the row asserted above
+    // is what it renders, and a feed a write behind is the record disagreeing with the ledger.
     expect(revalidatePath).toHaveBeenCalledWith('/');
     expect(revalidatePath).toHaveBeenCalledWith(`/groups/${fixture.groupId}`);
     expect(revalidatePath).toHaveBeenCalledWith(`/groups/${fixture.groupId}/members`);
+    expect(revalidatePath).toHaveBeenCalledWith('/activity');
   });
 
   it('moves both seats towards zero, which is the whole point of recording one', async () => {

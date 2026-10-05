@@ -512,7 +512,7 @@ describe('expenseChanges', () => {
     payers: [{ membershipId: ADa, displayName: 'Ada', amountMinor: 1250 }],
     participants: [{ membershipId: ADa, displayName: 'Ada', included: true }],
     splitType: 'equal' as const,
-    inputs: [{ membershipId: ADa, value: null }],
+    inputs: [{ membershipId: ADa, displayName: 'Ada', value: null }],
     category: 'food',
     note: null,
   };

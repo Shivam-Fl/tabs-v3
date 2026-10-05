@@ -60,6 +60,7 @@ vi.mock('../money/splits', async (importOriginal) => {
   return { ...actual, splitAmount: vi.fn(actual.splitAmount) };
 });
 
+const { revalidatePath } = await import('next/cache');
 const { createExpense, deleteExpense, updateExpense } = await import('./actions');
 const { getExpenseEditorData, listExpenses, loadExpense } = await import('./queries');
 const { splitAmount } = await import('../money/splits');
@@ -291,6 +292,7 @@ beforeEach(async () => {
   jar.entries.clear();
   accountNames.clear();
 
+  vi.mocked(revalidatePath).mockClear();
   vi.mocked(splitAmount).mockReset();
   vi.mocked(splitAmount).mockImplementation(splitBox.real);
 
@@ -843,6 +845,57 @@ describe('updateExpense', () => {
     });
   });
 
+  it('names the split inputs it carries, so a row that moved one value can say whose', async () => {
+    /** The same dinner, split the way the caller says. */
+    async function saveWith(splitType: string, adaValue: string, boValue: string): Promise<void> {
+      await redirectUrl(
+        updateExpense(
+          IDLE_EXPENSE_STATE,
+          expenseForm({
+            groupId,
+            expenseId,
+            description: 'Dinner',
+            amount: '10.00',
+            date: '2026-10-05',
+            category: 'food',
+            splitType,
+            payers: [{ membershipId: ada, amount: '10.00' }],
+            splits: [
+              { membershipId: ada, included: true, value: adaValue },
+              { membershipId: bo, included: true, value: boValue },
+            ],
+          }),
+        ),
+      );
+    }
+
+    // First make it a percentage split, then move one value and nothing else: the second save
+    // leaves the participants exactly where they were, so its payload carries no participant
+    // list at all — the input rows are the only thing in the row that knows who is who.
+    await saveWith('percentage', '60', '40');
+    await saveWith('percentage', '70', '30');
+
+    const edits = (await eventsOf(groupId)).filter((event) => event.kind === 'expense-edited');
+    const edit = edits[edits.length - 1];
+
+    // One field moved, and it is the inputs — nobody joined or left the split, so there is no
+    // participants list here for a reader to name them out of.
+    expect(edit?.payload).toEqual({
+      before: {
+        inputs: [
+          { membershipId: ada, displayName: 'Ada', value: 6000 },
+          { membershipId: bo, displayName: 'Bo', value: 4000 },
+        ],
+      },
+      after: {
+        inputs: [
+          { membershipId: ada, displayName: 'Ada', value: 7000 },
+          { membershipId: bo, displayName: 'Bo', value: 3000 },
+        ],
+      },
+    });
+  });
+
   it('writes nothing at all for a save that changes nothing', async () => {
     const url = await redirectUrl(
       updateExpense(
@@ -1146,6 +1199,13 @@ describe('deleteExpense', () => {
     // The feed row outlives the expense, names what it was, and points at nothing: there is no
     // row left for it to point at.
     expect(deleted).toMatchObject({ subjectName: 'Dinner', expenseId: null, actorUserId: adaId });
+
+    // Every screen this write is visible on, the cross-group feed among them: that row above is
+    // rendered there too, and nothing else in this list reaches it.
+    expect(revalidatePath).toHaveBeenCalledWith('/');
+    expect(revalidatePath).toHaveBeenCalledWith(`/groups/${groupId}`);
+    expect(revalidatePath).toHaveBeenCalledWith(`/groups/${groupId}/members`);
+    expect(revalidatePath).toHaveBeenCalledWith('/activity');
   });
 
   it('refuses an expense that is not there, and one in another group', async () => {

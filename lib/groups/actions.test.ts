@@ -76,6 +76,7 @@ const {
 const { getMemberBalance } = await import('./members');
 const { generateInviteToken } = await import('./tokens');
 const { listGroupsForUser, listMembers } = await import('./queries');
+const { revalidatePath } = await import('next/cache');
 const { randomToken } = await import('../random');
 const { SESSION_COOKIE, mintSession } = await import('../auth/session');
 const { hashPassword } = await import('../auth/password');
@@ -206,6 +207,7 @@ beforeEach(async () => {
   });
   jar.entries.clear();
 
+  vi.mocked(revalidatePath).mockClear();
   vi.mocked(getMemberBalance).mockReset();
   vi.mocked(getMemberBalance).mockResolvedValue(0);
   vi.mocked(generateInviteToken).mockReset();
@@ -540,6 +542,58 @@ describe('invite links', () => {
   });
 });
 
+describe('adding a placeholder', () => {
+  it('records the seat in the group history, written with it', async () => {
+    const { groupId } = await seedGroup();
+    await signInAs(ownerId);
+
+    await addPlaceholder(IDLE_GROUP_STATE, form({ groupId, displayName: 'Dee' }));
+
+    const placeholder = (await membersOf(groupId)).find((seat) => seat.displayName === 'Dee');
+    expect(placeholder).toMatchObject({ userId: null, role: 'member' });
+
+    // The one membership change with nobody behind it: the event keeps the held name as its
+    // subject and no subject user, which is why the feed has to read the snapshot rather than
+    // join. If it joined, this row would be the one that disappeared.
+    const events = await eventsOf(groupId);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: 'member-added',
+      actorUserId: ownerId,
+      subjectUserId: null,
+      subjectName: 'Dee',
+    });
+  });
+
+  it('writes neither half when the add is refused', async () => {
+    const { groupId } = await seedGroup();
+    await signInAs(ownerId);
+
+    const state = await addPlaceholder(IDLE_GROUP_STATE, form({ groupId, displayName: '   ' }));
+
+    // Both rows are written in one transaction, and the observable half of that is here: a
+    // refusal leaves neither behind, so the feed can never hold a seat the member list denies.
+    expect(state.status).toBe('error');
+    expect(state.fieldErrors).toMatchObject({ displayName: expect.any(String) });
+    expect(await membersOf(groupId)).toHaveLength(1);
+    expect(await eventsOf(groupId)).toHaveLength(0);
+  });
+
+  it('refreshes the feed alongside the screens the membership moved on', async () => {
+    const { groupId } = await seedGroup();
+    await signInAs(ownerId);
+
+    await addPlaceholder(IDLE_GROUP_STATE, form({ groupId, displayName: 'Dee' }));
+
+    expect(revalidatePath).toHaveBeenCalledWith('/');
+    expect(revalidatePath).toHaveBeenCalledWith(`/groups/${groupId}`);
+    expect(revalidatePath).toHaveBeenCalledWith(`/groups/${groupId}/members`);
+    // The cross-group feed is another screen rendering the row this just wrote, and it is not
+    // reachable from any of the three above: leaving it out is a feed that is quietly a step behind.
+    expect(revalidatePath).toHaveBeenCalledWith('/activity');
+  });
+});
+
 describe('claiming a seat', () => {
   let groupId: string;
   let token: string;
@@ -574,10 +628,16 @@ describe('claiming a seat', () => {
     await signInAs(joinerId);
     await redirectUrl(claimPlaceholder(IDLE_GROUP_STATE, form({ token, membershipId: seatId })));
 
+    // The seat was held by name before this, and holding it is recorded too, so the claim is
+    // read out of the history rather than assumed to be all of it. Exactly one claim, though:
+    // the assertion is about how many times the claim was recorded, not how big the feed is.
     const events = await eventsOf(groupId);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ kind: 'claim', actorUserId: joinerId });
-    expect(events[0].createdAt).toBeInstanceOf(Date);
+    const claims = events.filter((event) => event.kind === 'claim');
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ kind: 'claim', actorUserId: joinerId });
+    expect(claims[0].createdAt).toBeInstanceOf(Date);
+    // And the row that put the seat there is still there beside it, unchanged.
+    expect(events.filter((event) => event.kind === 'member-added')).toHaveLength(1);
   });
 
   it('sends a lost claim back to the join page with the seat-taken notice', async () => {

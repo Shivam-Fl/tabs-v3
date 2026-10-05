@@ -176,6 +176,14 @@ function SignedInHome({
         </p>
       )}
 
+      {/* The one way to the cross-group feed: home lists every group, so it is the screen from
+          which "what has been happening everywhere" is the obvious next question. */}
+      <p>
+        <Link className="text-accent underline" href="/activity">
+          All activity
+        </Link>
+      </p>
+
       <section className="flex flex-col gap-3" aria-labelledby="balances-heading">
         <h2 id="balances-heading" className="text-lg font-semibold">
           Your balances

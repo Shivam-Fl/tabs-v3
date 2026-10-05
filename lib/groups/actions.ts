@@ -135,9 +135,15 @@ function inviteNoticePath(groupId: string, notice: string): string {
   return `${groupPath(groupId)}/members?${INVITE_NOTICE_PARAM}=${notice}`;
 }
 
-/** The group list and the group's own pages, refreshed after anything that changes them. */
+/**
+ * The group list, the group's own pages and the cross-group feed, refreshed after anything that
+ * changes them. The feed is on the list because every membership change writes a row into it:
+ * leaving it out would leave the audit trail showing a state the membership table had moved on
+ * from.
+ */
 function revalidateGroup(groupId?: string): void {
   revalidatePath('/');
+  revalidatePath('/activity');
   if (groupId) {
     revalidatePath(groupPath(groupId));
     revalidatePath(`${groupPath(groupId)}/members`);
@@ -283,11 +289,26 @@ export async function addPlaceholder(
     if (access.status !== 'ok') return refusal(access);
     if (access.group.archived) return ARCHIVED_STATE;
 
-    await handle.db.insert(memberships).values({
-      groupId: access.group.id,
-      userId: null,
-      displayName: parsed.data.displayName,
-      role: 'member',
+    // The seat and the feed row that records it commit together, as every other membership
+    // change here does: a seat nobody can see was added is a group whose member list and whose
+    // history disagree (TR-10). This is the one membership change with no person behind it, so
+    // the row carries the held name as its subject and no subject user at all — the feed reader
+    // must resolve it from the snapshot rather than by joining, or this event vanishes.
+    await handle.db.transaction(async (tx) => {
+      await tx.insert(memberships).values({
+        groupId: access.group.id,
+        userId: null,
+        displayName: parsed.data.displayName,
+        role: 'member',
+      });
+
+      await tx.insert(activityEvents).values({
+        groupId: access.group.id,
+        actorUserId: access.user.id,
+        subjectUserId: null,
+        subjectName: parsed.data.displayName,
+        kind: 'member-added',
+      });
     });
 
     return {

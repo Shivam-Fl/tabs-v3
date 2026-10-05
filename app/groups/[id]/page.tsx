@@ -1,10 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { ActivityFeed, type PreservedParams } from '../../../components/activity-feed';
 import { DeleteExpenseForm } from '../../../components/expense-editor';
 import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
 import { INPUT_CLASSES, QUIET_BUTTON } from '../../../components/ui';
+import {
+  ACTIVITY_FILTER_PARAM,
+  activityFilterFrom,
+  listGroupActivity,
+  type ActivityFilter,
+  type ActivityRow,
+} from '../../../lib/activity/queries';
 import { withDb } from '../../../lib/db/client';
 import {
   EXPENSE_CATEGORY_PARAM,
@@ -53,7 +61,9 @@ export const metadata: Metadata = { title: 'Group · Tabs' };
  * The list reads through the filter the query carries, so a bookmarked or shared URL shows the
  * same rows to everybody it is opened by, and every filter is applied in the query rather than
  * after it — a filter applied on screen would be a filter that lies about the page count the
- * moment there is a second page.
+ * moment there is a second page. The activity excerpt's chip carries its own parameter beside
+ * them, and the two forms re-submit each other's values so neither filter clears the other
+ * (AC-8).
  *
  * An archive lands here carrying the notice flag, because archiving is what unmounts the settings
  * form that would have shown the confirmation (AC-11). A create, an edit and a delete land here
@@ -68,6 +78,7 @@ export default async function GroupPage({
   searchParams: Promise<{
     archived?: string;
     expense?: string;
+    activity?: string;
     member?: string;
     category?: string;
     q?: string;
@@ -82,6 +93,7 @@ export default async function GroupPage({
   if (access.status === 'not-found') notFound();
 
   const filters = expenseFiltersFrom(query);
+  const activityFilter = activityFilterFrom(query[ACTIVITY_FILTER_PARAM]);
 
   // One read at a time: the embedded backend serves a single connection, so two queries in
   // flight together are a queue pretending to be a race.
@@ -89,6 +101,21 @@ export default async function GroupPage({
   const members = await withDb((handle) => listMembers(handle.db, access.group.id));
   const balances = await withDb((handle) => computeNetBalances(handle.db, access.group.id));
   const payments = await withDb((handle) => listPayments(handle.db, access.group.id));
+
+  // The feed is read on its own, and its failure is kept on its own too: the balances, the debts
+  // and the expense list on this page are still true, and taking the whole screen down for the
+  // one section that did not come back is a worse answer than saying which one it was. The page's
+  // own load covers the loading state — this section has none of its own to show.
+  let activity: ActivityRow[] = [];
+  let activityFailed = false;
+  try {
+    activity = await withDb((handle) =>
+      listGroupActivity(handle.db, access.group.id, activityFilter),
+    );
+  } catch (error) {
+    console.error('[tabs] group activity: could not load the feed', error);
+    activityFailed = true;
+  }
 
   // The simplification is arithmetic on the numbers above, not another read: it is the same call
   // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
@@ -103,10 +130,32 @@ export default async function GroupPage({
       transfers={transfers}
       payments={payments}
       filters={filters}
+      activity={activity}
+      activityFilter={activityFilter}
+      activityFailed={activityFailed}
+      retryHref={pageHref(access.group.id, query)}
       justArchived={query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE}
       expenseNotice={expenseNoticeText(query[EXPENSE_NOTICE_PARAM])}
     />
   );
+}
+
+/**
+ * This page's own URL, rebuilt from the parameters it was opened with — every filter, both of
+ * them, exactly as the reader set them.
+ *
+ * It is what the activity section's retry re-requests, which is why it is built from the raw
+ * query rather than from the parsed filters: the retry has to land on the page the reader was
+ * already looking at, filter and all, not on a version of it this code thought was tidier.
+ */
+function pageHref(groupId: string, query: Record<string, string | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(query)) {
+    if (typeof value === 'string' && value !== '') params.set(name, value);
+  }
+
+  const search = params.toString();
+  return search === '' ? `/groups/${groupId}` : `/groups/${groupId}?${search}`;
 }
 
 function GroupDetail({
@@ -117,6 +166,10 @@ function GroupDetail({
   transfers,
   payments,
   filters,
+  activity,
+  activityFilter,
+  activityFailed,
+  retryHref,
   justArchived,
   expenseNotice,
 }: {
@@ -127,12 +180,32 @@ function GroupDetail({
   transfers: Transfer[];
   payments: PaymentRow[];
   filters: ReturnType<typeof expenseFiltersFrom>;
+  activity: ActivityRow[];
+  activityFilter: ActivityFilter;
+  activityFailed: boolean;
+  retryHref: string;
   justArchived: boolean;
   expenseNotice: string | null;
 }) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
   const filtered = filters.memberId !== null || filters.category !== null || filters.search !== null;
+
+  // What the chip row re-submits: the expense filter exactly as it stands, so choosing a chip
+  // cannot clear it (AC-8). Only values that are set travel — an empty parameter is noise the
+  // reader did not ask for, and a Clear that left one behind would be a Clear that did nothing.
+  const activityPreserved: PreservedParams = {
+    ...(filters.memberId ? { [EXPENSE_MEMBER_PARAM]: filters.memberId } : {}),
+    ...(filters.category ? { [EXPENSE_CATEGORY_PARAM]: filters.category } : {}),
+    ...(filters.search ? { [EXPENSE_SEARCH_PARAM]: filters.search } : {}),
+  };
+
+  // And the other direction: the expense form's own Clear resets the expense filter and leaves
+  // the chip where it was, which is why it goes to a URL that still carries the chip.
+  const clearExpenseHref =
+    activityFilter === 'all'
+      ? `/groups/${group.id}`
+      : `/groups/${group.id}?${ACTIVITY_FILTER_PARAM}=${encodeURIComponent(activityFilter)}`;
 
   // Every current member is on the debts card even at zero — a row that vanished would read as
   // somebody missing — while a departed seat (ADR-0007) is only worth a row when it still holds
@@ -352,12 +425,19 @@ function GroupDetail({
             />
           </div>
 
+          {/* The chip this page's other form holds, carried through a submit of this one: a
+              browser sends only the form it submits, so without this, filtering expenses would
+              silently drop the activity chip (AC-8). */}
+          {activityFilter === 'all' ? null : (
+            <input type="hidden" name={ACTIVITY_FILTER_PARAM} value={activityFilter} />
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" className={QUIET_BUTTON}>
               Filter
             </button>
             {filtered ? (
-              <Link className="text-accent underline" href={`/groups/${group.id}`}>
+              <Link className="text-accent underline" href={clearExpenseHref}>
                 Clear
               </Link>
             ) : null}
@@ -436,6 +516,36 @@ function GroupDetail({
           </p>
         </section>
       ) : null}
+
+      {/* Last, which is where ui.md puts the excerpt in this screen's regions: the ledger first,
+          then the record of how it got that way. The failure is the one section failing, so it
+          is the one section that says so — with the retry on the URL the reader was already
+          looking at, filter and all (TR-11). */}
+      <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
+        <h2 id="activity-heading" className="text-lg font-semibold">
+          Recent activity
+        </h2>
+
+        {activityFailed ? (
+          <div className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4">
+            <p className="font-medium">We could not load this group&rsquo;s activity</p>
+            <p className="text-sm text-muted">
+              Everything else on this page is up to date. The feed did not come back this time.
+            </p>
+            <Link className="text-accent underline" href={retryHref}>
+              Retry
+            </Link>
+          </div>
+        ) : (
+          <ActivityFeed
+            rows={activity}
+            filter={activityFilter}
+            action={`/groups/${group.id}`}
+            preserved={activityPreserved}
+            emptyText="No activity yet. Adding an expense, recording a payment or changing the members all show up here."
+          />
+        )}
+      </section>
     </main>
   );
 }

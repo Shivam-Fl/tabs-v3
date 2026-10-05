@@ -476,6 +476,20 @@
         "severity": "minor",
         "category": "test",
         "file": "lib/settle/balances.test.ts"
+      },
+      {
+        "title": "A payment between two departed seats can be recorded but never deleted, stranding a mistaken write with no recourse.",
+        "detail": "A payment between two departed seats can be recorded but never deleted, stranding a mistaken write with no recourse.\n\n`lib/settle/actions.ts:173`\n\nEvidence: createPayment accepts any two ids present in the computeNetBalances map (actions.ts:102-107), and that map includes departed ledger participants (balances.ts departed fold); simplifyDebts explicitly allows transfers naming departed holders and SettleUpForm offers every suggested transfer for recording. deletePayment then requires the acting current member to be the payer or the recipient (actions.ts:173-177) — but neither endpoint is a current member, a departed seat holds no session, and there is no owner override — so the delete is refused forever and the nets stay wrong.\n\nFix: Require at least one endpoint to be a current membership when creating a payment, or allow any current member to delete a payment whose endpoints are both departed.",
+        "severity": "minor",
+        "category": "data-correctness",
+        "file": "lib/settle/actions.ts"
+      },
+      {
+        "title": "The work order's promised transaction-atomicity case for settle writes was not written: no test fails a payment write mid-transaction.",
+        "detail": "The work order's promised transaction-atomicity case for settle writes was not written: no test fails a payment write mid-transaction.\n\n`lib/settle/actions.test.ts`\n\nEvidence: work-order.json tests for lib/settle/actions.test.ts list 'failing write leaves no payment and no activity row (transaction atomicity)'; the 711-line file (18 cases) proves refusals write nothing and proves create/delete round-trips, but grep for atomic/rollback/half-written/part-way finds nothing, while lib/expenses/actions.test.ts:692 proves the identical single-tx shape with a mid-write mock failure ('leaves nothing behind when the write fails part-way through'). The tx closure itself follows the proven pattern, so this is coverage debt, not a suspected half-write.\n\nFix: Add a mid-transaction failure test mirroring the expense one (throw between the payment insert and the activity insert, assert no payment and no activity rows remain).",
+        "severity": "minor",
+        "category": "test",
+        "file": "lib/settle/actions.test.ts"
       }
     ],
     "pr": "22"

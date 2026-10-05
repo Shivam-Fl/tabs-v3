@@ -90,6 +90,13 @@
         "id": "AC-9",
         "source": "IAC-3",
         "verify": "browser"
+      },
+      {
+        "check": "After recording a partial settle-up payment, the remaining transfer row's amount field offers the remaining amount, not the fragment just paid (a 10.00 partial on a 30.00 transfer leaves the row offering 20.00)",
+        "how_to_verify": "QA records a 10 partial on a 30.00 transfer as in T-11, then reads that same transfer row's amount field and sees 20.00",
+        "id": "AC-10",
+        "source": "IAC-3",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
@@ -112,9 +119,17 @@
       {
         "approach": "Mount a separate always-present live region inside each settle panel instead of fixing StateMessage",
         "rejected_because": "Two announcement sources per panel invite divergence (one region per outcome) and every future StateMessage consumer would repeat the bug; fixing the shared contract once makes both panels and all later consumers persistent with no panel change"
+      },
+      {
+        "approach": "Sync the row field with a useEffect on transfer.amountMinor instead of changing the row key",
+        "rejected_because": "An effect that overwrites typed state on every prop change risks clobbering what the user is typing during the revalidated render, and leaves the open confirm state stale; a key that includes the amount remounts the row exactly when the suggestion changed, resetting both field and confirm together with no effect to mistime"
+      },
+      {
+        "approach": "Make the amount input fully controlled from the transfer prop with no local state",
+        "rejected_because": "Typing would then need to round-trip through the parent on every keystroke, and the refusal path (T-9) deliberately preserves what the user typed beside its field error; local state keyed by the suggestion keeps typing local while still resetting when the suggestion itself moves"
       }
     ],
-    "approach": "Fix the shared contract the previous plan miscopied instead of reworking payments: edit components/ui.tsx so StateMessage always renders its region — idle renders an empty <p role=status aria-live=polite>, success renders the message in that same node, error keeps role=alert with aria-live=polite unchanged. No change in components/settle-panels.tsx is needed: SettleUpForm and DeletePaymentForm already mount StateMessage unconditionally at panel level (including the settled branch), so both regions become persistent automatically. Add app/groups/[id]/debts-live-region.test.ts using react-dom/server renderToStaticMarkup (node env, no new deps): idle renders the empty polite region (the BUG-1/T-12 repro), success fills the same node, error keeps alert. Append AC-9 plus a qa_script step so QA asserts pre-submit region presence on every future run.",
+    "approach": "Fix row identity in components/settle-panels.tsx: export a transferRowKey that includes the suggested amount (from:to:amountMinor) and use it as the TransferRow key, updating the submitted-row comparison to the same key. A partial payment then remounts exactly the row whose suggestion shrank, so its useState re-initializes from the remainder (20.00) instead of keeping the paid fragment (10); a refused submit leaves the amount unchanged so the key is stable and the typed value plus field error survive (T-9). Add components/settle-panels.test.ts covering the key contract and the 20.00 remainder, and append AC-10 plus a qa_script step so QA asserts the remainder in the row on every future run. No change to components/ui.tsx: the BUG-1 live-region fix is already on the branch and T-7 passes.",
     "assumptions": [
       "Issue #6's ledger (expenses, expense_payers, split_lines, activity_event with payload) is merged — verified present in lib/db/schema.ts, lib/expenses/actions.ts and migration 0004",
       "CI and QA run on PGlite only, so no backend-specific code is needed anywhere in this plan (backend-invariant holds as long as only getDb branches)",
@@ -122,25 +137,23 @@
       "A payment needs only from, to and amount (created_at orders the feed); no per-payment date picker or note field in v1"
     ],
     "confidence": 85,
-    "confidence_rationale": "The failure mechanism was reproduced locally against the real component (idle renders '', success renders the role=status node), both StateMessage mount sites were verified unconditional on the PR branch, and T-6 already proves the post-submit announcement path; it stays below 95 because actual screen-reader announcement behavior is asserted by QA's browser check, not by any CI test.",
-    "debate_summary": "The critique was a summary-only verdict of flawed with eight claims and I verified each against the code rather than applying them. Blocking (home per-person rows missing while AC-2 claims IAC-2): confirmed — the issue text, ui.md Home regions, spec tabs, TR-9 and IAC-2 all require per-person rows and the proposal's acceptance, files and qa_script omit them; fixed by extending AC-2, app/page.tsx and qa_script. Major (departed seat stranded non-zero after a later expense edit/delete, unreachable all-zero under a current-members-only rule): confirmed — removal deletes the membership row while ledger split lines keep the seat (the expense path's resolveNames previous-snapshot case proves it), so the state is reachable; fixed with the departed-ledger-participant rule plus AC-8 and tests, not by touching expense code. Major (null-payload payment rows can never render after set-null): confirmed as a specification gap — fixed by defining the snapshot payload plus AC-7 and tests, keeping feed UI out of scope. Major (endpoints not scoped to the guarded group, no cross-group test): confirmed as a precision gap against removeMember's own this-group scoping precedent — fixed in the actions rule, AC-5 and tests. Minor (cross-currency rule untested): confirmed — covered now in AC-2 and qa_script. Minor (toasts do not exist, aria-live unspecified): confirmed in the narrow sense — groups-panels has ConfirmStep plus a StateMessage live region but no toast component, so the plan now names that mechanism instead. Minor (debts card not conditioned on archived): confirmed omission — settle controls now hide when archived, matching the page's existing pattern. Minor (one computeNetBalances call per group on a single-connection backend): judged a non-defect — sequential reads in one request are correct on PGlite and within the TR-9 recompute budget, so it is recorded as a residual risk rather than a plan change. Nothing in the critique contradicts the brief's recorded decisions, so nothing was dismissed on those grounds.",
+    "confidence_rationale": "The stale-state mechanism is deterministic from the code (useState initialized once + endpoint-only key + revalidatePath updating the same row), it exactly predicts T-11's observed value=10 instead of 20.00, and the key fix preserves the T-9 refusal path by construction; it stays below 95 because the row remount is verified by QA's browser check, not by any DOM-level CI test (the repo has no jsdom/testing-library).",
     "evidence": [
-      "lib/groups/members.ts:29 sync getMemberBalance stub returning 0; no lib/settle directory; 0004 the last migration",
-      "lib/expenses/actions.ts resolveNames previous-snapshot case keeps departed seats in the ledger",
-      "lib/groups/actions.ts removeMember scopes the membership id to the group and deletes the row; leaveGroup deletes the row",
-      "components/groups-panels.tsx ConfirmStep plus StateMessage with aria-live=polite; no toast component exists",
-      "app/groups/[id]/page.tsx gates write UI on group.archived and reserves the debts slot for TR-9",
-      "docs/ui.md Home regions list per-person rows; issue Person-sees lists per-person rows; TR-9 requires per-person totals",
-      "components/ui.tsx:34 StateMessage returns null while idle — reproduced locally with renderToStaticMarkup against the real component: idle yields '', success yields <p role=status aria-live=polite>, error yields <p role=alert aria-live=polite>",
-      "origin/sdlc/issue-7 components/settle-panels.tsx mounts <StateMessage state={state}> unconditionally at panel level in SettleUpForm (both the transfer-list and settled branches) and DeletePaymentForm, so the shared-contract fix makes both regions persistent with no panel change",
-      "T-12 fails at qa-run/tests/settle-hostile.spec.ts:107 with zero [aria-live=polite] nodes in the debts section before the first submit, while the label, focus and Enter-to-confirm steps before it all passed"
+      "origin/sdlc/issue-7 components/settle-panels.tsx TransferRow: const [amount, setAmount] = useState(suggestedAmountText(transfer.amountMinor)); SettleUpForm keys rows by `${transfer.fromMembershipId}:${transfer.toMembershipId}` with no amount, and compares submitted === key for the field error",
+      "origin/sdlc/issue-7 lib/settle/actions.ts createPayment calls revalidateBalances (revalidatePath / and /groups/[id]) on success, so the shrunken transfer list re-renders under the same keys — the exact condition that preserves the stale typed fragment",
+      "qa-evidence/qa-evidence/qa-evidence/results.json T-11 fails: Expected '20.00', Received '10'; call log resolves the Bo row input to <input value=\"10\" ...> 24 times over 10s",
+      "qa-evidence/qa-evidence/qa-evidence/test-results/settle-T-11-after-a-partia-e80cd-mount-not-the-paid-fragment-chromium/error-context.md, test-failed-1.png, trace.zip and video.webm opened: the row text already reads the shrunken transfer while its amount field still holds the paid fragment",
+      "qa-evidence/qa-evidence/qa-evidence/probe.har and probe.png opened: no failed request accompanies the failure — the payment recorded (Payment recorded visible), only the row field is stale, ruling out a server/ledger cause",
+      "qa-report.json BUG-2 (introduced_by_pr, reproducible always) with the same suspected cause as the code read; 10/11 green and BUG-1 retest status fixed (T-7 passes), so the v2 live-region diagnosis was correct and this is a second, separate defect",
+      "lib/money/splits.ts minorUnitsText: 2000 renders '20.00', so the remainder the row must offer is exact, not a formatting question",
+      ".sdlc/memory/patterns/ holds no entry for this shape (stale useState under a stable key after a revalidated prop change)"
     ],
     "files": [
       {
         "action": "edit",
-        "change": "Drop the idle/message-empty early null return in StateMessage so it always renders its region: idle yields an empty <p role=status aria-live=polite>, success renders the message in that same node, error keeps role=alert with aria-live=polite unchanged",
-        "path": "components/ui.tsx",
-        "why": "The shared live-region contract both settle panels mount unconditionally; one fix makes both persistent"
+        "change": "In components/settle-panels.tsx export transferRowKey(transfer) returning `${fromMembershipId}:${toMembershipId}:${amountMinor}`, use it as the TransferRow key in SettleUpForm, and compare the submitted-row marker against the same key so the refusal field error (T-9) still lands under the row that submitted",
+        "path": "components/settle-panels.tsx",
+        "why": "The row's typed amount is useState initialized once; only an amount-bearing key remounts the row when a partial payment shrinks its suggestion, while a refused submit keeps the key stable and preserves what was typed"
       }
     ],
     "issue": 7,
@@ -159,39 +172,40 @@
       "Open home: totals cards, per-person rows and per-group balances all agree with the group page",
       "Add a group in a second currency: it appears as a per-group row only, plus the exclusion note on the totals",
       "Pay one transfer in full and one partially through the debts card confirms; balances update in place with an announcement",
+      "After the partial payment, read that same transfer row's amount field: it offers the remaining amount (e.g. 20.00 after a 10 partial on 30.00), not the fragment just paid",
       "Delete the partial payment as its payer through the confirm; attempt delete as Cy and see a refusal",
       "Settle the group to zero; confirm the explicit settled state on the group page and totals on home",
       "Open an archived group: balances read correctly with no settle-up or delete controls",
       "Repeat the group read on a 390px viewport: debts card above expenses, currency-formatted tabular amounts"
     ],
-    "reproduced": true,
+    "reproduced": false,
     "residual_risks": [
+      "Remounting the row also collapses an open confirm on that row after a successful partial; intended (the suggestion it confirmed no longer exists), but QA should confirm no confirm box lingers with a stale amount",
       "Home reads each group sequentially in one request; within the TR-9 recompute budget for typical homes, but a user in dozens of large groups may see a slow home — QA should try a multi-group home if fixtures allow",
-      "The departed-participant payment rule is new judgment: a current member recording with a departed seat has no maintainer precedent, and review may prefer to forbid it and accept the stranded state as a later ticket",
-      "The payment snapshot payload shape is chosen for the later feed ticket without its input; if that ticket wants more fields it will need a follow-up migration"
+      "The repo has no jsdom/testing-library, so the CI test asserts the key contract (the unit that determines remounting) rather than typing into a live input; the live-input proof is AC-10 in the browser"
     ],
     "risks": [
-      "No docs/ or .sdlc/ files change in this plan: the fix touches only components/ui.tsx plus one app test, so no new ADR is needed; if review disagrees, the activity ticket can carry the doc update",
-      "Cross-currency home totals and per-person rows exclude foreign-currency groups by the stated same-currency rule; a group in a second currency is the case that proves the note renders",
-      "The idle region renders an empty paragraph in each panel until the first result, adding a small blank gap; accepted deliberately so the announced node is stable from first paint"
+      "No docs/ or .sdlc/ files change in this plan: the fix touches only components/settle-panels.tsx plus one component test, so no new ADR is needed",
+      "Two rows can never share a key: endpoints are unique per suggestion and the amount only narrows it further, so no duplicate-key warning is introduced",
+      "The refused-submit path depends on key stability when the amount is unchanged; the new test pins that so a future key change cannot silently break T-9"
     ],
-    "root_cause": "components/ui.tsx StateMessage returns null while idle, so both settle panels mount with zero live regions from first paint; the first result inserts the [aria-live] node together with its message, which screen readers announce unreliably. The previous work order assumed the ConfirmStep-plus-StateMessage pattern is a persistent live region; it never was, and only the shared contract needs to change since both panels already mount it unconditionally.",
+    "root_cause": "TransferRow in components/settle-panels.tsx holds the typed amount in useState initialized once from the suggested transfer, and SettleUpForm keys rows by endpoint ids only (from:to). A partial payment revalidates the group page so the same row re-renders with a shrunken transfer.amountMinor under an unchanged key, and React reuses the mounted instance — the paid fragment survives in the field while the suggestion beside it has moved. The v2 StateMessage diagnosis was correct for BUG-1 (T-7 now passes); it missed this second defect because the live-region fix never touched row identity.",
     "tests": [
       {
         "action": "create",
         "cases": [
-          "idle state renders an empty persistent polite live region (role=status, aria-live=polite) with no message — the BUG-1/T-12 repro that fails while StateMessage returns null",
-          "success renders the message text inside that same status node",
-          "error keeps role=alert with aria-live=polite and the message text"
+          "row key changes when the suggested amount changes with the same endpoints (the T-11/BUG-2 repro: 3000 vs 2000 gives different keys, so the row remounts and the field re-initializes to the 20.00 remainder instead of keeping the paid 10)",
+          "row key is stable when the suggested amount is unchanged (the T-9 refusal path: a failed submit keeps the typed value and its field error under the row that submitted)",
+          "minorUnitsText(2000) is '20.00' and minorUnitsText(1000) is '10' — the exact remainder T-11 asserts after a 10.00 partial on a 30.00 transfer"
         ],
-        "path": "app/groups/[id]/debts-live-region.test.ts"
+        "path": "components/settle-panels.test.ts"
       }
     ],
-    "understanding": "PR #22 implemented version 1 faithfully and still failed QA (12/13 green, only T-12 red) because version 1's premise was wrong, not its execution: it specified the ConfirmStep-plus-StateMessage pattern as the debts card's persistent polite live region, but StateMessage returns null while idle (components/ui.tsx:34), so both settle panels mount zero [aria-live] nodes from first paint and the first result inserts the node together with its message — exactly what T-12 asserts against (BUG-1). I reproduced this locally against the real component: idle renders '', success renders the role=status node. My previous revision of this fix was additionally refused by the validator for dropping the IAC/TR sources on the acceptance criteria; this revision restores AC-1 through AC-8 verbatim with their sources and appends AC-9 for BUG-1.",
+    "understanding": "PR #22 v2 got its own diagnosis right but the attempt wrong in one place it never examined: the StateMessage null-while-idle cause of BUG-1 was correct and is now proven fixed (T-7 passes, 10/11 green, BUG-1 retest fixed). What v2 missed is a second, separate PR-introduced defect it never touched: TransferRow keeps the typed amount in useState initialized once and rows are keyed by endpoint ids only, so after a partial payment revalidates the page the same row re-renders with a shrunken suggestion under an unchanged key and React reuses the instance — the field keeps the paid fragment (10) instead of the remainder (20.00), exactly T-11/BUG-2. This plan keeps AC-1 through AC-9 verbatim and appends AC-10 for BUG-2.",
     "unknowns": [
       "Whether the later activity-feed ticket wants more than amount plus endpoint ids and names on payment rows; the snapshot defined here is the minimum that renders them"
     ],
-    "version": 2
+    "version": 3
   },
   "touch_paths": [
     "components/ui.tsx",
@@ -520,10 +534,10 @@
   "validated_at": "2026-10-05T05:32:30.997Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
-  "work_order_version": 2,
-  "work_order_posted_at": "2026-10-05T08:33:59.762Z",
+  "work_order_version": 3,
+  "work_order_posted_at": "2026-10-05T09:53:16.659Z",
   "work_order_from": "root-cause",
-  "work_order_comment": "5990958644",
+  "work_order_comment": "5992128446",
   "implemented_version": 2,
   "follow_ups": {
     "review": [

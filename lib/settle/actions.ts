@@ -3,7 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { withDb } from '../db/client';
-import { activityEvents, payments } from '../db/schema';
+import { activityEvents, memberships, payments } from '../db/schema';
 import { guardGroup, type GroupAccess } from '../groups/authz';
 import {
   ARCHIVED_GROUP_MESSAGE,
@@ -14,9 +14,11 @@ import { formatMinorUnits } from '../money/format';
 import { computeNetBalances } from './balances';
 import { loadPayment } from './queries';
 import {
+  PAYMENT_BOTH_DEPARTED_MESSAGE,
   PAYMENT_NOT_FOUND_MESSAGE,
   parsePaymentInput,
   paymentScope,
+  paymentSubject,
   type PaymentActionState,
   type PaymentSnapshot,
 } from './validation';
@@ -38,6 +40,9 @@ import {
  *   let it be settled would strand a net that no write could ever clear. An id from another group
  *   is neither, and gets the 404-shaped refusal (AC-5) — the same answer a stranger, a missing
  *   group and a made-up id get, so nothing about which ids exist leaks through the refusal.
+ *   At least one endpoint must still be a *current* membership, though: a payment between two
+ *   departed seats could be recorded and never deleted, since the delete rule below needs a
+ *   current member on one end, so it is refused at the write instead.
  * - **Only a member the payment involves may delete it** (spec: "a payment can be deleted by the
  *   members it involves"). A payment naming a departed seat is deletable by the *current* member
  *   on the other end of it — the only person left who was there. Everybody else gets the same
@@ -58,6 +63,10 @@ const PAYMENT_GONE_STATE: PaymentActionState = {
   status: 'error',
   message: PAYMENT_NOT_FOUND_MESSAGE,
 };
+const BOTH_DEPARTED_STATE: PaymentActionState = {
+  status: 'error',
+  message: PAYMENT_BOTH_DEPARTED_MESSAGE,
+};
 
 function refusal(access: GroupAccess): PaymentActionState {
   return access.status === 'unauthenticated' ? UNAUTHENTICATED_STATE : NOT_FOUND_STATE;
@@ -73,11 +82,6 @@ function revalidateBalances(groupId: string): void {
   revalidatePath('/');
   revalidatePath(`/groups/${groupId}`);
   revalidatePath(`/groups/${groupId}/members`);
-}
-
-/** What the feed row says happened, in the words the two seats carried at the time. */
-function paymentSubject(snapshot: PaymentSnapshot): string {
-  return `${snapshot.fromDisplayName} paid ${snapshot.toDisplayName}`;
 }
 
 export async function createPayment(
@@ -105,6 +109,23 @@ export async function createPayment(
     const fromName = names.get(parsed.draft.fromMembershipId);
     const toName = names.get(parsed.draft.toMembershipId);
     if (fromName === undefined || toName === undefined) return NOT_FOUND_STATE;
+
+    // The ledger map knows departed seats too, so the check above lets a payment between two of
+    // them through — and the delete rule, which needs one endpoint to still be a current member,
+    // could then never undo it. Current here means the membership row exists: a placeholder (null
+    // userId) is as current as a signed-up member. Nothing leaks by saying so: both seats are
+    // already on the balances screen under the names this group's ledger kept for them.
+    const current = await handle.db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(eq(memberships.groupId, access.group.id));
+    const currentIds = new Set(current.map((seat) => seat.id));
+    if (
+      !currentIds.has(parsed.draft.fromMembershipId) &&
+      !currentIds.has(parsed.draft.toMembershipId)
+    ) {
+      return BOTH_DEPARTED_STATE;
+    }
 
     const snapshot: PaymentSnapshot = {
       amountMinor: parsed.draft.amount,

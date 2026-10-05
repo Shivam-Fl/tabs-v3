@@ -28,6 +28,19 @@ export const PAYMENT_AMOUNT_POSITIVE_MESSAGE = 'Enter an amount more than zero.'
 export const PAYMENT_AMOUNT_TOO_LARGE_MESSAGE = `Enter an amount no more than ${minorUnitsText(MAX_MINOR_UNITS)}.`;
 export const PAYMENT_SAME_MEMBER_MESSAGE =
   'A payment moves money between two different people. Choose who paid and who received it.';
+export const PAYMENT_BOTH_DEPARTED_MESSAGE = 'A payment must include someone still in the group.';
+
+/**
+ * What the feed row for a payment says happened, in the words the two seats carried at the time.
+ *
+ * Pure, and here rather than in the `'use server'` module beside it, so the write path can import
+ * it *inside* the transaction: it is the call between the payment insert and the activity insert,
+ * and a test that mocks it can fail the write at exactly that point and prove the two rows come
+ * back together or not at all.
+ */
+export function paymentSubject(snapshot: PaymentSnapshot): string {
+  return `${snapshot.fromDisplayName} paid ${snapshot.toDisplayName}`;
+}
 
 /**
  * What a payment's activity row carries so the feed can render it later (TR-10, AC-7).

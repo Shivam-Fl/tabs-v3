@@ -161,4 +161,23 @@ describe('the post-sign-in destination', () => {
     expect(parseNextPath(undefined)).toBeNull();
     expect(parseNextPath(null)).toBeNull();
   });
+
+  it('drops every shape that would leave the origin, including the empty one', () => {
+    // This value no longer only feeds a server redirect and a link href: the auth island hands
+    // it straight to router.push, so the shapes that must never reach it are pinned by name.
+    // A browser reads `//evil.example` as another host, and normalizes `/\evil.example` into the
+    // same thing, which is why the backslash is refused as well.
+    for (const value of ['//evil.example', '/\\evil.example', 'https://evil.example', '', '   ']) {
+      expect(parseNextPath(value)).toBeNull();
+    }
+  });
+
+  it('keeps the destinations the auth pages actually navigate to', () => {
+    // The legitimate half: an invite link, a group, and the profile the account menu opens all
+    // survive parsing byte for byte, trimmed.
+    expect(parseNextPath('/join/abc123')).toBe('/join/abc123');
+    expect(parseNextPath(`/groups/${UUID}`)).toBe(`/groups/${UUID}`);
+    expect(parseNextPath('/profile')).toBe('/profile');
+    expect(parseNextPath(`  /groups/${UUID}  `)).toBe(`/groups/${UUID}`);
+  });
 });

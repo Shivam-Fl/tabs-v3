@@ -543,6 +543,63 @@ describe('expenseChanges', () => {
     expect(payload?.before.payers).toHaveLength(1);
   });
 
+  // The renderer has no other field that names the unit a split input is in: 6000 is "60%" of a
+  // percentage split and "₹60.00" of an exact one, and only the type says which. So the type
+  // travels beside the inputs it explains — in both halves, without having moved.
+  it('carries the split type beside the inputs it gives a unit to', () => {
+    const percentage = {
+      ...before,
+      splitType: 'percentage' as const,
+      inputs: [
+        { membershipId: ADa, displayName: 'Ada', value: 6000 },
+        { membershipId: BO, displayName: 'Bo', value: 4000 },
+      ],
+    };
+
+    const payload = expenseChanges(percentage, {
+      ...percentage,
+      inputs: [
+        { membershipId: ADa, displayName: 'Ada', value: 7000 },
+        { membershipId: BO, displayName: 'Bo', value: 3000 },
+      ],
+    });
+
+    // The two splitType entries are equal, which is what tells the feed this is not a row to
+    // print: only the inputs moved, and the type is there to say what their numbers mean.
+    expect(payload).toEqual({
+      before: {
+        splitType: 'percentage',
+        inputs: [
+          { membershipId: ADa, displayName: 'Ada', value: 6000 },
+          { membershipId: BO, displayName: 'Bo', value: 4000 },
+        ],
+      },
+      after: {
+        splitType: 'percentage',
+        inputs: [
+          { membershipId: ADa, displayName: 'Ada', value: 7000 },
+          { membershipId: BO, displayName: 'Bo', value: 3000 },
+        ],
+      },
+    });
+    expect(payload?.before.splitType).toBe(payload?.after.splitType);
+  });
+
+  it('leaves the split type out when the split itself did not move', () => {
+    // An exact split whose only its amount changed carries no inputs and so no unit to explain:
+    // the type is absent, not present-and-equal, and the feed has nothing extra to skip.
+    const exact = {
+      ...before,
+      splitType: 'exact' as const,
+      inputs: [{ membershipId: ADa, displayName: 'Ada', value: 1250 }],
+    };
+
+    expect(expenseChanges(exact, { ...exact, amountMinor: 2000 })).toEqual({
+      before: { amountMinor: 1250 },
+      after: { amountMinor: 2000 },
+    });
+  });
+
   it('counts a reordering as a change, because payer order decides the remainder', () => {
     const twoPayers = {
       ...before,

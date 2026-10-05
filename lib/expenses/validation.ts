@@ -150,7 +150,8 @@ export function percentPartsMessage(sumBasisPoints: number): string {
  * types the `payload` column with them and the schema file may only import a module that does
  * not itself reach for a database — which this one does not. Only the fields that actually
  * changed appear in either half, so an edit that moved the amount and nothing else records the
- * amount and nothing else.
+ * amount and nothing else. `splitType` is the one field `expenseChanges` copies beside the
+ * inputs it has to describe; see the note there.
  */
 export interface ExpensePayerSnapshot {
   membershipId: string;
@@ -216,6 +217,14 @@ export const EXPENSE_SNAPSHOT_FIELDS = [
  *
  * Compared by value, deep: reordering two payers is a change, and so is swapping one member out
  * of the split and another in, neither of which a shallow comparison would notice.
+ *
+ * One field rides along without having moved. A split input's number means nothing on its own:
+ * the same 6000 is "60%" of a percentage split and "₹60.00" of an exact one, and only the split
+ * type says which. An edit that moved the inputs and nothing else therefore carries `splitType`
+ * in both halves as well, so the half that describes the inputs also names their unit — the
+ * renderer reads that unit straight off the half it is printing, and has no other field to read
+ * it from. The row for it is not printed: `EditDetail` renders the fields whose two values
+ * differ, and these two are equal.
  */
 export function expenseChanges(
   before: ExpenseSnapshot,
@@ -233,6 +242,14 @@ export function expenseChanges(
     // cannot prove a single generic write is sound for every member of it.
     (changedBefore as Record<string, unknown>)[field] = before[field];
     (changedAfter as Record<string, unknown>)[field] = after[field];
+  }
+
+  // The unit the inputs above are in. Written when they moved, and harmless when the type moved
+  // too — the loop has already put the two different values there, and this assigns the same
+  // ones back.
+  if (changed && 'inputs' in changedAfter) {
+    (changedBefore as Record<string, unknown>).splitType = before.splitType;
+    (changedAfter as Record<string, unknown>).splitType = after.splitType;
   }
 
   return changed ? { before: changedBefore, after: changedAfter } : null;

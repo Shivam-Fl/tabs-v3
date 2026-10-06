@@ -369,8 +369,7 @@
   },
   "touch_paths": [
     "app/groups/[id]/page.tsx",
-    "app/groups/[id]/loading.tsx",
-    "app/groups/[id]/expenses/loading.tsx",
+    "components/group-skeletons.tsx",
     "components/group-page.tsx",
     "components/timestamp.tsx",
     "components/activity-feed.tsx",
@@ -379,9 +378,11 @@
     "lib/groups/validation.ts",
     "lib/dates.ts",
     "components/groups-panels.tsx",
+    "app/groups/[id]/expenses/new/page.tsx",
+    "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
     "lib/dates.test.ts",
-    "app/groups/[id]/loading.test.ts",
-    "app/groups/[id]/expenses/loading.test.ts",
+    "components/group-skeletons.test.tsx",
+    "app/groups/[id]/guards-wire-status.test.ts",
     "lib/groups/validation.test.ts",
     "components/groups-panels.test.ts"
   ],

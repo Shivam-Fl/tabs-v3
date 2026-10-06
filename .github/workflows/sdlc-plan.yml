@@ -407,6 +407,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Plan (single agent)
         id: plan_single_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode == 'single') && steps.plan_single.outcome != 'skipped' && steps.plan_single.outputs.structured_output == '' && steps.plan_single_record.outputs.needed == 'true' }}
@@ -606,6 +613,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Council 1/3 — propose
         id: propose_agent_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode == 'council') && steps.propose_agent.outcome != 'skipped' && steps.propose_agent.outputs.structured_output == '' && steps.propose_agent_record.outputs.needed == 'true' }}
@@ -752,6 +766,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Council 2/3 — critique
         id: critique_agent_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode == 'council' && steps.proposed.outputs.ok == 'true') && steps.critique_agent.outcome != 'skipped' && steps.critique_agent.outputs.structured_output == '' && steps.critique_agent_record.outputs.needed == 'true' }}
@@ -916,6 +937,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Council 3/3 — arbitrate
         id: plan_arbiter_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode == 'council') && steps.plan_arbiter.outcome != 'skipped' && steps.plan_arbiter.outputs.structured_output == '' && steps.plan_arbiter_record.outputs.needed == 'true' }}
@@ -1333,6 +1361,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Plan review agent
         id: review_plan_agent_finish
         if: ${{ !cancelled() && steps.review_plan_agent.outcome != 'skipped' && steps.review_plan_agent.outputs.structured_output == '' && steps.review_plan_agent_record.outputs.needed == 'true' }}

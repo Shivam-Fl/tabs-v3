@@ -356,5 +356,31 @@
       "note": "The implementer measured in a browser that adding break-words to the two notices cannot meet AC-1 or AC-2: at 375px the page is still 1136px wide, and the notices are never the widest element. What sets the width is the unbroken group name in the page headings: the h1 at app/groups/[id]/page.tsx:253 (wrapping it alone takes the group page from 1136 to 375) and the h1 at components/members-screen.tsx:75 plus the breadcrumbs at :66-72 and :160-167 on the members page. Plan the fix where the width comes from; the acceptance criteria stand."
     }
   ],
-  "implemented_version": 2
+  "implemented_version": 2,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "The join page h1 renders 'Join {group.name}' with no overflow-wrap treatment, so an 80-character unbroken group name widens /join/[token] past a 375px viewport. Same root-cause shape as the fixed h1s, on a route with no acceptance criterion, so it is a follow-up, not a blocker.",
+        "detail": "The join page h1 renders 'Join {group.name}' with no overflow-wrap treatment, so an 80-character unbroken group name widens /join/[token] past a 375px viewport. Same root-cause shape as the fixed h1s, on a route with no acceptance criterion, so it is a follow-up, not a blocker.\n\n`app/join/[token]/page.tsx:84`\n\nEvidence: app/join/[token]/page.tsx:84: <h1 className=\"text-page font-semibold text-ink\">Join {group.name}</h1> — no break-words/truncate; grep shows the PR does not touch this file. GROUP_NAME_MAX is 80 (lib/groups/validation.ts:21), and unbroken 80-char names are exactly what set the group/members pages to 753-1136px before this fix.\n\nFix: Add break-words to that h1 (block-level inside a flex-col div, so the one-class treatment used on the group-page h1 suffices) or file it as the follow-up issue; expense-screen.tsx:56,69,85 is the same shape but already tracked as a residual risk in the work order.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/join/[token]/page.tsx"
+      },
+      {
+        "title": "The join page's buttons re-print unbounded names with no overflow-wrap treatment: `Join ${groupName}` interpolates an up-to-80-character group name and `This is me — claim ${seat.displayName}` an up-to-80-character placeholder name, both as bare text inside inline-flex Buttons. That is the same shrink-to-fit min-content shape the PR fixes on the members top back-link (which measured 703px naive), on a route with no acceptance criterion — follow-up, not a blocker.",
+        "detail": "The join page's buttons re-print unbounded names with no overflow-wrap treatment: `Join ${groupName}` interpolates an up-to-80-character group name and `This is me — claim ${seat.displayName}` an up-to-80-character placeholder name, both as bare text inside inline-flex Buttons. That is the same shrink-to-fit min-content shape the PR fixes on the members top back-link (which measured 703px naive), on a route with no acceptance criterion — follow-up, not a blocker.\n\n`components/groups-panels.tsx:870`\n\nEvidence: components/groups-panels.tsx:870 `{`Join ${groupName}`}` inside Button and :831 `{`This is me — claim ${seat.displayName}`}` inside Button; Button renders buttonClasses() = `inline-flex items-center justify-center ...` with no min-w-0 or wrapping (components/ui.tsx:171); the enclosing Card is `flex flex-col` with no overflow clipping (components/ui.tsx:327), so nothing stops the min-content floor reaching the document. GROUP_NAME_MAX and PLACEHOLDER_NAME_MAX are both 80 (lib/groups/validation.ts:21-22).\n\nFix: Give the button labels the same treatment as the members back-link label — the text in its own min-w-0 break-words span, since break-words alone on the shrink-to-fit button cannot reduce its min-content floor — or file it with the join-h1 follow-up; the claim-button instance needs the same.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "components/groups-panels.tsx"
+      },
+      {
+        "title": "The shared ConfirmStep question paragraph interpolates 80-character group and member names with no wrapping, and it renders inline in-flow on the in-scope pages once expanded: `Remove ${displayName} from \"${groupName}\"` on members, `Archive \"${groupName}\"` / rotate / disable confirms on the group page, `Leave \"${groupName}\"` on members. Same unbroken-name root cause; only reachable behind a click so no AC covers it — follow-up, not a blocker.",
+        "detail": "The shared ConfirmStep question paragraph interpolates 80-character group and member names with no wrapping, and it renders inline in-flow on the in-scope pages once expanded: `Remove ${displayName} from \"${groupName}\"` on members, `Archive \"${groupName}\"` / rotate / disable confirms on the group page, `Leave \"${groupName}\"` on members. Same unbroken-name root cause; only reachable behind a click so no AC covers it — follow-up, not a blocker.\n\n`components/ui.tsx:97`\n\nEvidence: components/ui.tsx:97-99 `<p role=\"alert\" className=\"text-sm\">{question}</p>` — no break-words; instances at components/groups-panels.tsx:496 (remove), :539 (archive), :413/:426 (rotate/disable), :766 (leave); the confirm renders as an in-flow div (inline details dropdown on members, inline panels elsewhere), not a clipping dialog, so its overflow reaches the document.\n\nFix: Add break-words to the ConfirmStep question <p> — one place covers all five instances, the same one-class treatment as the group-page h1 precedent.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "components/ui.tsx"
+      }
+    ],
+    "pr": "54"
+  }
 }

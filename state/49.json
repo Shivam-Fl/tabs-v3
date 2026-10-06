@@ -452,7 +452,8 @@
         "suspected_cause": "The shared StateMessage (components/ui.tsx:54-64) renders success text in <p class=\"text-sm text-lent\"> with no overflow-wrap; lib/groups/actions.ts:316 interpolates the seat displayName ('Added ...') and :233 the group name ('Renamed to ...'). Base commit verified without break-words, so pre-existing — the PR fixed the two notice <p>s but missed this third sibling with the identical shape.",
         "title": "Add-seat (and rename) success line re-prints 80-character names with no wrapping (scrollWidth 676)"
       }
-    ]
+    ],
+    "filed": 55
   },
   "qa": {
     "verdict": "pass",

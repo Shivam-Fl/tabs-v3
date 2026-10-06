@@ -58,6 +58,24 @@ import {
  * `components/ui.tsx`, shared with the other screens' forms; what is left here is the behaviour.
  */
 
+/**
+ * Where a refusal sends somebody who has to settle up before the group will let them go.
+ *
+ * Two refusals need it — removing a member who still carries a balance, and leaving with one — and
+ * both used to link to the old `debts-heading` fragment. That heading no longer exists: the group
+ * page keeps settling behind `?section=balances`, so a bare fragment landed the reader on the
+ * expenses tab with no settle form in view. The link has to carry the section as well as the
+ * fragment, and the fragment has to be the panel that actually wraps the live `SettleUpForm` —
+ * `#panel-balances`, which the group page renders in the same order it is written here.
+ *
+ * It is one helper rather than two literals so the two call sites cannot drift apart again; the
+ * string is pinned by a unit test, so a page that renames that panel fails the suite instead of a
+ * QA run.
+ */
+export function settleUpHref(groupId: string): string {
+  return `/groups/${groupId}?section=balances#panel-balances`;
+}
+
 export function CreateGroupForm({ defaultCurrency }: { defaultCurrency: string }) {
   const [state, formAction, isPending] = useActionState(createGroup, IDLE_GROUP_STATE);
   const [name, setName] = useState('');
@@ -508,7 +526,7 @@ function RemoveMemberForm({
       {balanceBlocked ? (
         <Link
           className="text-secondary text-accent underline underline-offset-4"
-          href={`/groups/${groupId}#debts-heading`}
+          href={settleUpHref(groupId)}
         >
           Settle up
         </Link>
@@ -752,7 +770,7 @@ export function MembersPanel({
         ) : (
           <Link
             className="text-secondary text-accent underline underline-offset-4"
-            href={`/groups/${groupId}#debts-heading`}
+            href={settleUpHref(groupId)}
           >
             Settle up
           </Link>

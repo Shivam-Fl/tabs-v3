@@ -34,6 +34,16 @@ export default function GroupLoading() {
           Loading this group…
         </p>
 
+        {/* A reader with scripting off is left holding this fallback and nothing else: the resolved
+            ledger waits in the streamed Flight payload for a client-JS swap that never runs without
+            JavaScript, so the skeleton above would pulse forever. This says what is actually
+            missing instead (AC-16) — a designed sentence, not a bare loader nobody can finish. */}
+        <noscript>
+          <p className="rounded-token border border-border bg-surface p-4 text-secondary text-ink shadow-sm">
+            Tabs needs JavaScript to load this group&rsquo;s ledger. Turn it on and reload the page.
+          </p>
+        </noscript>
+
         <div className="flex items-center gap-3">
           <div
             data-skeleton="group-avatar"

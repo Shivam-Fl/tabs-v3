@@ -51,6 +51,17 @@ describe('group loading boundary', () => {
     expect(html).toContain('aria-busy="true"');
   });
 
+  it('tells a scriptless reader that JavaScript is required instead of stranding a loader', () => {
+    // BUG-2/T-14: with scripting off the route boundary is the paint, and the resolved ledger sits
+    // in a hidden Flight payload that no swap can reveal — so this fallback is what the reader
+    // keeps, pulsing forever. AC-16 replaces that stranded loader with a designed message naming
+    // the requirement. (`<noscript>` renders only when scripting is off, so JS-enabled paint is
+    // untouched by it.)
+    const html = render();
+
+    expect(html).toMatch(/<noscript>[\s\S]*JavaScript[\s\S]*<\/noscript>/);
+  });
+
   it('pulses only for a viewer who has not asked for less motion', () => {
     const html = render();
 

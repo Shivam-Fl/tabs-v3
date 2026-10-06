@@ -514,7 +514,7 @@
     ]
   },
   "qa": {
-    "verdict": "fail",
+    "verdict": "pass",
     "introduced_bugs": 0,
     "ac_ids": [
       "AC-1",
@@ -526,12 +526,13 @@
       "AC-7",
       "AC-8",
       "AC-9",
-      "AC-10"
+      "AC-10",
+      "AC-11"
     ],
-    "sha": "4e38a5cfb74f5dc20204d144a348b37c3e9aa4ca",
-    "run_id": "37402822093",
-    "work_order_version": 1,
-    "at": "2026-10-06T02:51:06.623Z"
+    "sha": "a2ef57bb7b497decbeb6dc410c16d5e5111942f1",
+    "run_id": "37408252079",
+    "work_order_version": 2,
+    "at": "2026-10-06T03:47:00.471Z"
   },
   "qa_open_bugs": []
 }

@@ -347,5 +347,9 @@
   "work_order_posted_at": "2026-10-06T02:00:53.792Z",
   "work_order_from": "plan",
   "work_order_comment": "6007786630",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [],
+    "pr": "48"
+  }
 }

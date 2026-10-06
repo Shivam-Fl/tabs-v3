@@ -154,7 +154,10 @@
       "Other tabs of the group page (Balances, Activity, Members) may be wider than 375px with an 80-char seat name; not in QA's report and out of scope, to be filed if found."
     ]
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "app/groups/[id]/page.tsx",
+    "app/groups/[id]/transfer-line-wrap.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

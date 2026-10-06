@@ -748,6 +748,9 @@ jobs:
       - name: Before and after, on the PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: a person's token, which GitHub accepts attachment uploads from and the
+          # Actions token it does not. With it the recordings play inline; without, they are links.
+          MEDIA_TOKEN: ${{ secrets.SDLC_MEDIA_TOKEN }}
           PR: ${{ needs.publish.outputs.pr }}
           SHA: ${{ needs.publish.outputs.head }}
         run: node .sdlc/bin/pr-demo-post.mjs _demo

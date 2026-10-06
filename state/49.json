@@ -92,7 +92,11 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/groups-panels.tsx",
+    "app/groups/[id]/page.tsx",
+    "app/groups/[id]/members/archived-readonly.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

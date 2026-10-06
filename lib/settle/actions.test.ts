@@ -20,6 +20,24 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const jar = vi.hoisted(() => ({ entries: new Map<string, string>() }));
 
 /**
+ * Where a successful action landed, as a thrown value rather than a return.
+ *
+ * A success redirects now — the recorded payment changes the list it was recorded from, so the
+ * form that would have shown the confirmation is unmounted with the row — and `redirect()` is a
+ * control-flow throw. Catching its own named error is the only way to read the URL back out, the
+ * same trick the expense suite uses.
+ */
+const redirected = vi.hoisted(() => {
+  class Redirected extends Error {
+    constructor(readonly url: string) {
+      super(`redirect:${url}`);
+      this.name = 'Redirected';
+    }
+  }
+  return { Redirected };
+});
+
+/**
  * The seam inside the payment transaction. `paymentSubject` builds the feed row's sentence, so it
  * is the call that sits between the payment insert and the activity insert; mocking it is how the
  * atomicity case fails the write at that exact point, the way the expense suite mocks
@@ -48,6 +66,15 @@ vi.mock('next/headers', () => ({
     },
   }),
   headers: async () => new Headers(),
+}));
+
+vi.mock('next/navigation', () => ({
+  redirect: (url: string) => {
+    throw new redirected.Redirected(url);
+  },
+  notFound: () => {
+    throw new Error('notFound');
+  },
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -82,7 +109,9 @@ const {
   PAYMENT_AMOUNT_POSITIVE_MESSAGE,
   PAYMENT_AMOUNT_TOO_LARGE_MESSAGE,
   PAYMENT_BOTH_DEPARTED_MESSAGE,
+  PAYMENT_DELETED,
   PAYMENT_NOT_FOUND_MESSAGE,
+  PAYMENT_RECORDED,
   PAYMENT_SAME_MEMBER_MESSAGE,
   paymentSubject,
 } = await import('./validation');
@@ -129,6 +158,27 @@ function paymentForm(spec: FormSpec): FormData {
   if (spec.amount !== undefined) data.set('amount', spec.amount);
 
   return data;
+}
+
+/** Runs an action that is expected to land the caller somewhere, and returns where. */
+async function redirectUrl(run: Promise<unknown>): Promise<string> {
+  try {
+    await run;
+  } catch (error) {
+    if (error instanceof redirected.Redirected) return error.url;
+    throw error;
+  }
+  throw new Error('expected the action to redirect');
+}
+
+/** The notice path a recorded payment lands on: the group page carrying the outcome and the pair. */
+function paymentNoticeUrl(
+  groupId: string,
+  notice: string,
+  fromMembershipId: string,
+  toMembershipId: string,
+): string {
+  return `/groups/${groupId}?payment=${notice}&from=${fromMembershipId}&to=${toMembershipId}`;
 }
 
 interface Fixture {
@@ -313,17 +363,21 @@ describe('createPayment', () => {
   });
 
   it('records the payment and the feed row that says so, in one save', async () => {
-    const state = await createPayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({
-        groupId: fixture.groupId,
-        fromMembershipId: fixture.bo,
-        toMembershipId: fixture.ada,
-        amount: '10.00',
-      }),
+    const url = await redirectUrl(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.bo,
+          toMembershipId: fixture.ada,
+          amount: '10.00',
+        }),
+      ),
     );
 
-    expect(state.status).toBe('success');
+    // The success is a navigation, not a returned state: the row it was recorded from leaves the
+    // list, so the confirmation rides the group page's query with the pair it is about (AC-6).
+    expect(url).toBe(paymentNoticeUrl(fixture.groupId, PAYMENT_RECORDED, fixture.bo, fixture.ada));
 
     const [payment] = await paymentRows(fixture.groupId);
     expect(payment).toMatchObject({
@@ -364,14 +418,16 @@ describe('createPayment', () => {
     await recordDinner(fixture);
     await signInAs(boId);
 
-    await createPayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({
-        groupId: fixture.groupId,
-        fromMembershipId: fixture.bo,
-        toMembershipId: fixture.ada,
-        amount: '10.00',
-      }),
+    await redirectUrl(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.bo,
+          toMembershipId: fixture.ada,
+          amount: '10.00',
+        }),
+      ),
     );
 
     const nets = await netsOf(fixture.groupId);
@@ -384,17 +440,21 @@ describe('createPayment', () => {
     await recordDinner(fixture);
     await signInAs(boId);
 
-    const state = await createPayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({
-        groupId: fixture.groupId,
-        fromMembershipId: fixture.bo,
-        toMembershipId: fixture.ada,
-        amount: '4.00',
-      }),
+    const url = await redirectUrl(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.bo,
+          toMembershipId: fixture.ada,
+          amount: '4.00',
+        }),
+      ),
     );
 
-    expect(state.status).toBe('success');
+    // A partial payment is still a success: the notice names the pair and the page reads the
+    // remainder back off the shrunken suggestion.
+    expect(url).toBe(paymentNoticeUrl(fixture.groupId, PAYMENT_RECORDED, fixture.bo, fixture.ada));
     const nets = await netsOf(fixture.groupId);
     expect(nets.get(fixture.bo)).toBe(-600);
     expect(nets.get(fixture.ada)).toBe(1600);
@@ -532,17 +592,21 @@ describe('createPayment', () => {
     // Bo leaves with their seat still in the ledger — the ADR-0007 state a removal produces.
     await withDb((handle) => handle.db.delete(memberships).where(eq(memberships.id, fixture.bo)));
 
-    const state = await createPayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({
-        groupId: fixture.groupId,
-        fromMembershipId: fixture.bo,
-        toMembershipId: fixture.ada,
-        amount: '10.00',
-      }),
+    const url = await redirectUrl(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.bo,
+          toMembershipId: fixture.ada,
+          amount: '10.00',
+        }),
+      ),
     );
 
-    expect(state.status).toBe('success');
+    // A seat that is gone is still a seat this group's notice can name: the redirect carries its
+    // id like any other, and the page's seat check reads it off the ledger map that keeps it.
+    expect(url).toBe(paymentNoticeUrl(fixture.groupId, PAYMENT_RECORDED, fixture.bo, fixture.ada));
 
     // The payment snapshots the name the ledger kept for a seat that is no longer there, and it
     // settles the seat's debt: Bo is square even though Bo is gone.
@@ -552,14 +616,16 @@ describe('createPayment', () => {
 
     // And the group is still settleable to all-zero: Cy's share is the only thing left, and the
     // money that cleared the departed seat did not strand itself anywhere.
-    await createPayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({
-        groupId: fixture.groupId,
-        fromMembershipId: fixture.cy,
-        toMembershipId: fixture.ada,
-        amount: '10.00',
-      }),
+    await redirectUrl(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.cy,
+          toMembershipId: fixture.ada,
+          amount: '10.00',
+        }),
+      ),
     );
 
     const nets = await netsOf(fixture.groupId);
@@ -621,14 +687,16 @@ describe('deletePayment', () => {
   /** A recorded payment: Bo pays Ada 10. Returns its id. */
   async function recordPayment(): Promise<string> {
     await signInAs(adaId);
-    await createPayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({
-        groupId: fixture.groupId,
-        fromMembershipId: fixture.bo,
-        toMembershipId: fixture.ada,
-        amount: '10.00',
-      }),
+    await redirectUrl(
+      createPayment(
+        IDLE_PAYMENT_STATE,
+        paymentForm({
+          groupId: fixture.groupId,
+          fromMembershipId: fixture.bo,
+          toMembershipId: fixture.ada,
+          amount: '10.00',
+        }),
+      ),
     );
 
     const [payment] = await paymentRows(fixture.groupId);
@@ -643,12 +711,13 @@ describe('deletePayment', () => {
     const paymentId = await recordPayment();
     await signInAs(boId);
 
-    const state = await deletePayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({ groupId: fixture.groupId, paymentId }),
+    const url = await redirectUrl(
+      deletePayment(IDLE_PAYMENT_STATE, paymentForm({ groupId: fixture.groupId, paymentId })),
     );
 
-    expect(state.status).toBe('success');
+    // The deleted row leaves the list, so this success navigates too, naming the pair the
+    // deletion was about.
+    expect(url).toBe(paymentNoticeUrl(fixture.groupId, PAYMENT_DELETED, fixture.bo, fixture.ada));
     expect(await paymentRows(fixture.groupId)).toHaveLength(0);
 
     const events = await eventsOf(fixture.groupId);
@@ -673,12 +742,11 @@ describe('deletePayment', () => {
     const paymentId = await recordPayment();
     await signInAs(adaId);
 
-    const state = await deletePayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({ groupId: fixture.groupId, paymentId }),
+    const url = await redirectUrl(
+      deletePayment(IDLE_PAYMENT_STATE, paymentForm({ groupId: fixture.groupId, paymentId })),
     );
 
-    expect(state.status).toBe('success');
+    expect(url).toBe(paymentNoticeUrl(fixture.groupId, PAYMENT_DELETED, fixture.bo, fixture.ada));
     expect(await paymentRows(fixture.groupId)).toHaveLength(0);
   });
 
@@ -687,7 +755,9 @@ describe('deletePayment', () => {
     const paymentId = await recordPayment();
     await signInAs(boId);
 
-    await deletePayment(IDLE_PAYMENT_STATE, paymentForm({ groupId: fixture.groupId, paymentId }));
+    await redirectUrl(
+      deletePayment(IDLE_PAYMENT_STATE, paymentForm({ groupId: fixture.groupId, paymentId })),
+    );
 
     const nets = await netsOf(fixture.groupId);
     expect(nets.get(fixture.ada)).toBe(2000);
@@ -771,13 +841,14 @@ describe('deletePayment', () => {
 
     // Ada is the other end of it, and the only person left who was there.
     await signInAs(adaId);
-    const involved = await deletePayment(
-      IDLE_PAYMENT_STATE,
-      paymentForm({ groupId: fixture.groupId, paymentId }),
+    const involved = await redirectUrl(
+      deletePayment(IDLE_PAYMENT_STATE, paymentForm({ groupId: fixture.groupId, paymentId })),
     );
 
     expect(third).toMatchObject({ status: 'error', message: PAYMENT_NOT_FOUND_MESSAGE });
-    expect(involved.status).toBe('success');
+    expect(involved).toBe(
+      paymentNoticeUrl(fixture.groupId, PAYMENT_DELETED, fixture.bo, fixture.ada),
+    );
     expect(await paymentRows(fixture.groupId)).toHaveLength(0);
   });
 });

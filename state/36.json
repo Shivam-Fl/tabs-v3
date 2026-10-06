@@ -508,7 +508,8 @@
         "suspected_cause": "components/activity-feed.tsx renders the expense description as raw link text with no truncation. That file is byte-identical between main and _pr (verified with diff), and the activity excerpt is explicitly a sibling piece in the work order out_of_scope list — pre-existing, found in passing.",
         "title": "Activity excerpt renders long expense names as an untruncated link, scrolling the page at 375px"
       }
-    ]
+    ],
+    "filed": 50
   },
   "qa": {
     "verdict": "pass",

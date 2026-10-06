@@ -1,96 +1,101 @@
 # Roadmap (survey 2026-10-06)
 
-Rebuilt from what is actually open: issues #24, #31, #35, #49, #52;
-PRs #46, #53; recently closed #33, #34, #36, #37, #38, #39, #41, #47, #50
-(+ earlier v1 slices #3–#8 with follow-ups #10, #13, #15, #18, #21, #26, #29).
-No untrusted entries. Under the recorded decisions on #31/#35
-(replan-project by @Shivam-Fl): UI redesign only — stack, data model, money
-rules, TRs and every other decision stay exactly as they are, and docs/ui.md
-is approved as written; and the replan on #49 (fix the width where it comes
-from — headings/breadcrumbs, not the notices; acceptance criteria stand).
+Rebuilt from what is actually open: issues #24, #60, #62, #63; PR #61;
+recently closed #58, #55, #31, #35, #49, #52, #50, #36, #34, #47, #37 and
+earlier slices. No untrusted entries. Decisions on record from the earlier
+replans still stand: the redesign changed UI only — stack, data model, money
+rules, TRs and every other decision stay as they were, and docs/ui.md is
+approved as written.
 
 ## Shipped
 
 What a user can do now that they could not before:
 
 - Use one consistent app shell on every signed-in page (Tabs mark to Home,
-  current place, account menu with Profile and Sign out), with a way back
-  from every nested page; signing in lands on Home, and no developer
-  artefacts are linked or shown anywhere.
+  current place, account menu with Profile and Sign out), with a way back from
+  every nested page; signing in lands on Home; no developer artefacts are shown.
 - Read a real landing page that explains Tabs and leads to sign up / sign in.
 - See Home as a balance summary with the key number as hero, people owed /
-  owing with avatars, and groups as rich rows with the primary action obvious.
-- Edit expenses amount-first with sensible defaults (paid by me, split
-  equally), a segmented split-type control with live per-member shares,
-  multi-payer inputs revealed only when needed, styled controls, sticky save
-  and cancel; settle up from a sheet with the suggested amount prefilled and
-  editable; row actions in an overflow menu with destructive choices
-  confirming by name.
-- Manage members, read per-group and cross-group activity, and keep a profile
-  with display name and default currency, with human dates carrying their
-  absolute day, times in the viewer zone, zero balances neutral, direction
-  always in words and colour, designed empty/loading/error states, 44px touch
-  targets, keyboard, focus and reduced-motion rules holding at 375px
-  and 1280px; archived groups read-only with blocked leave linking to settle.
-- Retry a refused expense save quietly, with the form state kept as set.
+  owing, and groups as rich rows with the primary action obvious.
+- Open a group page with sections, an expenses list and a settings entry.
+- Edit expenses amount-first with sensible defaults, a segmented split-type
+  control with live per-member shares, multi-payer inputs revealed only when
+  needed; settle up from a sheet with the suggested amount prefilled; row
+  actions in an overflow menu with destructive choices confirming by name.
+- Manage members, read per-group and cross-group activity, keep a profile
+  with display name and default currency; human dates, neutral zero balances,
+  direction in words and colour, designed empty/loading/error states, 44px
+  touch targets, keyboard/focus/reduced-motion rules.
+- Retry a refused expense save with the form state kept as set (include
+  switches no longer reset), and long group names no longer push headings and
+  notices past the 375px viewport.
+- The /activity feed degrades to a scoped failed state with a retry.
+- The whole v1 spec (accounts, groups, expenses with all split types,
+  balances and settle-up, activity, seed and deploy guide) and the redesign
+  epic #31 are built and closed.
 
 ## In flight
 
-- #35 Group page with sections, expenses list and settings entry — PR #46
-  open (`sdlc/issue-35`, ready, not draft). The last unmerged slice of #31.
-- #52 Refused expense save silently resets split include switches — PR #53
-  open (`sdlc/issue-52`, ready, not draft). Depends on closed #50, so
-  unblocked; a retry currently resubmits a different split than the user set.
-- #49 375px horizontal scroll from max-length group names — in planning, no
-  PR. Depends on closed #34, so unblocked. Re-scoped by the person's replan:
-  the width comes from the unbroken group name in the page headings (group
-  h1, members h1 plus breadcrumbs), not the two notices; plan the fix there.
-- #31 redesign epic — 6 of 7 slices closed (#33, #34, #36, #37 plus deferred
-  close-outs #38, #39); #35 in review, follow-ups #49 planning and #52
-  in review.
-- #24 Spec coverage — open tracking issue, not work. Its S-8 row still names
-  #34–#37 as in flight; actually #34, #36, #37 are built and only #35
-  remains. Nothing to action from it.
-- Nothing reads as stalled: #35 and #52 both have open PRs from this week,
-  #49 got its scoping decision yesterday.
+- #60 Follow-ups from #55 (2 from QA: remove-member confirm and an
+  80-character seat name each widen a page past 375px) — PR #61 open
+  (`sdlc/issue-60`, ready, not draft), labelled `sdlc:needs-human`. The label
+  is the thing to look at: the data does not say what it is waiting on.
+- #62 Follow-ups from #58 (4 from the review: lost loading announcement on
+  /activity, raw ?group= id carried on a failed feed, scope-line spacing,
+  a comment/test that disagree) — labelled `sdlc:blocked`, no PR yet. Its
+  only `Depends on` (#58) is closed, so nothing in the data explains the
+  block beyond the session ceiling below.
+- #63 Alert: the 100-agent-session daily ceiling was hit on 2026-10-06;
+  `implement` on #60 was the first stage refused. Everything that tries to
+  start parks until 2026-10-07T00:00Z and the watchdog resumes it by itself.
+- #24 Spec coverage — tracking issue, not work. Its S-8 row still shows #35
+  "in flight (#46)"; #35 is closed and merged, so the row is stale and will
+  correct on the next rebuild. S-1 and S-11 read "not started" because they
+  are scope sections, not requirements; nothing uncovered.
+- Nothing has sat in a stage for days: both follow-ups were filed this
+  morning.
 
 ## Next
 
-1. Land #35 (via PR #46), then #52 (via PR #53). Reason: both PRs are open
-   and #35 is the last epic slice — merging it closes the redesign build;
-   #52 rides alongside because a refused-save path that silently changes the
-   split is the one follow-up that can corrupt the next retry.
-2. Then #49 (max-length-name overflow at 375px). Reason: it is the last
-   known viewport violation against the redesign's explicit 375px promise,
-   and the implementer's measurement plus the person's replan already say
-   where the fix goes — small, evidence-led, no dependencies.
-3. Then nothing filed. Reason: after #35, #52 and #49 the redesign slices,
-   their deferred close-outs and every known follow-up are landed; the
-   deliberately-deferred items (password reset, native apps, in-app payment,
-   receipts, recurring expenses, multi-currency rates, charts, email
-   notifications) are eventual per the PRD, not next, so they stay out of
-   the backlog.
+1. Let the watchdog resume after 2026-10-07T00:00Z, and land #60 via PR #61.
+   Reason: the PR is already open; it is the last known 375px viewport
+   violation (member-row confirm width, balance-row long name), and the
+   redesign promised 375px everywhere.
+2. Then #62. Reason: the loading-announcement regression is an accessibility
+   loss against docs/ui.md (status changes are announced), so it outranks the
+   two cosmetic items bundled with it; the planner should drop any that no
+   longer reproduce.
+3. Then nothing filed. Reason: after #60 and #62 every known follow-up is
+   landed; the deliberately deferred items (password reset, native apps,
+   in-app payment, receipts, recurring expenses, multi-currency rates,
+   charts, email notifications) are eventual per the PRD, not next.
 
 ## Blocked, and on whom
 
-- Nothing open is labelled `sdlc:blocked` or `sdlc:needs-human`, and every
-  `Depends on` points at a closed issue (#35 on closed #33; #49 on closed
-  #34; #52 on closed #50) — on the pipeline, nothing waiting on a person.
-- First production deploy is blocked on a person: per the README and the
-  `project.md` open questions, someone must connect the repo to Vercel, add
-  Neon from the Storage tab (pooled URL), set the required secrets, and run
-  the manual Neon smoke check. Until then every proof is local-only
-  (PGlite). The `project.md` QA-auth-mode question is still unanswered but
-  blocks nothing currently in flight.
+- #62 is labelled `sdlc:blocked`; #60 is labelled `sdlc:needs-human`. Both
+  were parked while the day's session ceiling was reached (#63), and the
+  watchdog restarts parked stages at 2026-10-07T00:00Z. If #60 or #62 is
+  still labelled after that, the reason on the issue is for a person to read.
+- If today's work is worth more than 100 sessions, a person must raise
+  `limits.max_agent_sessions_per_day` in `.sdlc/config.yml` and
+  `/sdlc retry <stage>`. Otherwise nothing is needed.
+- First production deploy is blocked on a person: connect the repo to Vercel,
+  add Neon from the Storage tab (pooled URL), set the required secrets, run
+  the manual Neon smoke check. Until then every proof is local (PGlite). The
+  `project.md` QA-auth-mode question is unanswered but blocks nothing in
+  flight.
 
 ## Epics
 
-- #31 Make Tabs look and feel like a professional, market-ready product — in flight (6 of 7 slices closed; #35 in review via PR #46; follow-ups #49 planning, #52 in review via PR #53). No dependencies.
+No epic is open. #31 (professional redesign) closed with all seven slices
+built; nothing is waiting on any epic.
+
+EPIC DEPENDENCY GRAPH: none — no open epics, so no epic waits on another.
 
 ## Survey notes
 
-No new issues filed. The two known defects (#49 overflow, #52 include-switch
-reset) already have tickets with owners and stages, the last slice (#35) is
-in review, and the coverage tracker (#24) names nothing uncovered beyond the
-in-flight slice. `patterns/` shows no new recurrence and no doc drift beyond
-what open tickets own was found. Filing more now would be noise.
+No new issues filed. The two known defects classes (375px overflow, refused
+save) are already owned by #60 and #62. Width overflow has now appeared twice
+(#49, #60); a third would justify a ticket for a sweep test of every screen at
+375px with maximum-length names, not before. The session-ceiling alert (#63)
+clears on its own.

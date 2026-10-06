@@ -183,12 +183,7 @@
     "mode": "committed"
   },
   "touch_paths": [
-    "app/join/[token]/page.tsx",
     "components/groups-panels.tsx",
-    "components/ui.tsx",
-    "components/expense-screen.tsx",
-    "components/expense-editor.tsx",
-    "app/activity/page.tsx",
     "app/overflow-wrap.test.ts",
     "app/overflow-wrap.test.ts"
   ],

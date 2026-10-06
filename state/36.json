@@ -84,191 +84,85 @@
         "id": "AC-8",
         "source": "TR-11",
         "verify": "test"
+      },
+      {
+        "check": "Excluded member's typed split value survives a save and reopen: excluding a member, saving, and reopening through the row menu shows their row still excluded with the previously typed value intact rather than blank, and re-including them restores a normal working save",
+        "how_to_verify": "QA: exact-split expense 60/40 of 100, exclude the second member, save, reopen via row menu: exclusion kept AND their box still shows the typed value; re-include, restore 60/40, save again",
+        "id": "AC-9",
+        "source": "IAC-3",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
       {
-        "approach": "Keep payment success as inline StateMessage plus a Toast, leaving createPayment/deletePayment untouched",
-        "rejected_because": "ADR-0008 reserves inline action state for refusals because a success that changes the list unmounts the region announcing it; ui.md's settle-up loading state says the sheet stays mounted until the redirect notice fires; and the issue's contract face explicitly says to consume the notice-param success treatment from piece 1."
+        "approach": "Keep disabled on the excluded value input and add a hidden input mirror carrying the same split.N.value",
+        "rejected_because": "Two elements for one field must be kept in sync on every keystroke, and indexedRows last-wins on duplicate names, so ordering fragility decides which value the server sees; one readOnly input submits by itself with nothing to sync."
       },
       {
-        "approach": "Add an optional payment date (migration adding payments.date, action payload date, sheet date picker) to satisfy the whole of IAC-5",
-        "rejected_because": "The schema deliberately gives a payment no date (created_at is the only date); it needs a migration plus a payload and validation change, contradicting the issue's own 'identical payloads and validation, defining no new endpoint' contract and widening the money-writing surface the Risk section says must stay untouched. Deferred explicitly instead."
-      },
-      {
-        "approach": "Keep the inline ConfirmStep boxes for delete confirms and skip Dialog/overflow menus",
-        "rejected_because": "IAC-7 demands confirms in a dialog with focus-trap plus focus-return, which ConfirmStep alone does not provide; ui.md forbids inline Edit/Delete buttons on rows. ConfirmStep is kept inside the Dialog so the naming-object convention still holds."
-      },
-      {
-        "approach": "Build the row OverflowMenu from scratch in ui-interactive.tsx keyed like SegmentedControl",
-        "rejected_because": "account-menu.tsx already ships the exact menu contract (menuKeyIntent, stepMenuItem with wrap/Home/End, separately renderable panel, Escape-closes-and-returns-focus, 44px items) with tests; duplicating it repeats the drift ui.tsx's header exists to stop, and a radiogroup is the wrong keyboard model for a menu."
+        "approach": "Leave the excluded row fully editable (no readOnly, no disabled) and rely on the switch alone",
+        "rejected_because": "An editable-looking row that the live sum ignores invites typing into a field that changes nothing until re-inclusion; readOnly plus dimmed styling tells the truth about the row while still submitting its kept value."
       }
     ],
-    "approach": "Restyle the two money-writing surfaces onto the piece-1 component set without touching what they submit or how the server judges it. The expense editor is reordered amount-first (large autofocused MoneyInput, description, styled date with a human-reading label from humanDateLabel(date, today) where today is computed client-side once so SSR and hydration never disagree, single-payer default with progressive multi-payer reveal, SegmentedControl split type, per-member rows with Avatar plus a styled include switch preserving split.N.included plus input plus live computed share from splitAmount(), category plus note) with a sticky Save/Cancel bar and blur-aware section notes reusing the server's shortfall sentences; every FormData name stays identical so createExpense/updateExpense accept and refuse exactly as today. Settle-up loses its inline row forms: each transfer row shows who-pays-whom plus amount with a Settle up button (suppressed when archived, plain row as today) opening Dialog variant='sheet' with the suggestion prefilled in an editable MoneyInput and one Record payment confirm; the sheet body is exported for static-markup prefill tests and each open starts with clean refusal state. Payment success joins the ADR-0008 pattern with the remainder problem fixed: createPayment/deletePayment redirect with ?payment=recorded&from=<membershipId>&to=<membershipId>, the group page validates the pair against this group's seats (a non-seat renders nothing, like a forged value), recomputes the directed remainder through computeNetBalances plus simplifyDebts, and renders paymentNoticeText(raw, remainderMinor, currency) in the debts card's own panel-level role=status slot — never a second page-level slot. Over-payment stays accepted by design (no new validation rule): the notice names the flipped or settled remainder honestly. Deletes move behind the shared generic Menu (extracted from account-menu.tsx, which keeps its behavior) plus a Dialog opened directly on the ConfirmStep, preserving the name-the-object convention with focus trap and return. Per-type input text stays a single string per member (reopening fidelity from the unchanged getExpenseEditorData read-back); the IAC-5 optional-date clause is deferred because payments have no date column by spec.",
-    "assumptions": [
-      "Issue #33 (piece 1) is merged with the Dialog, SegmentedControl, MoneyInput, Button, Toast, Avatar, Badge APIs as read in components/ui.tsx and components/ui-interactive.tsx",
-      "The repo has no jsdom, so interactive behavior (sheet open, focus trap, sticky bar, double-submit, Escape/Tab/return-focus) is proved by the browser half of qa_script, following the precedent of the existing static-markup tests",
-      "Group-page sibling sections (balance banner, filters, activity, members, settings) are owned by other pieces; this plan touches the group page only for the debts-card notice slot, expense-row dates/actions and the settle panels",
-      "S-8 is the spec's Experience section (clean/consistent UI, mobile-first, one h1, labelled keyboard-reachable controls, designed states, group-currency amounts, sub-second main screens); its obligations are covered by AC-1 through AC-8 jointly with TR-11 rather than by any single criterion"
-    ],
-    "confidence": 72,
-    "confidence_rationale": "Every critique finding was re-verified against the code (payment schema has no suggestion comparison, the included checkbox is the sole emitter of split.N.included, DeleteExpenseForm starts with a Delete button, Dialog closed renders null, both notice validators are raw-param functions, the debts live-region test and the edit-page call site both exist) and each has a decided, evidenced resolution. What keeps this at 72 rather than higher: overlap friction with sibling group-page pieces editing the same page regions, and browser-only proof of focus-trap/Escape/return-focus behavior for a Dialog used in production for the first time.",
-    "debate_summary": "The critique was right on all thirteen findings and I verified each against the code rather than taking its word: (1) blocking — AC-6 asserted a remainder sentence no file could compose, fixed by carrying from/to ids in the redirect and recomputing the remainder in the page; (2) the plan missed debts-live-region.test.ts and the edit-page DeleteExpenseForm call site despite claiming all callers grepped, both now in files[]; (3) the redesigned split row dropped split.N.included, which would hard-refuse every save via superRefine — a styled per-row include switch is now required and AC-2 covers leave-out/put-back; (4) the QA over-amount refusal is unproducible since no such rule exists — replaced with real refusals, over-payment accepted by design with an honest flipped-remainder notice; (5) the plan rebuilt account-menu.tsx's menu from scratch — now an extraction with the menu reusing stepMenuItem/menuKeyIntent; (6) AC-5 silently dropped the optional date while citing IAC-5 — now labelled partial with an explicit out_of_scope deferral; (7) S-8 is the spec Experience section, not a ui.md screen reference — assumption corrected; (8) the recordPayment helper churn understated — the whole success-path surface moves to redirectUrl; (9) menu→Delete→dialog→Delete→confirm was five steps — the dialog now opens directly on the confirm step; (10) humanDateLabel needs a clock and would hydration-mismatch across timezones — now humanDateLabel(date, today) with a client-side today; (11) the residual-risk note was wrong and a second page-level role=status slot repeats the shape ADR-0008 rejected — the payment notice now lives in the debts card's panel slot; (12) the rewritten settle-row-identity test could not assert prefill through a closed Dialog — the sheet body is now exported for static markup and the row-key seam retained; (13) Dialog/Toast were never rendered anywhere — a static-contract test is added and Escape/Tab/return-focus are explicitly browser-QA. One scoping judgment of my own: I did not require inert on the dialog background (finding 13's aside) — Tab-trap without inert is left as-is and recorded as a residual risk rather than widening this ticket.",
+    "approach": "Keep the whole v1 restyle untouched and change only the submission semantics of one input: the split value field of an excluded participant becomes readOnly (with aria-disabled and the existing dimmed treatment) instead of disabled, so its typed value still submits and round-trips through the unchanged server keep-value path, while the include checkbox stays the sole emitter of split.N.included and all live advice still computes over included rows only. No visual, payload-name, or validation-rule change; equal splits (which have no per-member inputs) are unaffected. Pin it with a boundary test replaying T-4's exact FormData plus a static-markup test rendering the editor with an excluded row asserting the value is present with no disabled attribute, and add AC-9 so browser QA checks the round trip on every future run.",
+    "confidence": 82,
+    "confidence_rationale": "The failure mechanism is fully evidenced: the trace HTML shows the disabled input with value='', the server code path (readExpenseForm yields '' for a missing field, parseSplitValue null, splitValueText null = '') deterministically produces the blank reopen, and the server keep-value contract is already unit-proved. The fix is a single-attribute-class change with no money, payload, or validation surface. What keeps this below 90: I could not render the PR branch's exact editor here (only main is checked out), so the static-markup test shape relies on the repo's proven renderToStaticMarkup precedent rather than a locally executed proof.",
     "evidence": [
-      "lib/settle/validation.ts amountField plus paymentFormSchema check only parse, positive, max, from-is-not-to — no suggestion comparison",
-      "components/expense-editor.tsx checkbox is the sole emitter of split.N.included; lib/expenses/validation.ts superRefine refuses empty included with NO_PARTICIPANT_MESSAGE",
-      "components/expense-editor.tsx DeleteExpenseForm renders a Delete button before its ConfirmStep",
-      "components/ui-interactive.tsx Dialog returns null when closed; vitest runs in node with no jsdom",
-      "lib/expenses/validation.ts expenseNoticeText(raw) is a raw-param function; app/groups/[id]/page.tsx feeds it the query param alone",
-      "app/groups/[id]/debts-live-region.test.ts renders both settle panels and asserts one live region each; app/groups/[id]/expenses/[expenseId]/edit/page.tsx is a second DeleteExpenseForm call site",
-      "components/account-menu.tsx exports menuKeyIntent, stepMenuItem and AccountMenuPanel with the exact menu contract"
+      "QA trace: reopened row renders <input disabled value=\"\" name=\"split.1.value\"> — the typed 40 is gone at submit, not at read-back",
+      "lib/expenses/validation.ts indexedRows/readExpenseForm: a field a disabled input never submits reads back as ''",
+      "lib/expenses/validation.ts:487-488 server comment promises a left-out row keeps whatever was typed; validation.test.ts:193 proves an excluded row submitted WITH a value keeps it",
+      "lib/expenses/queries.ts:346 asText renders splitValueText(type, inputValue ?? null), so stored null reopens as ''",
+      "vitest.config.ts include is lib/app/scripts only, so the v1 components/dialog-contract.test.ts path would be collected by nothing",
+      "components/activity-feed.tsx is byte-identical between main and the PR per the QA diff, so BUG-2 predates this change"
     ],
     "files": [
       {
         "action": "edit",
-        "change": "Reorder amount-first: large autofocused MoneyInput with currency prefix and inputMode decimal, description, styled date input with human-reading label from humanDateLabel(date, today), category plus note; payer area defaults to viewer-single with 'Paid by several people' toggle revealing per-person parts; split type becomes SegmentedControl showing only that type's rows, each row Avatar plus name plus styled include switch plus input plus live computed share from splitAmount(); sticky bottom bar with Button pending 'Saving…' plus spinner and Cancel/back-to-group; section notes reuse server shortfall sentences; all input names (groupId, expenseId, description, amount, date, category, note, splitType, payer.i.*, split.i.*, split.N.included) byte-identical; delete becomes Dialog opened directly on ConfirmStep naming the expense and consequence",
+        "change": "In the split rows, the value input for a participant whose include switch is off must still submit its typed value: it must NOT carry the disabled attribute (a disabled control submits nothing, which is what stored inputValue null and reopened blank). Render it readOnly with aria-disabled=\"true\" keeping the existing dimmed treatment, so split.N.value round-trips; the include checkbox remains the sole emitter of split.N.included, live sums and section notes still compute over included rows only, and equal-split rows keep no value input.",
         "path": "components/expense-editor.tsx",
-        "why": "IAC-1, IAC-2, IAC-3, IAC-4 and the expense half of IAC-7; the island is the only file that renders the editor, called from the new/edit pages only"
-      },
-      {
-        "action": "create",
-        "change": "Pure humanDateLabel(date, today): 'Today', 'Yesterday', 'Tomorrow' against the passed-in today, else '13 Jan' with year when not the current year; calendar-checked, no floats, no framework; takes today as an argument so SSR never renders from a clock",
-        "path": "lib/money/human-date.ts",
-        "why": "IAC-1 human date reading beside the styled picker without inventing date logic inside the editor island and without SSR/hydration clock disagreement"
-      },
-      {
-        "action": "edit",
-        "change": "Replace inline TransferRow forms with summary rows (who-pays-whom, suggested amount, Settle up button opening Dialog variant='sheet' holding hidden groupId/from/to ids, editable MoneyInput prefilled via minorUnitsText, recorded-now line instead of a date picker, Record payment confirm plus cancel; each open starts with clean refusal state; archived branch keeps plain rows with no button); export the sheet body for static-markup prefill tests and retain the row-key seam; payment delete moves behind shared Menu plus Dialog confirm naming the payment; panel-level StateMessage stays for refusals only; exactly one live region per panel mounted empty including the settled branch",
-        "path": "components/settle-panels.tsx",
-        "why": "IAC-5, IAC-6 and the payment half of IAC-7; the inline forms this replaces are what the issue bans"
-      },
-      {
-        "action": "edit",
-        "change": "Add PAYMENT_NOTICE_PARAM='payment' with recorded/deleted values, a pair-id validator against the guarded group's seats (non-seat renders nothing), plus paymentNoticeText(raw, remainderMinor, currency) closed-vocabulary composer covering recorded-with-remainder, flipped-direction and settled sentences and nulling unknown/blank/forged input; no validation or payload rule changes",
-        "path": "lib/settle/validation.ts",
-        "why": "Notice vocabulary plus remainder sentences the redirecting payment actions and the group page must share without drifting, per ADR-0008 consequences"
-      },
-      {
-        "action": "edit",
-        "change": "createPayment/deletePayment keep guard, zod boundary, membership checks and single-transaction writes untouched; on success build the notice path (/groups/:id?payment=recorded&from=<id>&to=<id>, deleted likewise) and redirect() after revalidation, mirroring the expense finish/redirectTo shape; refusals return inline state unchanged",
-        "path": "lib/settle/actions.ts",
-        "why": "IAC-6 success routing; the current inline-success return is the ADR-0008 violation this piece retires, while payloads and accept/reject behavior stay identical"
-      },
-      {
-        "action": "edit",
-        "change": "Validate the payment notice pair against the group's seats, recompute the directed remainder via computeNetBalances plus simplifyDebts, render it in the debts card's own panel-level role=status slot beside the existing expense notice; expense rows replace inline Edit/Delete buttons with the new ExpenseRowMenu island and render human dates with truncated long names instead of raw ISO; settle sections otherwise untouched (banner, filters, activity, members, settings are sibling pieces)",
-        "path": "app/groups/[id]/page.tsx",
-        "why": "IAC-6 notice rendering and IAC-7 row-menu placement; the only group-page edits in this plan, fenced explicitly"
-      },
-      {
-        "action": "edit",
-        "change": "Narrow content column to 640px, h1 at page-title scale, back-to-group breadcrumb above the header, archived banner unchanged; editor and delete section render as children as today, delete section using the confirm-directly dialog",
-        "path": "components/expense-screen.tsx",
-        "why": "IAC-1/IAC-4 shell for the editor: ui.md fixes forms and detail pages at 640px with a way back"
-      },
-      {
-        "action": "edit",
-        "change": "Host the generic Menu (panel plus trigger behavior plus stepMenuItem/menuKeyIntent arithmetic extracted from account-menu.tsx, full-width 44px items, ui.md menu shadow) built only from ui.md tokens; Dialog API unchanged",
-        "path": "components/ui-interactive.tsx",
-        "why": "IAC-7 row actions for expense and payment rows with no new dependency and keyboard behavior matching the menu the repo already ships and tests"
-      },
-      {
-        "action": "edit",
-        "change": "Consume the shared generic Menu for the shell account menu with behavior identical to today; keep the separately renderable panel export pattern the no-jsdom tests rely on",
-        "path": "components/account-menu.tsx",
-        "why": "Source of the extracted menu contract; behavior unchanged, no visual or keyboard regression in the shell"
-      },
-      {
-        "action": "create",
-        "change": "ExpenseRowMenu client island: shared Menu with Edit link plus Delete item opening the Dialog directly on the ConfirmStep form for that row; owns its open state so the server-rendered list stays a server component",
-        "path": "components/expense-row-menu.tsx",
-        "why": "IAC-7 on the group expense list without lifting row state into the group page and without the nested Delete-button double confirm"
-      },
-      {
-        "action": "edit",
-        "change": "Move the whole success-path surface to the redirect shape using the existing next/navigation redirect mock plus redirectUrl() helper (assert /groups/:id?payment=recorded&from&to with remainder sentence, payment=deleted), including the recordPayment helper and the departed-seat success call; refusal, authz and transaction cases unchanged",
-        "path": "lib/settle/actions.test.ts",
-        "why": "The file asserts the inline-success returns this plan retires and its helper awaits a call that will now throw the redirect"
-      },
-      {
-        "action": "edit",
-        "change": "Rewrite to the sheet contract: assert each transfer's prefill via the exported sheet body with minorUnitsText of its own suggestion; retain the row-key seam assertions; refusal keeps the sheet input where state now lives",
-        "path": "app/groups/[id]/settle-row-identity.test.ts",
-        "why": "The file pins the inline-field mechanism this plan deletes; its honest-limit note about no-jsdom stays true, met by the exported sheet body"
-      },
-      {
-        "action": "edit",
-        "change": "Keep rendering both redesigned panels on cold load with exactly one live region per panel mounted empty, including the settled branch; the sheet and row menus introduce no new live regions",
-        "path": "app/groups/[id]/debts-live-region.test.ts",
-        "why": "The contract this redesign must preserve; the plan's panels, sheet and menus all touch what this file pins"
-      },
-      {
-        "action": "edit",
-        "change": "Delete section uses the shared confirm-directly dialog through DeleteExpenseForm; no other change to the edit screen",
-        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
-        "why": "Second DeleteExpenseForm call site; the dialog change reaches it and the file must say so explicitly"
+        "why": "BUG-1 (QA T-4): the excluded member's typed split value is silently discarded at submit and reopens blank"
       }
     ],
     "issue": 36,
-    "kind": "feature",
+    "kind": "bug",
     "out_of_scope": [
-      "IAC-5 optional payment date: payments have no date column by spec (created_at is the only date), so the sheet states the payment is recorded now; a stored date needs a migration plus payload change against this issue's identical-payloads contract",
-      "Over-payment is accepted by design (no validation rule compares the amount to the suggestion, and adding one would break the identical-validation contract): the notice names the flipped-direction or settled remainder honestly and the transfer list shows the reversed transfer",
-      "Any split-math, remainder-rule, balance, simplification or transaction change (review must reject logic changes per the issue Risk note)",
-      "Group page balance banner, expense filters, activity excerpt, members/invite, settings and profile screens (sibling pieces); the page is touched only for the debts-card notice slot, expense-row dates/actions and settle panels",
-      "Dark mode"
+      "BUG-2 activity-excerpt overflow at 375px: activity-feed.tsx is byte-identical between main and the PR and the excerpt is a sibling piece, so it predates this change and is not introduced here",
+      "IAC-5 optional payment date (carried from v1: payments have no date column by spec, sheet states recorded-now)",
+      "Any split-math, remainder-rule, balance, simplification, transaction, payload-name or validation-rule change (AC-8 holds byte-identical)"
     ],
     "qa_script": [
-      "Sign up two users, create a group with a third placeholder member; open /groups/:id/expenses/new at 375px: amount is focused, type 500, payer defaults to you, split defaults equal with live per-member shares",
-      "Exclude one member via the row switch, save, reopen via the row menu: stored split type, each member input and the exclusion match what was entered; re-include and save again",
-      "Switch split to exact, enter parts summing 450, blur: the section names '450, 50 short of 500'; submit: the same sentence refuses without clearing input; fix to 500 and save: redirected with 'Expense added'",
-      "Throttle the network, press Save twice: one expense, button shows Saving plus spinner, form never unmounts; force a failure: all input kept with retry",
-      "At 1280px open Settle up on a suggested transfer: centred dialog with who-pays-whom and prefilled suggestion; edit to a partial amount, Record payment: notice in the debts card names the recording plus what remains, suggestion shrinks",
-      "At 375px repeat settle-up: bottom sheet, thumb-reachable confirm; submit zero and non-numeric amounts: sheet stays open with input, error and retry; record more than suggested: notice names the flipped remainder honestly",
-      "Keyboard-only at both viewports: delete the expense from its row menu and a recorded payment from its menu; each dialog names the object and consequence with a single confirm, Escape cancels with focus returned, Tab never leaves the open dialog",
-      "Record the last payment of a group: notice renders above the 'Everyone is settled up' state; reload with ?expense=forged and ?payment=<script>: no notice renders; viewport sweeps show no horizontal scroll, tabular right-aligned amounts, direction in words plus colour"
+      "Repeat T-4 exactly: two-seat group, new exact-split expense amount 100 with values 60 (me) / 40 (them), exclude them via the include switch, blur to read the 60-of-100 shortfall, set own share to 100, save, reopen via the row menu",
+      "Reopened editor must show split type exact, their switch off, my box 100.00, AND their box still showing the typed 40 (not blank); re-include, restore 60/40, save again and confirm the redirect",
+      "Regression sweep of the v1 proofs that touch this file: T-2 keyboard/arrow split control, T-5 short-split refusal sentence rendered once, T-6 double-submit single write"
     ],
-    "residual_risks": [
-      "Payment success now navigates (redirect with notice) where it previously updated inline; any sibling piece caching the old inline-success copy or the removed inline-form imports breaks and must follow this plan",
-      "After the redirect the browser history holds ?payment=recorded, so Back re-renders the success banner, and pageHref() rebuilds the raw query so activity Retry re-renders the notice too — the same staleness the expense notices already carry",
-      "Dialog renders in place (no portal) inside list rows with fixed position; a sibling piece restyling row overflow could clip the overlay and needs a visual check, and a payment deleted in another tab while its dialog is open unmounts the dialog with its focus-return target",
-      "Dialog traps Tab focus but the background is not marked inert, so a screen reader's virtual cursor can still reach the page behind — left as-is to avoid widening this ticket; revisit deliberately",
-      "Two notice params render in adjacent panel slots by design (one role=status per panel per ADR-0008); a URL carrying both known values shows both, which is correct rather than forged"
+    "reproduced": true,
+    "risks": [
+      "The PR branch's editor markup differs from main's (restyle with switch/disabled); the fix description is behavioral (no disabled on split.N.value, readOnly instead) so it applies regardless of the exact class strings",
+      "readOnly inputs stay keyboard-focusable where disabled ones did not: one extra Tab stop per excluded row, announced with its label; accepted as the honest cost of keeping the value submittable",
+      "next/link inside ExpenseEditor under plain-vitest renderToStaticMarkup: next/link renders a plain anchor with no router context per the same island-render precedent as settle-row-identity.test.ts; if the harness disagrees, the boundary test alone still pins the server half and T-4 pins the browser half"
     ],
+    "root_cause": "PR #43's restyled split row renders the excluded participant's value input with the disabled attribute. A disabled control contributes nothing to the submission, so split.N.value for the excluded row arrived missing; readExpenseForm yields '' for it and parseSplitValue returns null, which is stored as inputValue null. On reopen getExpenseEditorData renders splitValueText('exact', null) = '', the blank box QA saw in T-4. The server contract was never broken — validation.ts promises a left-out row keeps whatever was typed and validation.test.ts proves an excluded row submitted WITH a value keeps it — it was starved of the value at submit. The exclusion itself persisted correctly (an unchecked checkbox submits nothing, which the schema reads as included=false).",
     "tests": [
       {
-        "action": "create",
+        "action": "edit",
         "cases": [
-          "Today/Yesterday/Tomorrow against boundary todays passed explicitly",
-          "13 Jan within the year, 13 Jan 2025 across years",
-          "Malformed and non-calendar dates fall back to the raw string, never throw"
+          "Exact-split T-4 replay at the boundary: FormData with split.0 included/100 plus split.1 excluded carrying value 40 parses ok and the draft keeps the excluded line as {included:false, value:4000} with splitValueText rendering 40.00, not blank",
+          "The disabled-input shape of the same form (split.1.value field omitted, which is what the browser submits for a disabled control) yields inputValue null and a blank read-back, documenting the trap the client must not fall into",
+          "Equal-split expenses still carry no per-member value fields and parse exactly as before"
         ],
-        "path": "lib/money/human-date.test.ts"
+        "path": "lib/expenses/validation.test.ts"
       },
       {
         "action": "create",
         "cases": [
-          "recorded/deleted values map to their sentences with remainder, flipped and settled variants",
-          "undefined, blank and forged values (including markup) map to null",
-          "non-seat from/to pair ids map to null; payment notice copy differs from expense notice copy (no shared-alias drift)"
+          "Render ExpenseEditor with an exact split where one participant is excluded with a typed value: their split.N.value input renders that value and carries NO disabled attribute (readOnly instead)",
+          "Included rows render normally editable inputs with no readOnly and no disabled",
+          "The include checkbox remains the sole emitter of split.N.included in the rendered markup"
         ],
-        "path": "lib/settle/validation.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "Dialog renders role dialog with aria-modal and labelledby, sheet versus centred classes by variant, closed renders nothing",
-          "Menu arithmetic wraps on arrows and jumps on Home/End with empty-list null",
-          "Escape intent mapping closes and returns focus (contract shape; behavior proved in browser QA)"
-        ],
-        "path": "components/dialog-contract.test.ts"
+        "path": "app/groups/[id]/expense-exclusion.test.ts"
       }
     ],
-    "understanding": "Issue #36 restyles the two money-writing surfaces (expense editor, settle-up plus deletes) onto the piece-1 shared set (MoneyInput, SegmentedControl, Dialog sheet, Button pending, notice-param success) with identical Server Action payloads and validation and zero money-logic change. The current editor renders description-before-amount with an unstyled include checkbox and always-visible payer rows; settle-up uses inline per-row amount forms with inline success state (an ADR-0008 violation the plan retires via redirect notices); deletes use inline ConfirmStep boxes. Payments have no date column by spec, so the IAC-5 optional-date clause is deferred with the criterion labelled partial. Depends on #33, covers TR-11/S-8, no prior rejection to answer.",
-    "unknowns": [
-      "Whether sibling pieces concurrently editing app/groups/[id]/page.tsx will collide on the notice-slot and row-action regions this plan also touches"
-    ],
-    "version": 1,
+    "understanding": "The v1 plan was wrong on exactly the point that failed: it specified a styled include switch for leaving members out but never constrained what exclusion does to the row's value input, treating the switch as pure presentation. The implementer chose disabled for the excluded input; a disabled input submits nothing, so the excluded member's typed 40 arrived as '' and was stored as inputValue null, reopening blank — while the plan's own evidence quoted the server comment promising the typed value is kept, without pinning the client behavior that delivers it. The exclusion itself worked (unchecked checkbox submits nothing, read as included=false). Second defect in v1: it placed the new Dialog/Menu contract test at components/dialog-contract.test.ts, which vitest never collects (include is lib/app/scripts only), so part of its proof would run nowhere. BUG-2 (activity-excerpt overflow) is pre-existing — activity-feed.tsx is byte-identical between main and the PR — and stays out of scope.",
+    "version": 2,
     "mode": "committed"
   },
   "touch_paths": [
@@ -492,10 +386,10 @@
   "validated_at": "2026-10-05T22:55:55.434Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
-  "work_order_version": 1,
-  "work_order_posted_at": "2026-10-05T22:58:28.222Z",
-  "work_order_from": "plan",
-  "work_order_comment": "6004920174",
+  "work_order_version": 2,
+  "work_order_posted_at": "2026-10-06T03:36:42.054Z",
+  "work_order_from": "root-cause",
+  "work_order_comment": "6008815819",
   "implemented_version": 1,
   "follow_ups": {
     "review": [

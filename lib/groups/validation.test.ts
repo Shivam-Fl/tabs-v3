@@ -10,6 +10,8 @@ import {
   createGroupSchema,
   groupScope,
   inviteNoticeText,
+  isBalanceBlockedRefusal,
+  nonZeroBalanceMessage,
   isSameOriginPath,
   joinByTokenSchema,
   joinNextSchema,
@@ -179,5 +181,47 @@ describe('the post-sign-in destination', () => {
     expect(parseNextPath(`/groups/${UUID}`)).toBe(`/groups/${UUID}`);
     expect(parseNextPath('/profile')).toBe('/profile');
     expect(parseNextPath(`  /groups/${UUID}  `)).toBe(`/groups/${UUID}`);
+  });
+});
+
+/**
+ * Recognising the balance guard's own sentence (AC-2).
+ *
+ * The members panel is a client island and the guard that throws this lives behind the database,
+ * so the two share the wording through `nonZeroBalanceMessage` rather than the island importing
+ * the guard. These cases pin the two halves of that contract: the builder produces the sentence
+ * the guard throws, and the predicate says yes to exactly that and no to everything else — a
+ * message that merely mentions balances, another member's refusal, or nothing at all.
+ */
+describe('the non-zero-balance refusal', () => {
+  it('names the member in the sentence the guard throws', () => {
+    expect(nonZeroBalanceMessage('Bo')).toBe(
+      'Bo has a non-zero balance. Settle up first, then try again.',
+    );
+    expect(nonZeroBalanceMessage('Ada Lovelace')).toMatch(/^Ada Lovelace /);
+  });
+
+  it('recognises the sentence it built, whoever it names', () => {
+    expect(isBalanceBlockedRefusal(nonZeroBalanceMessage('Bo'))).toBe(true);
+    expect(isBalanceBlockedRefusal(nonZeroBalanceMessage('A very long display name'))).toBe(true);
+  });
+
+  it('does not recognise unrelated refusals that talk about balances', () => {
+    for (const message of [
+      'Bo has a non-zero balance.',
+      'has a non-zero balance. Settle up first, then try again.',
+      'You have a non-zero balance. Settle up first, then try again.',
+      'Bo has a non-zero balance. Settle up first, then try again',
+      '',
+      'Something else went wrong.',
+    ]) {
+      expect(isBalanceBlockedRefusal(message)).toBe(false);
+    }
+  });
+
+  it('is a plain string test — nothing here needs a database or a session', () => {
+    // The point of the predicate living in this module: the island can call it in the browser.
+    expect(typeof isBalanceBlockedRefusal).toBe('function');
+    expect(nonZeroBalanceMessage('Bo')).toContain('Settle up');
   });
 });

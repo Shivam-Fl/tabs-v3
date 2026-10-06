@@ -14,6 +14,7 @@ import {
   type HomeGroupRow,
 } from '../components/home-panels';
 import { Badge, Card, EmptyState, ListRow } from '../components/ui';
+import { GROUP_NAME_MAX, leftNoticeText, parseNoticeName } from '../lib/groups/validation';
 import { formatMinorUnits } from '../lib/money/format';
 import type { ExcludedGroup, PersonRow } from '../lib/settle/summary';
 
@@ -518,6 +519,37 @@ describe('the notice and the feed link', () => {
     expect(html).toContain('role="status"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('You left Goa Trip.');
+  });
+
+  it('wraps a max-length unbroken group name instead of letting it widen the page', () => {
+    // The longest name the product allows, with nothing in it to break on — the value a leaver
+    // arrives with when the group they left is called this.
+    const name = 'x'.repeat(GROUP_NAME_MAX);
+    const html = render(createElement(LeftGroupNotice, { message: leftNoticeText(name) }));
+
+    // The name is still said in full — the notice confirms *which* group was left, so it wraps
+    // rather than truncating — and `break-words` is what lets an 80-character run wrap inside
+    // the phone viewport rather than setting the document width past it (AC-11).
+    expect(html).toContain(name);
+    expect(tagFor(html, name)).toContain('break-words');
+  });
+
+  it('reflects a hostile ?left= value as escaped text, never as markup or a hole', () => {
+    const html = render(
+      createElement(LeftGroupNotice, {
+        message: leftNoticeText('<img src=x onerror=alert(1)>'),
+      }),
+    );
+
+    expect(countOf(html, 'role="status"')).toBe(1);
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img');
+
+    // The name the page reflects is only ever a sentence's object, so a blank one has nothing
+    // to say: the page's reader answers null and its `leftName === null ? null : …` line is
+    // what keeps the notice off the screen entirely.
+    expect(parseNoticeName('   ')).toBeNull();
+    expect(parseNoticeName(undefined)).toBeNull();
   });
 
   it('mounts exactly one live region when the notice and the fallback share the screen', () => {

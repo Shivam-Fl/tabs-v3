@@ -472,13 +472,19 @@ export function HomeSkeleton() {
  *
  * It is also the page's one status slot. Everything that loads below it stays quiet about
  * arriving, which is what keeps this the only live region on the screen.
+ *
+ * The sentence names the group, and a group name can be 80 characters with no space in it. The
+ * notice wraps rather than truncates — it confirms *which* group was left, so hiding characters
+ * would weaken the one thing it says — and `break-words` (overflow-wrap) is what lets that
+ * unbroken value wrap inside the phone viewport instead of setting the page's width past it
+ * (AC-11).
  */
 export function LeftGroupNotice({ message }: { message: string }) {
   return (
     <p
       role="status"
       aria-live="polite"
-      className="rounded-token border border-border bg-surface p-3 text-body text-lent"
+      className="rounded-token border border-border bg-surface p-3 text-body break-words text-lent"
     >
       {message}
     </p>

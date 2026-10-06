@@ -16,8 +16,8 @@ import {
 } from '../lib/expenses/validation';
 import { formatBasisPoints, formatMinorUnits } from '../lib/money/format';
 import type { PaymentSnapshot } from '../lib/settle/validation';
+import { Timestamp } from './timestamp';
 import { Avatar, Button, EmptyState } from './ui';
-import { Timestamp } from './ui-interactive';
 
 /**
  * The one rendering of an activity feed (TR-10, AC-1, AC-2, AC-9).
@@ -80,13 +80,34 @@ export function ActivityFeed({
           <p className="text-secondary text-ink-muted">No events match this filter.</p>
         )
       ) : (
-        <ul className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <ActivityRowItem key={row.id} row={row} showGroup={showGroup} />
-          ))}
-        </ul>
+        <ActivityRows rows={rows} showGroup={showGroup} />
       )}
     </div>
+  );
+}
+
+/**
+ * The rows themselves, without the chips (IAC-2).
+ *
+ * The group page shows a five-row excerpt of the same feed and links out to the full one, so the
+ * excerpt renders this rather than a second copy of the row markup — a payment row has to read
+ * the same on both screens or the excerpt is a different feed with the same data. Chips stay in
+ * `ActivityFeed`: the excerpt is five rows and a link, not a filterable list, and a chip row that
+ * filtered a slice would filter five rows out of the newest five.
+ */
+export function ActivityRows({
+  rows,
+  showGroup = false,
+}: {
+  rows: ActivityRow[];
+  showGroup?: boolean;
+}) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <ActivityRowItem key={row.id} row={row} showGroup={showGroup} />
+      ))}
+    </ul>
   );
 }
 
@@ -203,12 +224,14 @@ function actionText(row: ActivityRow): string {
 }
 
 /**
- * When it happened (TR-11) is not decided here any more.
+ * When it happened (TR-11, IAC-7) is not decided here any more.
  *
- * A row's time is the `Timestamp` island from `components/ui-interactive.tsx`, which renders the
- * UTC-labelled time on the server and replaces it with the viewer's own zone in an effect — so
- * the server-rendered markup a row ships with is still the one zone both the writer and the
- * reader agree on, and the reader's local time is what they end up looking at (AC-3).
+ * The row used to print the instant in UTC with the zone spelled out, because a server component
+ * cannot know the viewer's zone and labelling the server's clock as the reader's would have been
+ * worse. A row's time is now the `Timestamp` island from `components/timestamp.tsx`, which
+ * renders a zone-neutral absolute date on the server and replaces it with the viewer's own
+ * relative-then-human reading in an effect — so the markup a row ships with carries no zone
+ * label at all, and the reader's local time is what they end up looking at (AC-7).
  */
 
 /** Whether a payload is an edit's before/after rather than a payment's snapshot. */
@@ -259,7 +282,7 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
         </p>
 
         <p className="min-w-0 text-secondary break-words text-ink-muted">
-          <Timestamp value={row.createdAt} />
+          <Timestamp instant={row.createdAt.toISOString()} />
           {showGroup ? (
             <>
               {' · '}

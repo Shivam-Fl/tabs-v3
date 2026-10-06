@@ -77,6 +77,13 @@
         "id": "AC-7",
         "source": "TR-11",
         "verify": "browser"
+      },
+      {
+        "check": "A failed profile save keeps both the typed display name and the chosen default currency on screen: the empty name with its inline field error, the currency select still showing the chosen value rather than the saved one, and Save available for retry with no redirect.",
+        "how_to_verify": "Fresh account at /profile: pick EUR, clear the display name, save; the inline name error shows, the URL gains no ?error param, the name field stays empty, #profile-currency still reads EUR; typing a name and saving again confirms once.",
+        "id": "AC-8",
+        "source": "IAC-5",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
@@ -99,129 +106,62 @@
       {
         "approach": "Key the members roster avatars on displayName so roster and feed tints always agree.",
         "rejected_because": "It would break the shared set's documented contract (same member, same colour on every screen and render) and the app/ui-set.test.ts pin that renaming must not recolour; the feed can only be name-keyed because ActivityRow carries no actor id, so the mismatch is disclosed instead of spreading it to the roster."
+      },
+      {
+        "approach": "Keep the controlled island and resync its state from the echoed values with a useEffect only (no uncontrolled fields, no key).",
+        "rejected_because": "If the failure is the DOM desync QA observed (hooks held EUR while the DOM painted USD), re-setting identical state issues no re-render and the DOM stays wrong; keyed uncontrolled defaults rebuild the field DOM from the submitted values, which is correct under both the stale-state and the desync mechanism."
+      },
+      {
+        "approach": "Convert the island to uncontrolled fields without touching the server action (no echo of submitted values).",
+        "rejected_because": "It leaves no Vitest-testable seam: this repo runs Vitest in node with no jsdom, and SSR markup cannot distinguish a controlled value from an uncontrolled defaultValue, so the regression could not be pinned; the echo makes the submitted-values round trip assertable at the action and helper level."
       }
     ],
-    "approach": "Restyle the three screens onto the shared set that piece 1 already merged (Button, Card, Avatar, Badge, TextInput, Skeleton, EmptyState, ConfirmStep, Dialog patterns, design tokens) without touching any read or write logic: the members roster becomes composed avatar rows (not ListRow, which cannot hold a badge cluster plus an inline form inside an anchor) with words-plus-colour balances from a new directionWords helper and owner actions behind a no-JS details disclosure; the invite panel keeps its copy island and single-notice confirm flow; the activity feed keeps its URL-chip GET form with hidden preserved inputs and exact-changed-fields edit detail, owns its EmptyState through the unchanged emptyText string plus an optional action, and gains a viewer-zone Timestamp island; profile becomes one card with a controlled island whose refusals go inline per ADR-0008 and conventions while success keeps the ?saved=1 redirect. The balance-blocked predicate and its sentence live in client-safe lib/groups/validation.ts with NonZeroBalanceError built from the same constant so the sentence cannot drift; no client island imports the drizzle-backed members module. Server text for rotation failure, balance-blocked removal and claim-taken stays byte-identical; only its presentation changes, plus a settle-up link beside balance-blocked refusals and a legacy reader for ?error=invalid so the pinned selector surface keeps rendering.",
+    "approach": "Make the submitted values, not the saved props, the source of truth after a refusal — the opposite of the previous attempt's 'hold both fields in controlled island state'. updateProfile echoes the exact submitted displayName and currency in state.values on validation failure (additive only; schemas, messages, ?saved=1 and signin redirects unchanged); ProfileFormState gains the optional values plus a pure client-safe profileFormDefaults(state, saved) helper returning the submitted values on a refusal that carries them and the saved values otherwise, with an echoed currency that is not a supported code falling back to saved; ProfileForm becomes uncontrolled (defaultValue from the helper) inside a form keyed by the displayed defaults, so each refusal re-seeds the field DOM from what was actually submitted instead of repainting the saved currency, while idle renders the saved props exactly as today. Inline FieldError and aria wiring, the styled select with its chevron, the ProfileSaveButton pending guard, and the ?saved=1 / ?error=invalid transports are untouched.",
     "assumptions": [
-      "Piece for #33 (or the #40 foundation work on main) has merged the shared set, AppShell, tokens and Inter/lucide-react this plan builds on; no new design-system component or token is introduced — ProfileForm, CopyLinkButton and the Timestamp island are app-level compositions over the existing set.",
-      "The contract face fixes reads and actions, so listMembers, listGroupActivity, listUserActivity, computeNetBalances and all group/auth actions keep their signatures, schemas, messages and success transports; the single exception is updateProfile's failure transport, which moves from redirect to the inline-refusal state the house rule (ADR-0008, conventions.md) already prescribes for refusals — a presentation transport, not a rule change.",
-      "With no actor id on ActivityRow the feed avatar tint can only derive from the actor name while the roster stays id-keyed per the avatar contract, so the same person may tint differently between roster and feed and a rename recolours their feed avatar; the roster is deliberately not re-keyed.",
-      "'Failed pages show load-more retry' (IAC-4, ui.md Activity partial) is read as 'a failed feed read shows its retry': the cross-group error card with the filter preserved plus the group excerpt's section retry; no pagination is added because the reads are fixed.",
-      "Timestamps are stored UTC and the viewer zone is only knowable on the client, so the server renders a UTC-labelled fallback and the island replaces it in an effect (never during render), falling back to the UTC label when the time zone is unavailable and clamping future values instead of printing 'in 3 hours'.",
+      "The attempt-1 tree on sdlc/issue-37 is the base: the shared set, AppShell, tokens, the ProfileForm island, the inline-refusal updateProfile and the Timestamp island already exist; this order revises them, it does not rebuild them.",
+      "The contract face still fixes reads and actions; the only action change is additive (values echoed on the validation-failure return), not a rule, schema, message or success-transport change.",
+      "With no actor id on ActivityRow the feed avatar tint can only derive from the actor name while the roster stays id-keyed per the avatar contract; the mismatch stays disclosed, the roster is not re-keyed.",
+      "'Failed pages show load-more retry' (IAC-4, ui.md Activity partial) is still read as section-level retry with the filter preserved; no pagination is added.",
+      "Timestamps are stored UTC and the viewer zone is only knowable on the client; the Timestamp island behaviour is unchanged.",
       "PGlite serves one connection, so the sequential withDb reads stay sequential; no read is parallelised.",
       "sdlc:verify here is typecheck plus test:ci plus build; the work-order lint step does not apply because the repo has no lint script by decision.",
       "The members loading fallback markers (#invite-url, notice params, data-skeleton names, bg-muted/20 with motion-safe:animate-pulse, aria-busy) stay stable because qa/selectors.md and the loading test pin them.",
-      "lib/auth/actions.test.ts pins updateProfile redirecting on invalid input and will be updated to the inline-refusal contract in this change."
+      "The form key changes only when the displayed defaults change (saved props vs a new refusal's submitted values), so a refusal remounts the fields exactly when there is something new to seed; repeated identical refusals and idle renders do not remount, and focus behaviour is unchanged from attempt 1.",
+      "lib/auth/actions.test.ts on the branch already pins the inline-refusal contract; this order adds the echo case to it rather than rewriting it."
     ],
-    "confidence": 80,
-    "confidence_rationale": "Every function to change has been read, every caller of the shared pieces is listed in the file reasons, and the critique's one genuine bundle-layer defect (drizzle pulled into the client) is designed out by hoisting the predicate into validation.ts; the remaining risk is QA selector churn on the profile error path plus the disclosed avatar-tint mismatch, both flagged rather than hidden. What would move the number down is discovering a second client import of a db-backed module; what would move it up is a passing preflight plus the pinned loading/marker tests staying green.",
+    "confidence": 75,
+    "confidence_rationale": "The failure is pinned to three lines (value={chosenCurrency}, useState(currency), and an error return without values) and the fix is correct under both candidate mechanisms — stale controlled state and the DOM desync QA observed — because the field DOM is rebuilt from the echoed submission rather than repainted from the saved prop. What keeps it from higher is that the exact React-internal trigger was read from QA evidence plus code rather than a live repro, and the keyed-remount focus behaviour is new.",
     "debate_summary": "The critique was right three times and manufacturing noise twice. Accepted outright: (1) the isBalanceBlockedRefusal bundle defect — value-importing lib/groups/members.ts from a 'use client' island would drag drizzle-orm and the db schema into the browser bundle, so the predicate and sentence now live in client-safe validation.ts with NonZeroBalanceError built from the same constant; (2) the double-owned empty state — EmptyState now has one owner (inside ActivityFeed behind the unchanged emptyText string, new props optional so the group excerpt inherits without an edit); (3) the Card/panel double-h2 — Cards wrap without titles and keep the panels' aria-labelledby h2s. Accepted as disclosure, rejected as a change: the name-keyed feed avatars cannot match the id-keyed roster (ActivityRow carries no actor id and the contract face forbids adding one), so the mismatch is stated in assumptions and the roster is deliberately not re-keyed. Rejected: the blocking demand to escalate the profile transport — redirect-on-refusal contradicts the binding house rule that refusals go inline (ADR-0008, conventions.md) and ui.md's 'failed saves never clear input', while schemas, messages and both success redirects stay byte-identical, so the transport move is inside the ticket, not an amendment of it; the sessionStorage-restore alternative stays rejected. Minor findings (ListRow fit, directionWords helper, styled select, load-more interpretation, assumption wording) were all folded into the work order, and the load-bearing edge cases (archived/disabled invite gating, viewer-perspective wording, hydration/timezone/future-time behaviour, pending guard after refusal, pinned skeleton/notice/selector markers, filtered-vs-truly-empty) are now explicit file constraints or acceptance text.",
+    "evidence": [
+      "T-7 fails only at its final assertion: #profile-currency reads USD (saved) instead of EUR (chosen); every preceding AC-5 check passes — styled select, chevron, no page-level sign-out, Saving guard, ?saved=1 single notice, reload persistence, inline field error with no redirect, aria-invalid, typed name kept (error-context.md).",
+      "qa-report BUG-1 repro, always reproducible: fresh account, pick EUR, clear Display name, Save → inline 'Enter a display name' with no redirect, name kept, select reverted to the saved value; reproduced 4/4 with both selectOption and real keyboard-arrow selection, hook state holding EUR while the DOM showed USD.",
+      "components/profile-form.tsx on sdlc/issue-37: the select is controlled as value={chosenCurrency} with const [chosenCurrency, setChosenCurrency] = useState(currency) — painted from the saved prop, with no path re-seeding it from the submitted FormData on the refusal render.",
+      "lib/auth/actions.ts updateProfile on sdlc/issue-37: the validation-failure return carries status, message and fieldErrors only — the submitted displayName/currency are discarded, so the island has no source for what the user actually chose.",
+      "T-7-refusal.png: empty name field with its inline error visible while the currency select shows USD."
+    ],
     "files": [
       {
         "action": "edit",
-        "change": "Migrate MembersPanel to composed Avatar plus Badge (You, Owner, Placeholder) rows — a composed row, not ListRow, because the badge cluster plus an inline Remove form cannot sit inside ListRow's anchor; balances via the directionWords helper in words plus colour (lent/owed, zero neutral 'All settled up' from the viewer's side), move owner Remove into a per-row details overflow disclosure keeping ConfirmStep with refusals rendering inline while the disclosure stays open, render a settle-up link beside balance-blocked refusals via isBalanceBlockedRefusal imported from lib/groups/validation (never from the db-backed members module), restyle InvitePanel on shared Button keeping #invite-url, data-amount, the copy island, rotate/disable confirms and the single role=status notice slot, convert AddPlaceholderForm to TextInput plus Button keeping placeholder-name-error, restyle JoinPanel claim seats with Badge and keep the panel-level claim notice, add a CopyLinkButton used only for the live-link solo-owner empty state; placeholder seats with no account keep the Avatar fallback icon plus the Placeholder badge; long names truncate with title and the badge cluster never wraps a row into three lines.",
-        "path": "components/groups-panels.tsx",
-        "why": "All four member/invite/claim forms live here; one edit converts them to the shared set without touching the actions they call."
-      },
-      {
-        "action": "edit",
-        "change": "Own the empty state inside the feed: wrap the emptyText string in an EmptyState (title derived, new optional emptyAction prop for the cross-group page's links) while keeping the filtered-empty 'No events match this filter.' sentence distinct; render feed rows with name-keyed actor Avatar, keep rowHref/link-through rules and the exact-changed-fields EditDetail untouched, keep the GET chip form with its hidden preserved inputs and aria-pressed (never links or a client control, so the sibling expense filter survives), show payment snapshots as from-to words with a neutral tabular amount keeping data-amount, use the Timestamp island for dates.",
-        "path": "components/activity-feed.tsx",
-        "why": "The one feed both the group excerpt and the cross-group page render, so both screens inherit the redesign from this file with no group-page edit (new props are optional)."
-      },
-      {
-        "action": "edit",
-        "change": "Add a Timestamp client island (relative-then-human time in the viewer zone) plus its pure formatter beside stepSegment: server and first client render emit the identical UTC-labelled time element, the human string replaces it only in an effect, unknown time zones fall back to the UTC label, and future values clamp to 'just now'; follows the file's rule that stateful shared pieces live here and not in ui.tsx.",
-        "path": "components/ui-interactive.tsx",
-        "why": "This is the established home for hook-backed shared components; the feed, and later the expense screens, need exactly one timestamp island."
-      },
-      {
-        "action": "edit",
-        "change": "Compose the screen from Card sections without Card titles (the panels keep their own aria-labelledby h2s, so no heading renders twice), add a solo-owner EmptyState whose copy action renders only while the invite link is live — archived groups show the read-only note, a disabled link offers create-new, non-owners get no copy prompt — wrap the member/balance reads in a try/catch that renders an error Card with a retry link, keep the breadcrumb, single h1, removed/invite single-slot notices and the archived read-only note.",
-        "path": "app/groups/[id]/members/page.tsx",
-        "why": "Page owns layout, empty and error states; the panels own rows, so the IAC-1/IAC-2 screen requirements land here."
-      },
-      {
-        "action": "edit",
-        "change": "Rebuild the fallback from the shared Skeleton on the new tokens with identical data-skeleton names, sr-only status text and aria-busy, keeping bg-muted/20 with motion-safe:animate-pulse in the same tags so the streamed-flight assertions keep passing.",
-        "path": "app/groups/[id]/members/loading.tsx",
-        "why": "Loading boundary must match the redesigned layout or data arrival jumps; attribute names are pinned by QA."
-      },
-      {
-        "action": "edit",
-        "change": "Render the three empty cases through the feed's EmptyState with distinct copy and per-case actions (not collapsed into one), the failure through an error Card whose retry preserves the ?activity= filter, and keep the h1, back-to-Home link and AppShell.",
-        "path": "app/activity/page.tsx",
-        "why": "Page owns the empty/error states the feed component deliberately does not."
-      },
-      {
-        "action": "edit",
-        "change": "Migrate the boundary to the new border/surface tokens while keeping its structure (title/nav skeletons plus ActivityFeedSkeleton) and aria-busy so it still matches the feed shape.",
-        "path": "app/activity/loading.tsx",
-        "why": "Token-only pass; structure already mirrors the feed via the shared skeleton."
-      },
-      {
-        "action": "create",
-        "change": "New controlled ProfileForm island: TextInput for display name, styled select for default currency (appearance-none FIELD_CLASSES plus a lucide ChevronDown indicator positioned inside the field, never the browser arrow) reusing FIELD_CLASSES, ProfileSaveButton for the pending guard (double-submit stays impossible including a slow second submit after a refusal), inline FieldError nodes on refusal with the typed values preserved in state; success keeps flowing through the ?saved=1 redirect.",
+        "change": "Replace the controlled useState-seeded-from-props fields with uncontrolled inputs: TextInput takes defaultValue={defaults.displayName} and the select takes defaultValue={defaults.currency} where defaults = profileFormDefaults(state, { displayName, currency }), the form carries key={JSON.stringify(defaults)} so a refusal carrying new submitted values re-seeds the field DOM from them instead of repainting the saved currency, and the useState/onChange pair goes away (useActionState stays for errors and pending); keep the FIELD_CLASSES styled select with appearance-none plus ChevronDown, FieldError and aria-invalid/aria-describedby wiring, ProfileSaveButton, noValidate and the single-slot ?saved=1 / legacy ?error=invalid rendering; rewrite the docblock to state the lesson — controlled state seeded from saved props repaints the saved value on refusal and silently discards the choice, so the submitted values echoed by the action are the source of truth after a refusal.",
         "path": "components/profile-form.tsx",
-        "why": "A server form cannot keep typed input across the redirect that reports its own failure; the island holds it, matching every other form in the app."
+        "why": "The file that introduced BUG-1: its controlled select paints the saved prop on the refusal render instead of the submitted choice."
       },
       {
         "action": "edit",
-        "change": "Render the single settings Card with the new form, remove the page-level sign-out button (sign-out lives in the account menu), keep the ?saved=1 status slot with exactly one status node and keep reading ?error=invalid so direct hits still render the same sentence.",
-        "path": "app/profile/page.tsx",
-        "why": "IAC-5 puts sign-out exclusively in the account menu and the card layout here."
-      },
-      {
-        "action": "edit",
-        "change": "Change updateProfile to the (previous, formData) island signature returning fieldErrors state on invalid input instead of redirecting, keeping the validation schema, messages, ?saved=1 success redirect and the signin redirect byte-identical; this is the ADR-0008 refusal transport, not a logic change.",
+        "change": "On profileSchema validation failure, echo the exact submitted strings in the returned state: values: { displayName: field(formData, 'displayName'), currency: field(formData, 'currency') } alongside status, message and fieldErrors; RAW submitted strings (not normalized) so the island restores literally what the user chose; write nothing, keep the ?saved=1 success redirect and the /signin redirect byte-identical.",
         "path": "lib/auth/actions.ts",
-        "why": "Inline refusals are the ADR-0008/conventions pattern; the redirect-on-refusal is what destroys the typed input IAC-5 requires."
+        "why": "The refusal currently drops the submitted values (fieldErrors only), leaving the island no source for the chosen currency."
       },
       {
         "action": "edit",
-        "change": "Add ProfileFormState and IDLE_PROFILE_STATE beside the auth form state so the server-action file, which may export only async functions, and the island share one type.",
+        "change": "Add ProfileFormValues { displayName: string; currency: string }, an optional values?: ProfileFormValues on ProfileFormState, and a pure client-safe profileFormDefaults(state, saved): ProfileFormValues helper returning state.values on an error refusal that carries them (with an echoed currency outside SUPPORTED_CURRENCIES falling back to the saved currency) and saved otherwise; no schema, message or constant change.",
         "path": "lib/auth/validation.ts",
-        "why": "Same colocation rule the auth island state already follows."
-      },
-      {
-        "action": "edit",
-        "change": "Reimplement on top of the shared Button with pending and pendingLabel so the guard keeps its markup contract while gaining the redesigned states.",
-        "path": "components/profile-save-button.tsx",
-        "why": "Conventions cite this button as the double-submit guard pattern; delegation keeps the reference valid."
-      },
-      {
-        "action": "create",
-        "change": "Skeleton settings card under AppShell with sr-only status and aria-busy, mirroring the members/activity boundaries.",
-        "path": "app/profile/loading.tsx",
-        "why": "Profile currently has no loading boundary; the global sweep requires designed loading states on every screen in this piece."
-      },
-      {
-        "action": "edit",
-        "change": "Migrate the join card to the new tokens so the claim prompt matches the redesigned JoinPanel it contains; claim-taken notice reading unchanged.",
-        "path": "app/join/[token]/page.tsx",
-        "why": "IAC-2's claim prompt is this page plus JoinPanel; leaving its card on old tokens would split the flow across two designs."
-      },
-      {
-        "action": "edit",
-        "change": "Add the NonZeroBalanceError sentence builder plus the pure isBalanceBlockedRefusal predicate (client-safe: zod and auth validation only, no db imports) so a client island can classify a refusal without importing the database layer.",
-        "path": "lib/groups/validation.ts",
-        "why": "Client-safe home the members panel already imports; keeps the sentence and its classifier in one place so they cannot drift."
-      },
-      {
-        "action": "edit",
-        "change": "Build NonZeroBalanceError's message from the shared builder in validation.ts; no signature, rule or balance-arithmetic change — server-only wiring so the sentence the panel classifies is the sentence the guard throws.",
-        "path": "lib/groups/members.ts",
-        "why": "Single source for the refusal sentence now that both the thrower and the client-side classifier must agree on it."
-      },
-      {
-        "action": "edit",
-        "change": "Add a small pure directionWords(balanceMinor, viewerIsSubject) helper beside formatMinorUnits returning words-plus-tone (zero neutral, positive/negative from the viewer's side); sibling pages are deliberately not refactored to it in this ticket.",
-        "path": "lib/money/format.ts",
-        "why": "The members panel needs the words-plus-colour rule without writing a third inline copy of the branching the home and group pages already carry; format.ts is dependency-free so the client island can import it."
+        "why": "The island and the action need one shared, unit-testable contract for which values a refusal must restore."
       }
     ],
     "issue": 37,
     "kind": "feature",
+    "mode": "committed",
     "out_of_scope": [
       "Landing, home, group, expense and settle-up screen markup except what they inherit automatically through the shared ActivityFeed and ui components (new feed props are optional, so app/groups/[id]/page.tsx needs no edit).",
       "Dark mode, explicitly deferred by ui.md.",
@@ -238,67 +178,52 @@
       "Claim flow: as B open the invite link, claim the matching placeholder seat, land in the group; open the same seat link again in a second tab and read the taken notice.",
       "Activity at /activity and the group excerpt: all four chips filter correctly, timestamps read relative-then-human in the local zone, expense-edited entries show exactly the changed fields, empty group feed explains itself, filtered-empty keeps its own sentence, failed load keeps the filter on retry.",
       "Profile at /profile: save a new name and currency and read the saved notice; submit an empty name and confirm the input is kept with an inline error; confirm no sign-out control on the page and sign-out works from the account menu by keyboard at 375px.",
-      "Keyboard and contrast pass at both widths over all three screens, including the chip row, disclosure, dialogs and the styled currency select; reduced-motion shows no animation."
+      "Keyboard and contrast pass at both widths over all three screens, including the chip row, disclosure, dialogs and the styled currency select; reduced-motion shows no animation.",
+      "Regression for BUG-1 at /profile: pick EUR in Default currency, clear Display name, save — the inline name error shows with no redirect, the name field stays empty, #profile-currency still reads EUR; type a name and save again to confirm the retry succeeds once."
     ],
     "residual_risks": [
       "The group page excerpt inherits the feed redesign without its owning ticket reviewing it; visually intended, but its QA belongs to the sibling piece.",
       "The details-based overflow disclosure is keyboard-accessible without JavaScript but is not a true ARIA menu; a strict menu-pattern review may ask for a menu island later.",
-      "Two identically named placeholder seats are matched by name in the claim flow (existing logic, untouched here): one person must not be able to claim both, and the roster must not read them as one person — flagged for the owning ticket's QA."
+      "Two identically named placeholder seats are matched by name in the claim flow (existing logic, untouched here): one person must not be able to claim both, and the roster must not read them as one person — flagged for the owning ticket's QA.",
+      "A refusal that changes the displayed defaults remounts the profile fields, so focus returns to the body instead of staying in the form; no QA assertion covers post-refusal focus and the inline error plus Tab order still orient the user, but a future pass may move focus to the first error explicitly."
     ],
     "risks": [
-      "Moving the profile failure from ?error=invalid to inline state changes the QA walk pinned in selectors.md; the page keeps rendering ?error=invalid for direct hits and ?saved=1 is untouched, but the replay walk for a failed save must assert the inline node instead.",
-      "updateProfile becomes an island-style (previous, formData) action; any caller outside the profile form would need the same update, and the grep shows only the profile page and its tests call it.",
-      "Payment rows render amounts in neutral ink with from-to words; if reviewers expect lent/owed colouring on payments, that is a one-line tone decision inside ActivityRowItem.",
-      "Client islands in this change may only import client-safe modules (validation, money/format, ui); the db-backed members module stays server-only, which the validation.ts hoist enforces structurally."
+      "The profile failure transport stays inline (ADR-0008); the page keeps rendering ?error=invalid for direct hits and ?saved=1 is untouched, but a replay walk for a failed save must assert the inline node plus the preserved select value instead of the legacy URL.",
+      "updateProfile's error state gains an additive values member; any exhaustive matcher on the state shape (tests, future callers) must tolerate the new key — the grep shows only the profile island and its tests consume it.",
+      "The form key is JSON of the displayed displayName/currency; attacker-chosen strings are safe inside a key, and the key changes only when the displayed defaults change, so idle renders and repeated identical refusals never remount.",
+      "An echoed currency outside SUPPORTED_CURRENCIES (only reachable by forged POST, since the dropdown offers exactly the supported codes) falls back to the saved currency in the helper; the field error still names the valid choices. No pattern in .sdlc/memory/patterns covers the seeded-controlled-select shape; the Librarian may want one."
     ],
+    "root_cause": "components/profile-form.tsx binds the currency select to useState initialized from the saved currency prop, a second source of truth beside the submitted FormData, and nothing re-seeds it from what was actually submitted — so the inline-refusal render repaints the select from the saved value (USD) and silently discards the chosen one (EUR). lib/auth/actions.ts updateProfile compounds it by returning fieldErrors only on validation failure, dropping the submitted values that would let the island recover. The previous diagnosis ('controlled island state naturally preserves both fields because the form never unmounts') is rejected by T-7: the identically-wired name field survived while the select did not.",
     "tests": [
       {
         "action": "edit",
         "cases": [
-          "relative thresholds: just now, minutes, hours, days, then human-only",
-          "human shapes: same-day time, Yesterday, weekday, dated with viewer timeZone",
-          "future timestamps clamp to just now instead of printing 'in N hours'",
-          "Timestamp SSR fallback renders time with dateTime and UTC-labelled text"
-        ],
-        "path": "app/ui-set.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "invalid profile input returns error state with fieldErrors instead of redirecting",
-          "valid save still redirects to /profile?saved=1",
-          "signed-out save still redirects to /signin"
+          "refused profile save echoes the submitted values: empty displayName plus EUR returns status error naming displayName only with values { displayName: '', currency: 'EUR' } and writes nothing (fails before: values is undefined)",
+          "answers a currency it cannot render with field errors instead of a redirect (existing case kept)",
+          "names the display name field when the name is the empty one (existing case kept)",
+          "writes the display name and currency for the signed-in user only (existing case kept)",
+          "sends a caller with no session to sign in rather than updating anything (existing case kept)"
         ],
         "path": "lib/auth/actions.test.ts"
       },
       {
         "action": "edit",
         "cases": [
-          "matches the NonZeroBalanceError sentence",
-          "ignores unrelated refusal messages",
-          "empty message is not a balance block"
+          "profileFormDefaults returns the saved values when the state is idle",
+          "profileFormDefaults returns the submitted values on a refusal that carries them, so a chosen EUR survives an empty-name refusal",
+          "profileFormDefaults falls back to the saved currency when the echoed value is not a supported code",
+          "profileFormDefaults falls back to the saved values on a refusal without values"
         ],
-        "path": "lib/groups/validation.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "zero reads neutral with no direction",
-          "positive balance reads as the viewer being owed when the viewer is the subject",
-          "negative balance reads as the viewer owing when the viewer is the subject",
-          "perspective flips for other members"
-        ],
-        "path": "lib/money/format.test.ts"
+        "path": "lib/auth/validation.test.ts"
       }
     ],
-    "understanding": "Issue #37 is the members/activity/profile slice of the #31 UI redesign (covers TR-11 mobile-first accessible UI and the S-8 Experience spec): owner roster and invites, the human-dated filterable activity feed, and the single-card profile, plus a display/accessibility sweep over exactly these screens. The binding constraints keep docs/ui.md, tokens, lucide-react and every other decision as they are, so this is a pure restyle onto the piece-1 shared set with reads, actions, schemas and success transports unchanged. What exists today: functional but un-redesigned members panels on old class strings with plain role tags and raw amounts, an activity feed with UTC-labelled timestamps and unstyled chips, and a server profile form whose redirect-on-refusal wipes typed input and whose page carries its own sign-out button. No plan for this issue has been rejected, and no issue comment binds anything.",
+    "understanding": "QA failed PR #44 (attempt 1) on T-7/BUG-1, the only failing test in the slice: a failed profile save keeps the typed display name but reverts the currency select to the saved value (USD) instead of the chosen one (EUR), blocking AC-5. The previous work order's diagnosis was WRONG: it claimed the controlled island holding both fields in useState 'keeps the typed state naturally because the form never unmounts'. That premise holds for the text input and fails for the select — the select is bound to useState seeded from the saved currency prop, a second source of truth beside the submitted FormData, and nothing re-seeds it from what was actually submitted, so the refusal render paints the saved value and the choice is silently discarded (QA verified hook state holding EUR while the DOM showed USD). The server side shares the blame: updateProfile returns only fieldErrors on refusal, dropping the submitted values. Everything else in the slice passed twice with zero unfiltered console errors, so the rest of the plan stands and this order changes only the profile refusal round trip.",
     "unknowns": [
-      "Whether QA wants the selectors.md profile-error walk rewritten to the inline node or kept against the legacy ?error=invalid reader, which this plan keeps rendering.",
-      "Whether the sibling group-page ticket wants its own pass over the excerpt once it inherits the redesigned feed rows.",
-      "The exact S-8 Experience acceptance wording beyond TR-11, which is not in the work-order source vocabulary and is covered here through the TR-11 criterion."
+      "Whether the React-internal trigger is stale controlled state at submit time or a DOM desync after it; the fix (DOM rebuilt from echoed submissions) is correct under both, so the distinction does not change the work.",
+      "Whether QA wants the selectors.md profile-error walk extended to assert the preserved select value, which AC-8 now requires.",
+      "Whether the sibling group-page ticket wants its own pass over the excerpt once it inherits the redesigned feed rows."
     ],
-    "version": 1,
-    "mode": "committed"
+    "version": 2
   },
   "touch_paths": [
     "components/groups-panels.tsx",
@@ -457,10 +382,10 @@
   "validated_at": "2026-10-05T22:54:19.896Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
-  "work_order_version": 1,
-  "work_order_posted_at": "2026-10-05T22:57:03.075Z",
-  "work_order_from": "plan",
-  "work_order_comment": "6004896598",
+  "work_order_version": 2,
+  "work_order_posted_at": "2026-10-06T00:27:20.234Z",
+  "work_order_from": "root-cause",
+  "work_order_comment": "6006461375",
   "implemented_version": 1,
   "follow_ups": {
     "review": [

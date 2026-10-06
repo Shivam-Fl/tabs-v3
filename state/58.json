@@ -6,12 +6,16 @@
   "lock_expires": null,
   "lock_run": null,
   "attempts": {
-    "plan": 0,
+    "plan": 1,
     "ci": 0,
     "review": 0,
     "qa": 0
   },
-  "attempt_run": null,
+  "attempt_run": {
+    "counter": "plan",
+    "n": 1,
+    "run": "37457588433"
+  },
   "pending": null,
   "work_order": null,
   "touch_paths": [],
@@ -53,7 +57,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-06T10:10:41.343Z",
-  "updated_at": "2026-10-06T11:36:54.085Z",
+  "updated_at": "2026-10-06T11:37:15.793Z",
   "history": [
     {
       "at": "2026-10-06T10:11:02.690Z",
@@ -219,6 +223,11 @@
       "at": "2026-10-06T11:36:54.085Z",
       "agent": "human",
       "action": "-> planning"
+    },
+    {
+      "at": "2026-10-06T11:37:15.793Z",
+      "agent": "plan",
+      "action": "plan attempt 1"
     }
   ],
   "issue_snapshot": {

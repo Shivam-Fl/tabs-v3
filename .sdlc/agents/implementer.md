@@ -154,16 +154,17 @@ the PR from a job that runs none of it.
    fix it within the work order's scope, or stop and say what you found. The cheapest place
    to catch a fix that does not fix anything is here, before a CI run, a review and a QA cycle
    have all been spent on it.
-6. **Show the change, if the app has a screen it changes.** Write `pr-demo.spec.ts` at the repository
-   root — a Playwright test file, not committed — that walks what you changed, the way a person
-   would. A job with no agent records it twice, on the base branch and on your branch, and posts
+6. **Show the change, if the app has a screen it changes.** Write `pr-demo.spec.mjs` at the repository
+   root — a Playwright test file in plain JavaScript, not committed — that walks what you changed,
+   the way a person would. JavaScript, not TypeScript: the app does not install `@playwright/test`,
+   and a `.ts` file importing it fails the project's own typecheck. A job with no agent records it twice, on the base branch and on your branch, and posts
    both recordings and their last frames on the PR as **Before / after**, for a bug and a feature
    alike. Keep it short and honest:
 
-   ```ts
+   ```js
    import { test, expect } from '@playwright/test';
    test('settle up records a partial payment', async ({ page }) => {
-     await page.goto(process.env.DEMO_URL!);
+     await page.goto(process.env.DEMO_URL);
      // sign up a fresh account if the flow needs one: a new email each run (Date.now())
      // ...the steps that reach the change, then end on the screen that shows it
      await expect(page.getByText('₹50 still owed')).toBeVisible();

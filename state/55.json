@@ -357,7 +357,31 @@
   "implemented_version": 1,
   "follow_ups": {
     "review": [],
-    "pr": "56"
+    "pr": "56",
+    "qa": [
+      {
+        "actual": "With the remove confirm expanded, documentElement.scrollWidth reads 390 against clientWidth 375 — with 80-character names (T-3) and with short names (T-14) alike. The confirm question itself wraps correctly; the row around it does not fit: the confirm renders as an in-flow w-64 (256px, shrink-0) dropdown inside the member row, and 256px of dropdown plus avatar plus gaps exceeds the ~309px card content width, so the row pushes the document ~15px past the viewport until Cancel.",
+        "evidence": [
+          "qa-evidence/test-results/confirms-T-3-remove-confir-39c7c-har-names-fits-the-viewport-chromium/test-failed-1.png",
+          "qa-evidence/test-results/confirms-T-3-remove-confir-39c7c-har-names-fits-the-viewport-chromium/trace.zip",
+          "qa-evidence/test-results/confirms-T-14-remove-confi-bac33--is-name-length-independent-chromium/test-failed-1.png",
+          "qa-evidence/test-results/confirms-T-14-remove-confi-bac33--is-name-length-independent-chromium/trace.zip"
+        ],
+        "expected": "With the remove confirm expanded on the members page, the page fits the 375px viewport (scrollWidth <= clientWidth) while the question names its member and group in full.",
+        "id": "BUG-1",
+        "introduced_by_pr": false,
+        "repro": [
+          "Sign up a fresh account and create any group (short names reproduce it; 80-char names are not required).",
+          "Add any placeholder seat from the members page.",
+          "Open the seat row overflow menu and press Remove to expand the confirm.",
+          "Read document.documentElement.scrollWidth vs clientWidth at a 375px viewport: 390 vs 375."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "suspected_cause": "Row geometry untouched by this PR: MemberRow renders the confirm in a div.mt-2.w-64.max-w-[calc(100vw-3rem)] inside details.relative.shrink-0 (components/groups-panels.tsx MemberRow), so the 256px dropdown cannot shrink inside the ~309px Card content width (Card p-4 inside main px-4 at 375px). The PR diff adds only break-words to the shared question <p> and never touches MemberRow (verified: the groups-panels.tsx hunk touches ClaimSeatForm/JoinPanel only); the T-14 short-name control overflows identically, so the defect predates the PR. The fix belongs with the row (e.g. an overlay dropdown or a narrower panel), not with the wrapping classes.",
+        "title": "Remove-member confirm open widens members page past 375px viewport"
+      }
+    ]
   },
   "qa": {
     "verdict": "fail",

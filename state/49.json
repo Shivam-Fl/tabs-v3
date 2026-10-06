@@ -173,9 +173,10 @@
     "mode": "committed"
   },
   "touch_paths": [
-    "components/groups-panels.tsx",
     "app/groups/[id]/page.tsx",
-    "app/groups/[id]/members/archived-readonly.test.ts"
+    "components/members-screen.tsx",
+    "components/groups-panels.tsx",
+    "app/groups/[id]/members/long-name-wrap.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

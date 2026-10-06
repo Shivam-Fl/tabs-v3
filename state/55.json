@@ -12,7 +12,6 @@
     "qa": 0
   },
   "attempt_run": null,
-  "halted": null,
   "pending": {
     "stage": "root-cause",
     "rework": null,
@@ -21,7 +20,7 @@
     "from": "failure",
     "pr": 56,
     "work_order_version": 2,
-    "at": "2026-10-06T11:25:18.057Z"
+    "at": "2026-10-06T11:39:51.748Z"
   },
   "work_order": {
     "acceptance": [
@@ -436,7 +435,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-06T08:14:21.517Z"
   },
-  "resume_at": "root-cause",
+  "resume_at": null,
   "flow_plan": {
     "kind": "bug",
     "confidence": 80,
@@ -445,7 +444,7 @@
     "councils": {},
     "decided_at": "2026-10-06T08:34:28.284Z"
   },
-  "stopped_at": "root-cause",
+  "stopped_at": null,
   "dispatched_stage": "root-cause",
   "validated_from": "plan",
   "validated_at": "2026-10-06T09:05:08.680Z",

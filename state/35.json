@@ -856,6 +856,27 @@
         "severity": "minor",
         "category": "design",
         "file": "components/ui-interactive.tsx"
+      },
+      {
+        "title": "On a failed /activity read, the filter chips drop the ?group= scope even when it is known, and the retry drops it whenever the groups read itself failed.",
+        "detail": "On a failed /activity read, the filter chips drop the ?group= scope even when it is known, and the retry drops it whenever the groups read itself failed.\n\n`app/activity/page.tsx:127`\n\nEvidence: app/activity/page.tsx:127 renders <FilterChips filter={filter} action=\"/activity\" /> with no preserved prop in the failed branch, while the success branch (:154) passes preserved={...ACTIVITY_GROUP_PARAM...}. So any failed scoped load loses the scope the moment the reader touches a chip. The retry at :140 uses scoped?.id, but scoped (:80) is resolved from groups, which stays [] when listActivityGroups throws — so a groups-read failure also strips ?group= from the retry URL.\n\nFix: Pass the same preserved map in the failed branch (lift scoped-or-raw-group computation above the failed/success split), and build the retry href from the raw query group param as fallback when groups failed to load, e.g. activityHref(filter, scoped?.id ?? query[ACTIVITY_GROUP_PARAM] ?? null).",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/activity/page.tsx"
+      },
+      {
+        "title": "Opening the expense-filter disclosure rotates both header icons, including the decorative SlidersHorizontal, instead of just the chevron.",
+        "detail": "Opening the expense-filter disclosure rotates both header icons, including the decorative SlidersHorizontal, instead of just the chevron.\n\n`app/groups/[id]/page.tsx:897`\n\nEvidence: app/groups/[id]/page.tsx:897 label class peer-checked:[&>svg]:rotate-180 applies to every direct svg child of the label; the label has two (SlidersHorizontal and ChevronDown), so checking the disclosure flips the sliders glyph upside down too.\n\nFix: Scope the rotation to the chevron only, e.g. give ChevronDown its own class and use peer-checked:[&_.chevron]:rotate-180 or move the rotation onto a span wrapping the chevron.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "The expense-filter disclosure's checkbox stays in the tab order on desktop, where its label is hidden: keyboard users land on an invisible, effectively unnamed control whose focus ring is drawn on a display:none label.",
+        "detail": "The expense-filter disclosure's checkbox stays in the tab order on desktop, where its label is hidden: keyboard users land on an invisible, effectively unnamed control whose focus ring is drawn on a display:none label.\n\n`app/groups/[id]/page.tsx:894`\n\nEvidence: app/groups/[id]/page.tsx:894 renders <input type=\"checkbox\" className=\"peer sr-only\" /> with no responsive hiding, while its <label> (:896-897) carries sm:hidden and the focus ring lives on that label via peer-focus-visible. On >=sm screens the input is focusable but visually hidden, its accessible name comes from a display:none label, and the peer-focus-visible outline paints on nothing.\n\nFix: Take the input out of the tab order where the disclosure does not exist, e.g. className=\"peer sr-only sm:hidden\" (display:none removes it from tab order). Mobile behaviour is unchanged: the label is visible there and the focus ring still draws on it.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/page.tsx"
       }
     ],
     "pr": "46",

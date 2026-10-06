@@ -460,5 +460,28 @@
       }
     ],
     "pr": "44"
-  }
+  },
+  "qa": {
+    "verdict": "fail",
+    "introduced_bugs": 1,
+    "ac_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7"
+    ],
+    "sha": "c3b12fe4dfe48b9abcdb4785d43ad77445022d8d",
+    "run_id": "37390602827",
+    "work_order_version": 1,
+    "at": "2026-10-06T00:20:15.178Z"
+  },
+  "qa_open_bugs": [
+    {
+      "id": "BUG-1",
+      "title": "Failed profile save discards the chosen currency, reverting to the saved value"
+    }
+  ]
 }

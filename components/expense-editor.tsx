@@ -629,12 +629,19 @@ export function ExpenseEditor({
                       type="text"
                       inputMode="decimal"
                       value={participant.value}
-                      disabled={!participant.included}
+                      // A member taken out of the split keeps the number typed beside them: the
+                      // field goes readOnly rather than disabled, because a disabled control
+                      // contributes nothing to the submission and the 40 this person typed would
+                      // arrive as a missing field — stored as null and reopened blank (AC-9).
+                      // It stays focusable and readable, which is the honest cost of a row whose
+                      // value still has to be sent.
+                      readOnly={!participant.included}
+                      aria-disabled={!participant.included}
                       onChange={(event) =>
                         changeParticipant(participant.membershipId, { value: event.target.value })
                       }
                       placeholder={splitType === 'shares' ? '1' : '0.00'}
-                      className={`${FIELD_CLASSES} w-24 text-right tabular-nums disabled:opacity-50`}
+                      className={`${FIELD_CLASSES} w-24 text-right tabular-nums ${participant.included ? '' : 'opacity-50'}`}
                     />
                     <span className="text-secondary text-ink-muted">{unitHint(splitType)}</span>
                   </span>

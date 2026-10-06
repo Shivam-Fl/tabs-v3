@@ -9,12 +9,12 @@
     "plan": 0,
     "ci": 0,
     "review": 0,
-    "qa": 1
+    "qa": 2
   },
   "attempt_run": {
     "counter": "qa",
-    "n": 1,
-    "run": "37458520357"
+    "n": 2,
+    "run": "37460608107"
   },
   "pending": {
     "stage": "root-cause",
@@ -224,7 +224,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-06T08:14:01.860Z",
-  "updated_at": "2026-10-06T12:03:44.068Z",
+  "updated_at": "2026-10-06T12:06:32.120Z",
   "history": [
     {
       "at": "2026-10-06T08:14:24.516Z",
@@ -480,6 +480,11 @@
       "at": "2026-10-06T12:03:44.068Z",
       "agent": "release",
       "action": "-> qa"
+    },
+    {
+      "at": "2026-10-06T12:06:32.120Z",
+      "agent": "qa",
+      "action": "qa attempt 2"
     }
   ],
   "issue_snapshot": {

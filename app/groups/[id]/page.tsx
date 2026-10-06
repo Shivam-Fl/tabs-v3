@@ -499,7 +499,7 @@ function GroupDetail({
             </h2>
             <p
               data-amount
-              className={`text-hero font-semibold ${
+              className={`text-hero font-semibold tabular-nums ${
                 ownMinor > 0 ? 'text-lent' : ownMinor < 0 ? 'text-owed' : 'text-ink'
               }`}
             >
@@ -548,7 +548,7 @@ function GroupDetail({
                   </span>
                   <span
                     data-amount
-                    className={`font-semibold ${directionTone(transfer, membership.id)}`}
+                    className={`font-semibold tabular-nums ${directionTone(transfer, membership.id)}`}
                   >
                     {formatMinorUnits(transfer.amountMinor, group.currency)}
                   </span>
@@ -743,7 +743,7 @@ function GroupDetail({
                           {/* In ink, with the direction in the payer words beside it: an expense
                               row is a fact about what happened, not a claim about who owes whom,
                               and the totals that are claims live on the balances panel. */}
-                          <span data-amount className="font-semibold text-ink">
+                          <span data-amount className="font-semibold tabular-nums text-ink">
                             {formatMinorUnits(expense.amountMinor, group.currency)}
                           </span>
                           {group.archived ? null : (
@@ -791,7 +791,7 @@ function GroupDetail({
                           </span>
                           <span
                             data-amount
-                            className={`font-semibold ${balanceTone(balance.balanceMinor)}`}
+                            className={`font-semibold tabular-nums ${balanceTone(balance.balanceMinor)}`}
                           >
                             {formatMinorUnits(Math.abs(balance.balanceMinor), group.currency)}
                           </span>
@@ -882,7 +882,7 @@ function GroupDetail({
                         </span>
                         <span
                           data-amount
-                          className={`font-semibold ${balanceTone(balanceOf.get(member.id) ?? 0)}`}
+                          className={`font-semibold tabular-nums ${balanceTone(balanceOf.get(member.id) ?? 0)}`}
                         >
                           {formatMinorUnits(Math.abs(balanceOf.get(member.id) ?? 0), group.currency)}
                         </span>

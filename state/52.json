@@ -25,5 +25,12 @@
   "review_root_caused": [],
   "created_at": "2026-10-06T06:01:44.715Z",
   "updated_at": "2026-10-06T06:01:44.715Z",
-  "history": []
+  "history": [],
+  "issue_snapshot": {
+    "title": "Follow-ups from #50: 1 from QA",
+    "body": "What the review and QA of PR #51 (for #50) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## Found by QA — pre-existing\n\nPR #51 did not introduce these, which is why they did not block it.\n\n### Refused expense save silently resets split include switches to included\n\n**Severity** minor (as judged by QA — reassess before planning).\n\n**Expected.**\n> A refused expense save keeps every input exactly as the user set it, including which members are left out of the split, so correcting the flagged field and retrying submits the intended split.\n\n**Actual.**\n> After a refused save, every excluded member's Include switch reads included again. Description, amount and payer inclusion persist; only the included flags are discarded. The retry then submits a different split than the user set.\n\n**Steps to reproduce**\n1. Sign up as A, create a group, add a placeholder seat Bo via the members page.\n2. Open /groups/:id/expenses/new, fill a description, turn Bo's Include switch off (Bo reads excluded).\n3. Fill the amount with not-a-number and press Add expense.\n4. Observe the amount refusal AND Bo's switch silently back to included, while description, amount and payer inclusion persist.\n\n**Reproducible:** always\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #50.",
+    "sha256": "6e87c177179705d3073556a3bf01c0d6ef7ef98daaedd4fb4c9c93802226aa05",
+    "by": "github-actions[bot]",
+    "at": "2026-10-06T06:01:59.223Z"
+  }
 }

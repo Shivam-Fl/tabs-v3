@@ -1,5 +1,5 @@
 {
-  "source_sha": "da7784dd3f51dc1664b2829c408cdce8461a4d0b",
+  "source_sha": "aa405c97ba5abd81f8d658934cfa0e59ea9c85cb",
   "source_repo": "Shivam-Fl/automated-ai-sdlc",
   "files": {
     ".github/workflows/ci-verify.yml": "f31654d925f79b1b38402aa9d4115c15cf888ac4e17e87b488620000167399e9",
@@ -83,7 +83,7 @@
     ".sdlc/bin/check-url.mjs": "a7ed71906edc91fae6a6a530740720dc15825fdf738e1b6846c33eb159bc5e69",
     ".sdlc/bin/claude-args.mjs": "28baebd8d9220a17107e8376cab64d905b547517dfe4bcfd3ba8c1a96f7c6e0c",
     ".sdlc/bin/contribute.mjs": "c42aec66fee094f45bf228df5e5614ae93dc95cc9706864cba11302f6b652b14",
-    ".sdlc/bin/dispatch-fix.mjs": "afbe67f1c4f900121eb62bc57b1fbc7a212544a04121c4b84ce0beeed20c47c9",
+    ".sdlc/bin/dispatch-fix.mjs": "dba270f033e8c27a7a6227a7cc29d668a1e9759c64cb4af85be7f222bc78f6ab",
     ".sdlc/bin/dispatch.mjs": "2af240f8eb68b04340e37fae68ba15e82ad29f2cca891b9946cc50529cfab9f5",
     ".sdlc/bin/ensure-ci.mjs": "b9d1c405fca7439563d8605e8a02ecc7ddf6e0952a24cb849530777377bedfb8",
     ".sdlc/bin/ensure-deps.mjs": "18be494636162567150dbdbd863dd14e446719a7274f6b002ea60cd836661c27",

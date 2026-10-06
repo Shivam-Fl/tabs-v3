@@ -1,7 +1,7 @@
 {
   "issue": 60,
   "pr": 61,
-  "state": "implementing",
+  "state": "needs-human",
   "owner": "implementer",
   "lock_expires": "2026-10-06T23:16:42.674Z",
   "lock_run": "37469515490",
@@ -180,7 +180,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-06T12:23:08.496Z",
-  "updated_at": "2026-10-06T13:16:42.674Z",
+  "updated_at": "2026-10-06T13:16:47.730Z",
   "history": [
     {
       "at": "2026-10-06T12:23:26.804Z",
@@ -281,6 +281,11 @@
       "at": "2026-10-06T13:16:42.674Z",
       "agent": "implementer",
       "action": "lock acquired"
+    },
+    {
+      "at": "2026-10-06T13:16:47.730Z",
+      "agent": "watchdog",
+      "action": "-> needs-human"
     }
   ],
   "issue_snapshot": {

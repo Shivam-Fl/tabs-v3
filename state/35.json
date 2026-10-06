@@ -145,227 +145,72 @@
         "id": "AC-17",
         "source": "TR-3",
         "verify": "browser"
+      },
+      {
+        "check": "Every amount on the group page renders with tabular figures: each [data-amount] on the Expenses tab and the Balances tab (hero balance, transfer lines, expense rows, member rows) carries tabular-nums, and no amount on either tab lacks it.",
+        "how_to_verify": "Create an INR group with a second member and a 123456 expense; open /groups/<id>?section=expenses and ?section=balances; read the class list of every [data-amount] and confirm tabular-nums is present.",
+        "id": "AC-18",
+        "source": "TR-11",
+        "verify": "browser"
       }
     ],
-    "alternatives_considered": [
-      {
-        "approach": "Client-side tab state (useState tab, all four sections fetched and toggled without navigation).",
-        "rejected_because": "Breaks the bookmarkable filter-URL contract the page documents and splits filter state across tabs; URL tabs keep every panel linkable and server-rendered."
-      },
-      {
-        "approach": "A new per-group full activity route that the excerpt links to.",
-        "rejected_because": "A new route plus reads for what /activity already shows; excerpt (newest 5, sliced in the page, no read change) plus a View-all link to /activity scoped by ?group= satisfies 'excerpt linking to the full feed' with zero new surface."
-      },
-      {
-        "approach": "Desktop side-card layout (summary card beside the main column at 1024px, which IAC-7 permits).",
-        "rejected_because": "Optional per the issue ('may'), and it doubles the loading-skeleton sync surface and the responsive QA matrix for a cosmetic gain; single centred column keeps every state trivially in sync."
-      },
-      {
-        "approach": "Delete the whole-page loading skeleton and serve region-level excerpt skeletons plus a synchronously rendered ledger (the refused v2 revision).",
-        "rejected_because": "The plan reviewer refused it: it deletes the IAC-6- and ui.md-required whole-page skeleton states (summary card, section tabs, three expense rows), so QA would certify a page that no longer meets IAC-6. The skeleton letter stays; only its mechanism changes."
-      },
-      {
-        "approach": "Keep both the whole-page streaming skeleton file and a synchronous scriptless ledger in the same route segment.",
-        "rejected_because": "Mechanically incompatible under App Router streaming: the in-repo T-14 DOM proves the route-level boundary streams its fallback visibly while the ledger waits in a hidden Flight payload for a client-JS swap. Both cannot hold, so the issue-required skeleton takes precedence and the scriptless guarantee is scoped to a noscript notice."
-      },
-      {
-        "approach": "Keep the whole-page boundary and add a <noscript> hatch that unhides the streamed Flight payload for scriptless readers.",
-        "rejected_because": "Depends on Next-internal streaming mechanics (B:0/S:0 ids, hidden-payload swap) no contract guarantees; untestable in CI, invisible until a framework upgrade renames an id, and shows both paints if the swap half-runs. The noscript notice names the requirement instead of reaching into framework internals."
-      },
-      {
-        "approach": "Restore the deleted #debts-heading anchor on the rewritten page so the reused refusal links resolve again.",
-        "rejected_because": "The anchor would sit on the wrong tab: settling lives in the Balances panel behind ?section=balances, so a bare fragment on the expenses tab lands the reader with no settle form in view. Retargeting via one shared helper puts them on the live SettleUpForm."
-      },
-      {
-        "approach": "Move the guard into app/groups/[id]/layout.tsx (and guard-layouts for the editor segments) so redirect/notFound throw above the route-level loading.tsx boundary.",
-        "rejected_because": "Splits one guard across two files and doubles the guardGroup read (layout and page cannot share the resolved access without refetching), and each editor segment would need its own guard-layout for the same gain; Suspense-below-the-guard keeps guard and reads in one file in guard-first order with a single guardGroup call."
-      },
-      {
-        "approach": "Keep the route-level loading.tsx files and accept HTTP 200 for guard outcomes (browsers self-correct, no data leaks).",
-        "rejected_because": "AC-11 and TR-3 promise wire-indistinguishable guards ('redirects', '404 identically', 'missing-or-forbidden reads are indistinguishable') and AC-11's own how_to_verify says fetch; QA fails the 200s, and curl/unfurlers/caches/scanners never run the Flight swap. The skeleton stays, the file goes."
-      },
-      {
-        "approach": "Drop skeleton states entirely (no fallback anywhere) so guards trivially own the wire status.",
-        "rejected_because": "Deletes the IAC-6- and ui.md-required loading states the reviewer already defended once; the requirement is real, only the route-level file mechanism is wrong."
-      }
-    ],
-    "approach": "A fourth attempt from the main tree (the PR46 branch is unmerged, so every step below applies to main) that keeps the full tabbed rewrite and every AC-1..AC-16 letter, but achieves the IAC-6 skeleton with a DIFFERENT mechanism: in-page Suspense below the guards instead of route-level loading.tsx files, which is what broke the guard wire status. (1) Rewrite app/groups/[id]/page.tsx around URL tabs as previously specified — breadcrumb, header (Avatar 40 + h1 + currency Badge + owner-only Settings entry), summary Card (hero viewer balance, first 3 transfer lines plus '+N more in Balances' link, settled lent-tint banner at zero, Add expense primary + Settle-up-to-balances secondary), tab nav preserving all filter params with aria-current, Expenses panel (disclosure collapsed on phones and open inline from sm: up with active-filter names on the summary, existing GET filter form + hidden section input, rows with payer Avatar, human-date meta via ExpenseDate island, ink amounts with payer words and no direction colour), Balances panel rendering <section aria-labelledby='panel-balances'><h2 id='panel-balances'> wrapping the debts Card plus the Settle up Card with the live SettleUpForm (the refusal links' landing target), Activity panel (excerpt slice(0,5) via shared ActivityRows, View-all to /activity?group=<id>, isolated try/catch with section-preserving retry), Members panel (5-row excerpt + View-all), owner Settings dialog only, fixed bottom Add-expense CTA on phones, all notice slots and the departed-seat label preserved; reuse listExpenses/listMembers/computeNetBalances/simplifyDebts/listPayments/listGroupActivity unchanged — with this ordering guarantee: guardGroup runs first and its redirect()/notFound() throw before ANY Suspense boundary or data read, so the guard alone decides the wire status; the synchronous shell (breadcrumb, header from access.group) renders immediately and every post-guard data-dependent section renders behind <Suspense> with a fallback from the shared skeleton module; NO loading.tsx is created at this segment. (2) Create components/group-skeletons.tsx exporting GroupPageSkeleton (skeleton summary card, section tabs, three expense rows, data-skeleton attrs, role=status wait announcement, aria-busy, motion-safe pulse only, plus a <noscript> notice naming the JavaScript requirement) and EditorFormSkeleton (form-shaped fallback carrying no group summary/tabs/rows markers). (3) New components/group-page.tsx islands (ExpenseRowMenu with focus return + Dialog delete-confirm naming the expense via deleteExpense with pending guard; GroupSettingsEntry hosting the existing rename/archive forms) and components/timestamp.tsx islands (Timestamp zone-neutral absolute first paint with viewer-zone upgrade inside time dateTime, never UTC; ExpenseDate server absolute first paint with Today/Yesterday upgrade) for JS-enabled paint only. (4) Edit components/activity-feed.tsx to extract shared ActivityRows and render times via Timestamp; props, chips, copy, order, empty text, PreservedParams/preserved and ActivityFeedSkeleton exports untouched. (5) Edit app/activity/page.tsx for optional ?group= scope applied in the page on row.groupId (no read/signature/endpoint/schema change, default all groups, unknown scope falls back, scoped header with way back, retry and chips preserve scope via the existing preserved passthrough). (6) Edit lib/activity/queries.ts to add only the ACTIVITY_GROUP_PARAM const beside ACTIVITY_FILTER_PARAM. (7) Edit lib/groups/validation.ts for GROUP_SECTION_PARAM/GROUP_SECTIONS/groupSectionFrom (unknown/blank defaults to expenses, trims and case-folds). (8) Create lib/dates.ts pure presenters (explicit now, no server clock). (9) Edit app/groups/[id]/expenses/new/page.tsx and app/groups/[id]/expenses/[expenseId]/edit/page.tsx ONLY for the boundary mechanism: guards stay first and unchanged (redirect with the editor-specific next, notFound for stranger/malformed/missing/scope-fail), post-guard data reads render behind <Suspense> with the EditorFormSkeleton fallback; NO loading.tsx is created at either editor segment. (10) Edit components/groups-panels.tsx: extract exported settleUpHref(groupId) returning `/groups/${groupId}?section=balances#panel-balances` and use it for both the remove-refusal and leave-refusal links, keeping the #48 archived branches (cannot-settle note, no link) untouched.",
+    "approach": "A one-class delta on top of the v3 rewrite, which is otherwise kept exactly as QA already passed it: add the tabular-nums utility to every data-amount className in app/groups/[id]/page.tsx (hero viewer balance, transfer lines, expense rows, member and balance rows — every site QA's T-11 probes on the Expenses and Balances tabs), restoring the font-semibold tabular-nums text-ink pattern origin/main carried on its expense rows. No layout, copy, colour, arithmetic, guard-ordering, skeleton-mechanism or routing change: the Suspense-below-guard structure, the refusal-link helper, the ?group= scoping and the skeleton fallbacks all stay as they are. Add a source-level regression test beside the page that fails exactly the way T-11 did (a data-amount class list without tabular-nums) so CI pins what the browser asserts.",
     "assumptions": [
-      "PGlite resolves inside the microtask queue, so Suspense fallbacks never paint locally either; fallback-markup unit pins per the QA environment notes are the CI proof, and QA re-checks the browser paint only where it can (whole-page skeleton under latency, editors fallback).",
-      "The served-HTML stream markers QA probes (data-skeleton attrs, Loading announcement) appear in served HTML whenever a Suspense boundary suspends; under real latency the fallback streams exactly as the route file's did, minus the premature 200 commit for guard cases.",
-      "The archived-group leave path already suppresses the onward link (cannot-settle note instead, per #48), so retargeting the helper affects only the non-archived refusals QA walks.",
-      "QA re-runs its T-8/T-15 specs plus the raw-HTTP curl probe against AC-17: browser paint expectations are unchanged (bounce + identical not-available screen), only the wire status is newly asserted."
+      "The PR branch already carries the full v3 rewrite (tabbed page, Suspense-below-guard skeletons, timestamp islands, ?group= scoping, settleUpHref helper) with T-1..T-10 and T-12..T-15 green; only the missing utility class needs to change.",
+      "All five data-amount sites live in app/groups/[id]/page.tsx on the rewritten branch, so one file edit covers both tabs QA probes; payment rows in components/settle-panels.tsx already carry tabular-nums and are untouched."
     ],
-    "confidence": 85,
-    "confidence_rationale": "The failure mechanism is confirmed two independent ways: QA's control experiment (boundary-less /join/[token] 404s correctly while the three new loading.tsx segments serve 200) and first-hand code reading (guardGroup redirect/notFound at page.tsx:100-106 and both editor pages sit beneath a boundary that streams first). Suspense-below-guard is the framework's own answer to exactly this ordering problem: nothing streams before the guard throws, so 3xx/404 keep their status, while members see the identical skeleton visuals. What keeps this below 90: served-HTML marker probes depend on real-latency suspension QA must confirm in the browser, and the ?group= scoping choice remains a product judgment a reviewer may read differently.",
+    "confidence": 92,
+    "confidence_rationale": "The failure is a single deterministic class assertion with the exact received string in evidence, the fix is the exact class QA names in its hint, origin/main proves the class existed before the rewrite, and 14 of 15 QA tests already pass on this branch so the blast radius is one utility class with no behavioural surface.",
     "evidence": [
-      "QA verdict fail on attempt 3 (commit 8dbc750c): single bug BUG-1 minor — anonymous/stranger/malformed/missing direct loads return HTTP 200 with skeleton/not-available bodies; browsers self-correct in-suite (anonymous bounces to /signin?next=, stranger/malformed/missing paint the identical not-available screen), so only raw-HTTP clients observe the wrong status.",
-      "QA control on the same server: curl /join/does-not-exist-token-123 -> 404; that segment holds only page.tsx with no loading.tsx — the boundary is the difference, not the guard.",
-      "Guard-first code on main: app/groups/[id]/page.tsx:100-106 (guardGroup then redirect/notFound), new/page.tsx:27-32 and edit/page.tsx:29-36 identical shape, lib/groups/authz.ts guardGroup returning unauthenticated/not-found/ok with failure carrying no group fields; none of these segments has a loading.tsx on main, and the PR added one at each — the added file commits 200 before the guard resolves.",
-      "Prior defects confirmed fixed by the same report: T-12 refusal links land on the live Balances settle form (AC-15), T-13 scriptless paints skeleton plus notice (AC-16), T-6 skeleton streams with markers — so the v2 diagnosis of the old bugs stands; only its skeleton mechanism was wrong."
+      "QA verdict fail on attempt 4 (commit e09b7d36, PR #46): 14 pass, single fail T-11 with bug BUG-2 minor; prior BUG-1 (guard wire status) retests fixed across T-8/T-14/T-15.",
+      "T-11 error string is deterministic: amount 0 on expenses is tabular — Expected pattern /tabular-nums/, Received string font-semibold text-ink (qa-run/tests/group-guards.spec.ts:259).",
+      "Error-context page snapshot shows the rewritten ledger (header, Your balance hero, transfer line, Expenses list with T11 auto row at Rs.123,456.00) with the failing [data-amount] carrying no tabular-nums.",
+      "QA suspected cause confirmed by code reading: origin/main expense-row amount at app/groups/[id]/page.tsx:561 carries font-semibold tabular-nums text-ink, while the hero (line 359-360) and member-row (line 418-419) sites already lacked it and the rewrite extended the omission to all five new sites; untouched components/settle-panels.tsx:337 kept tabular-nums on payment rows.",
+      "docs/ui.md lines 47 and 49 require tabular-nums for every amount, and AC-14 already promises group-currency tabular amounts — the new AC-18 only makes that contract directly probeable per amount.",
+      "reproduced is false because no live preview was booted in this session; the mechanism is confirmed by QA's browser evidence plus first-hand source reading, not by a local repro run."
     ],
     "files": [
       {
         "action": "edit",
-        "change": "Full tabbed rewrite per ui.md Group page (breadcrumb, avatar-mark header, summary card with hero balance plus '+N more' overflow link, tab nav preserving filter params, redesigned expense rows, Balances panel rendering section#panel-balances with an h2 of that id wrapping the debts Card and the Settle up Card with the live SettleUpForm, Activity/Members excerpts, settings in dialog, fixed mobile CTA, error card with section-preserving retry, human dates; reuse listExpenses/listMembers/computeNetBalances/simplifyDebts/listPayments/listGroupActivity unchanged; no #debts-heading restored) with guard-first ordering: guardGroup plus redirect/notFound run before any Suspense boundary or data read so the guard alone decides the wire status; synchronous shell plus post-guard sections behind <Suspense> with GroupPageSkeleton fallbacks; no loading.tsx at this segment.",
+        "change": "Add tabular-nums to every data-amount className in the rewritten group page (hero viewer balance, transfer lines, expense rows, member and balance rows on both the Expenses and Balances tabs), restoring the font-semibold tabular-nums text-ink pattern origin/main carried; no colour, copy, layout, guard-ordering, skeleton or routing change.",
         "path": "app/groups/[id]/page.tsx",
-        "why": "The screen the issue rebuilds; all IAC-1..7 land here, the Balances settle target must be created by the same order, and the guard must throw before anything streams."
-      },
-      {
-        "action": "create",
-        "change": "Shared skeleton fallbacks: GroupPageSkeleton (skeleton summary card, section tabs, three expense rows with data-skeleton attrs, role=status wait announcement, aria-busy, motion-safe pulse only, plus a <noscript> notice naming the JavaScript requirement) and EditorFormSkeleton (form-shaped fallback with no group summary/tabs/rows markers). No data fetching inside either fallback.",
-        "path": "components/group-skeletons.tsx",
-        "why": "IAC-6 loading states with no layout shift, usable as Suspense fallbacks below the guards so the skeleton letter survives without a route-level file."
-      },
-      {
-        "action": "create",
-        "change": "Client islands: ExpenseRowMenu (overflow menu with Edit link and Dialog delete-confirm naming the expense via deleteExpense + ConfirmStep with pending guard) and GroupSettingsEntry (Settings button opening Dialog hosting existing rename/archive forms); timestamps deliberately not here.",
-        "path": "components/group-page.tsx",
-        "why": "IAC-4 overflow actions and IAC-2 settings-behind-entry need client behaviour the server page cannot render."
-      },
-      {
-        "action": "create",
-        "change": "Neutral client time islands for JS-enabled paint: Timestamp (zone-neutral absolute first paint, effect upgrade to viewer-zone relative+absolute inside time dateTime, never a UTC label) and ExpenseDate (server absolute first paint, viewer-zone Today/Yesterday upgrade); shared by group page, feed and /activity.",
-        "path": "components/timestamp.tsx",
-        "why": "IAC-7 viewer-zone times without the banned UTC first paint and without making a screen module a dependency of shared code."
-      },
-      {
-        "action": "edit",
-        "change": "Extract shared ActivityRows list used by ActivityFeed and the group excerpt; render row timestamps through Timestamp. Props, chips, copy, order, empty text, PreservedParams/preserved and ActivityFeedSkeleton exports unchanged so /activity and its skeleton cannot break.",
-        "path": "components/activity-feed.tsx",
-        "why": "The excerpt must reuse the feed rendering (contract face) without duplicating row markup; timestamps must move to the viewer zone per IAC-7."
-      },
-      {
-        "action": "edit",
-        "change": "Accept optional ?group= to scope the feed to one group (filter applied in the page on row.groupId, no read/signature/endpoint/schema change, default all groups, unknown scope falls back to the whole feed with chips intact); scoped header names the group with a way back to every group; retry and chips preserve filter and group params via the existing preserved passthrough; render through the shared rows so times are zone-correct.",
-        "path": "app/activity/page.tsx",
-        "why": "The group excerpt's View-all target must preserve group scope; this page's rendered output also changes via Timestamp so it must be named."
-      },
-      {
-        "action": "edit",
-        "change": "Add only the ACTIVITY_GROUP_PARAM const ('group') beside ACTIVITY_FILTER_PARAM with a comment recording it is a page-level filter, not a read: scoping narrows already-read rows by row.groupId, so no query, endpoint or index changes.",
-        "path": "lib/activity/queries.ts",
-        "why": "The page that writes the ?group= link and the page that reads it must share one spelling; the const lives beside the filter key so it cannot drift."
-      },
-      {
-        "action": "edit",
-        "change": "Add GROUP_SECTION_PARAM, GROUP_SECTIONS closed set and groupSectionFrom parser (unknown/blank defaults to expenses; trims and case-folds human input) beside the existing filter-param pattern.",
-        "path": "lib/groups/validation.ts",
-        "why": "Tab state lives in the URL like the existing filters, so parser and key live with the other boundary constants and cannot drift."
-      },
-      {
-        "action": "create",
-        "change": "Pure date presenters with no clock of their own: formatExpenseDate for YYYY-MM-DD against an explicit today string to Today/Yesterday/weekday/3 Oct/3 Oct 2025, and formatViewerTimestamp for relative bucket plus local-zone absolute with raw-string fallback. No backend branch, no timezone input needed.",
-        "path": "lib/dates.ts",
-        "why": "IAC-7 human dates; relative labels are decided with a viewer-supplied day so the server clock can never mislabel them."
-      },
-      {
-        "action": "edit",
-        "change": "Extract an exported settleUpHref(groupId) helper returning `/groups/${groupId}?section=balances#panel-balances` and use it for both the remove-refusal link and the leave-refusal link, replacing the `/groups/${groupId}#debts-heading` hrefs that dangle once the rewrite deletes that heading; keep the #48 archived branches (cannot-settle note, no link) untouched.",
-        "path": "components/groups-panels.tsx",
-        "why": "Prior BUG-1 fix (kept): both refusals must land on the live Balances settle target created in this same order; a shared helper keeps the two call sites from drifting apart again and makes the target unit-pinnable."
-      },
-      {
-        "action": "edit",
-        "change": "Boundary mechanism only (no visual or contract change): guards stay first and unchanged — redirect with the new-expense next path for signed-out, notFound for stranger/malformed/missing/scope-fail — and post-guard data reads render behind <Suspense> with the EditorFormSkeleton fallback; no loading.tsx is created at this segment.",
-        "path": "app/groups/[id]/expenses/new/page.tsx",
-        "why": "The editor must keep its form-shaped loading state without a route-level file that would commit 200 before its guard decides (AC-17)."
-      },
-      {
-        "action": "edit",
-        "change": "Boundary mechanism only (no visual or contract change): guards stay first and unchanged — redirect with the edit next path for signed-out, notFound for stranger/malformed/missing/scope-fail — and post-guard data reads render behind <Suspense> with the EditorFormSkeleton fallback; no loading.tsx is created at this segment.",
-        "path": "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
-        "why": "Same wire-status hazard as the new-expense route (QA reprobed the row-menu edit URL at 200); same Suspense-below-guard answer."
+        "why": "BUG-2 regression pin: the rewrite dropped the tabular-nums utility ui.md requires for every amount, and T-11 fails on the first [data-amount] without it."
       }
     ],
     "issue": 35,
     "kind": "feature",
-    "mode": "committed",
     "out_of_scope": [
-      "Expense editor form internals and settle-up sheet internals (next piece): SettleUpForm/DeletePaymentForm render unchanged inside the Balances tab; inline per-transfer forms are NOT converted to the dialog/sheet flow here.",
-      "Balance math, simplification, filter semantics and activity-writing changes: no split, balance, simplify or feed-writer code is touched; ?group= filters already-read rows in the page.",
-      "Dark mode: tokens stay light-only per ui.md.",
-      "Approved docs and framework paths (.sdlc/**, docs/**, .github/**): untouched; no ADR is recorded by this plan.",
-      "A separate per-group full activity route: group scoping is a ?group= filter on /activity instead.",
-      "Desktop side-card summary layout: single centred column kept (IAC-7 allows either).",
-      "Scriptless (JS-disabled) ledger paint on the group page: the Suspense fallback plus a JS-required notice is the designed state (AC-16); a synchronous no-JS ledger is incompatible with the IAC-6 whole-page skeleton under App Router streaming, and neither the issue nor ui.md requires one.",
-      "Route-level loading.tsx at any guarded group segment (app/groups/[id], its expenses segments): forbidden by AC-17 — a file boundary streams its fallback and commits HTTP 200 before guardGroup decides; skeleton states ride in-page Suspense fallbacks below the guards instead.",
-      "The pre-existing app/groups/[id]/members/loading.tsx from the merged members piece: left untouched (that piece's contract); it carries the same guarded-segment hazard and needs the same Suspense treatment in a follow-up if QA extends the wire probe to members guards."
+      "Any other visual, copy, layout, arithmetic, guard, skeleton-mechanism or routing change: the v3 rewrite stays exactly as QA passed it (T-1..T-10, T-12..T-15 green) and only the missing utility class is restored.",
+      "Payment rows in components/settle-panels.tsx and amounts on other screens: already tabular, untouched.",
+      "Approved docs and framework paths (.sdlc/**, docs/**, .github/**): untouched."
     ],
     "qa_script": [
-      "Seed and sign in as two users in different zones; open a group with several expenses, payments and member events.",
-      "At 375px and 1280px: header, hero balance, transfer lines plus '+N more' link, Add expense (fixed bottom button on phone, header button on desktop), Settle up jumps to the Balances tab with the live settle form.",
-      "Switch all four tabs; reload each tab URL directly; try malformed ?section=; set expense filters then switch tabs and confirm filters survive.",
-      "Keyboard only: tab bar, filter disclosure, overflow menu open/Edit/Escape/Delete confirm with focus return, Settings dialog open/close.",
-      "Owner plus joiner with an unpaid expense: members page, remove the joiner to refusal, follow the Settle up link to ?section=balances#panel-balances and confirm the live settle form; repeat for the leave refusal.",
-      "JS-enabled cold load under latency: skeleton (summary, tabs, three rows) then the full ledger; javaScriptEnabled:false load: skeleton plus the JS-required notice, with no ledger promised.",
-      "Wire-status probe (AC-17): anonymous curl of the group page and both editor URLs returns 3xx to /signin?next=; stranger-cookie curl of group/new/edit URLs plus malformed and missing UUIDs returns 404 with no group name, expense text or editor field; /join/does-not-exist-token-123 still 404s; browser T-8/T-15 walks unchanged.",
-      "Regression sweep: editors cold-load shows the form fallback (never ledger rows); archived groups stay read-only with no Add links; delete one expense via the overflow menu (cancel once, confirm once)."
+      "Sign up, create an INR group, add a second member, add a 123456 expense.",
+      "Open /groups/<id>?section=expenses and ?section=balances; confirm every [data-amount] class list contains tabular-nums and the 123456 expense reads with separators.",
+      "Confirm the expense-row amount still carries no direction colour (ink only) and the hero/member rows still carry words-plus-colour.",
+      "Re-run the T-11 browser walk unchanged; it should go green with no other test moving."
     ],
     "reproduced": false,
-    "residual_risks": [],
     "risks": [
-      "The pre-existing members/loading.tsx (merged members piece, left untouched) wraps a guarded page with a route-level boundary: if QA extends the raw-HTTP probe to members guards it will read 200 for the same reason; flagged here as a follow-up, not fixed here, to avoid breaking a merged piece's contract.",
-      "PGlite resolves in-microtask so Suspense fallbacks never paint locally; the fallback-markup unit pins are the CI proof and QA must confirm the browser paint under real latency — same caveat the route files carried, unchanged by the mechanism swap.",
-      "If a later rewrite renames Panel ids, the refusal links dangle again — the shared settleUpHref helper plus its unit pin turn that into a test failure, not a silent QA find.",
-      "The delete-confirm question sentence is duplicated between DeleteExpenseForm (edit page) and the row menu confirm; a future copy change must touch both — flagged here rather than refactored, to avoid changing the edit page caller.",
-      "A departed seat with a balance renders in balance/transfer lists but has no member row in the Members excerpt; the excerpt links to the members page where it is labelled, pinned in AC-12 rather than special-cased here.",
-      "Icon export names are verified at build time; if the installed lucide-react has removed the MoreVertical alias, use the current vertical-ellipsis export with identical placement and size.",
-      "Scriptless readers get the skeleton plus a JS-required notice rather than a working ledger; that is the documented AC-16 contract (the issue and ui.md require no scriptless state), not a defect to rediscover."
+      "If any amount site lives outside app/groups/[id]/page.tsx on the rewritten branch (a shared row component), the one-file edit misses it and T-11 still fails on that tab — the new source test enumerates every data-amount site so the miss shows in CI, not in QA.",
+      "Adding tabular-nums changes glyph widths slightly; a pixel-tight snapshot taken from the broken paint could diff once, which is the correct new baseline rather than a regression."
     ],
-    "root_cause": "Route-level loading.tsx boundaries at guarded segments. guardGroup in app/groups/[id]/page.tsx (and both editor pages) decides redirect vs notFound vs ok, but a loading.tsx at the same segment streams its fallback first and commits HTTP 200; the guard's redirect()/notFound() then resolve inside the Flight payload, which only router-driven browsers honor. Raw-HTTP clients (curl, unfurlers, caches, scanners) observe 200 plus skeleton/not-available paint for all four guard cases, while the boundary-less /join/[token] segment 404s correctly on the same server. No auth bypass and no data leak — the fallbacks hold no data and browsers self-correct in-suite — purely the wire status TR-3/AC-11 promise. The fix keeps guards first and synchronous in each page and moves the skeleton states into in-page Suspense fallbacks (shared components/group-skeletons.tsx) rendered only after the guard passes, so nothing streams before the guard decides.",
+    "root_cause": "The rewritten app/groups/[id]/page.tsx sets new classNames for its amount spans without the tabular-nums utility: hero, transfer-line, expense-row and member-row [data-amount] elements carry only font-semibold/text-ink/tone classes, while origin/main carried font-semibold tabular-nums text-ink on its expense rows and components/settle-panels.tsx kept it on payment rows. With the utility missing from the class list, docs/ui.md's tabular-nums-for-every-amount rule and AC-14 fail, and T-11's per-amount class assertion fails on the first expenses-tab amount. No arithmetic, guard, skeleton or data change is involved — purely the dropped utility class in the rewrite.",
     "tests": [
       {
         "action": "create",
         "cases": [
-          "today/yesterday render as words against an explicit now, never the server clock",
-          "same-week date renders weekday, same-year renders '3 Oct', prior year renders '3 Oct 2025'",
-          "viewer timestamp buckets: just now, minutes, hours, days, then absolute; invalid input falls back to the raw string"
+          "every data-amount className in app/groups/[id]/page.tsx contains tabular-nums (hero, transfer lines, expense rows, member rows) — the exact BUG-2/T-11 repro",
+          "at least one data-amount exists for each of the expenses and balances tabs so the pin cannot pass vacuously on an empty page",
+          "expense-row amounts keep the ink-only pattern (no owed/danger/lent direction class) while the pin holds, so the fix cannot trade T-11's second half for its first"
         ],
-        "path": "lib/dates.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "group fallback carries the skeleton summary, tabs and at least three expense rows with data-skeleton attrs plus the wait announcement, aria-busy and motion-safe pulse only",
-          "group fallback carries a noscript notice naming the JavaScript requirement — the scoped BUG-2 pin, kept",
-          "editor fallback is form-shaped and carries no group summary, tabs or expense-row markers"
-        ],
-        "path": "components/group-skeletons.test.tsx"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "no loading.tsx exists at app/groups/[id] or its expenses segments, so guard redirect/notFound set the wire status before any fallback streams — BUG-1 regression pin",
-          "the group page awaits guardGroup before its first Suspense boundary or data read, and both editor pages await guardGroup before theirs",
-          "settleUpHref(groupId) resolves to /groups/<id>?section=balances#panel-balances with no bare #debts-heading fragment — prior refusal-link pin, kept"
-        ],
-        "path": "app/groups/[id]/guards-wire-status.test.ts"
-      },
-      {
-        "action": "edit",
-        "cases": [
-          "groupSectionFrom accepts each of the four closed values",
-          "blank/unknown/missing section defaults to expenses",
-          "trims and case-folds human input (' BALANCES ' -> balances, 'Activity' -> activity)"
-        ],
-        "path": "lib/groups/validation.test.ts"
-      },
-      {
-        "action": "create",
-        "cases": [
-          "settleUpHref(groupId) resolves to /groups/<id>?section=balances#panel-balances, carrying the group id and the live Balances target",
-          "the resolved target contains no bare #debts-heading fragment, which the rewritten group page no longer renders — prior refusal-link regression pin, kept"
-        ],
-        "path": "components/groups-panels.test.ts"
+        "path": "app/groups/[id]/amounts-tabular.test.ts"
       }
     ],
-    "understanding": "The v2 plan was right about the old defects and wrong about the mechanism it chose for the skeleton. Its BUG-1/BUG-2 diagnosis stands — QA now passes the refusal-link target (T-12), the scriptless contract (T-13) and the skeleton paint (T-6) — but its fix for BUG-2 created the new failure: it required route-level loading.tsx files (app/groups/[id]/loading.tsx, expenses/loading.tsx) at segments whose pages guard-first with redirect()/notFound(). Under App Router streaming the boundary streams its fallback and commits HTTP 200 before guardGroup resolves, so guard outcomes travel only inside the Flight stream: router-driven browsers self-correct (QA verified the bounce and the identical not-available paint in-suite) while raw-HTTP clients see 200 for anonymous, stranger, malformed and missing requests. IAC-6 and ui.md require the skeleton visual state, not a loading.tsx file — the plan conflated the two, a work-order-step-that-defeats-its-own-goal against its own AC-11, whose how_to_verify literally says 'fetch'. This is the second occurrence of that pattern on this issue (v1: skeleton file vs scriptless ledger; v2: skeleton file vs guard status). This order keeps every AC-1..AC-16 byte-identical and adds AC-17 for the wire status; the skeleton is achieved with in-page Suspense below the guards instead — a different mechanism, not the same file described more carefully. Reproduced is false only because no live preview was booted: the mechanism is confirmed by QA's control experiment (boundary-less /join 404s correctly on the same server) plus first-hand code reading of the guard positions, recorded in evidence.",
-    "unknowns": [
-      "Whether the issue author ever wants scriptless (JS-disabled) ledger support on the group page: granting it would require an explicit author decision to drop the IAC-6 whole-page skeleton, which this order does not assume.",
-      "Whether reviewers prefer the scoped /activity?group=<id> landing or the unfiltered /activity feed as the excerpt target; scoped is chosen because the reader came from a group."
-    ],
-    "version": 3
+    "understanding": "The v3 plan was right about the guard wire status and wrong only by omission about amounts. Its Suspense-below-guard diagnosis stands proven: prior BUG-1 is fixed and QA's T-8/T-14/T-15 wire probe now passes 10 of 10 exchanges (anonymous 307s, stranger/malformed/missing 404s, dead join 404). But the rewrite it specified dropped a class the old page carried: origin/main rendered expense-row amounts with font-semibold tabular-nums text-ink, while the new page's five data-amount spans (hero, transfer lines, expense rows, member rows) carry only tone classes such as font-semibold text-ink. That violates docs/ui.md lines 47/49 (tabular-nums for every amount) and AC-14, which is exactly what T-11 asserts with Received string font-semibold text-ink. So this is not a wrong mechanism to replace — it is a one-class omission inside an otherwise green rewrite. This order keeps the entire v3 approach untouched and restores the missing class, adding permanent AC-18 and a source-level test so T-11 can never regress silently.",
+    "unknowns": [],
+    "version": 4,
+    "mode": "committed"
   },
   "touch_paths": [
     "app/groups/[id]/page.tsx",
@@ -922,10 +767,10 @@
     }
   ],
   "approved_too_high": false,
-  "work_order_version": 3,
-  "work_order_posted_at": "2026-10-06T06:36:14.046Z",
+  "work_order_version": 4,
+  "work_order_posted_at": "2026-10-06T08:37:26.201Z",
   "work_order_from": "root-cause",
-  "work_order_comment": "6010810503",
+  "work_order_comment": "6012555956",
   "failure_packet": {
     "issue": 35,
     "head": null,

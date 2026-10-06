@@ -226,27 +226,11 @@
     "version": 2
   },
   "touch_paths": [
-    "components/groups-panels.tsx",
-    "components/activity-feed.tsx",
-    "components/ui-interactive.tsx",
-    "app/groups/[id]/members/page.tsx",
-    "app/groups/[id]/members/loading.tsx",
-    "app/activity/page.tsx",
-    "app/activity/loading.tsx",
     "components/profile-form.tsx",
-    "app/profile/page.tsx",
     "lib/auth/actions.ts",
     "lib/auth/validation.ts",
-    "components/profile-save-button.tsx",
-    "app/profile/loading.tsx",
-    "app/join/[token]/page.tsx",
-    "lib/groups/validation.ts",
-    "lib/groups/members.ts",
-    "lib/money/format.ts",
-    "app/ui-set.test.ts",
     "lib/auth/actions.test.ts",
-    "lib/groups/validation.test.ts",
-    "lib/money/format.test.ts"
+    "lib/auth/validation.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

@@ -293,7 +293,7 @@ jobs:
             git checkout -B "$BRANCH" "origin/$BASE"
           fi
           printf '%s\n' work-order.json failure-packet.json rework-context.md \
-            implementer-note.md implementer-reply.md sdlc-protected/ pr-demo.spec.ts >> .git/info/exclude
+            implementer-note.md implementer-reply.md sdlc-protected/ pr-demo.spec.mjs pr-demo.spec.ts >> .git/info/exclude
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -451,7 +451,7 @@ jobs:
             package.json or scripts/ goes under sdlc-protected/ ("Some files your commands cannot
             write" in your pack), and the pipeline puts it in place and rebuilds the lockfile.
 
-            If the change shows on a screen, also write pr-demo.spec.ts at the repository root
+            If the change shows on a screen, also write pr-demo.spec.mjs at the repository root
             (step 6 of your pack): the pipeline records it on the base branch and on your branch
             and posts both on the PR as Before / after. You are answering one question — does the change
             work — not hunting edge cases; an adversarial agent does that later. If it does not
@@ -509,7 +509,10 @@ jobs:
             [ -s "$f" ] && cp "$f" "$RUNNER_TEMP/out/"
           done
           # The walk through the change the demo job records, before and after (implementer.md).
-          if [ -s pr-demo.spec.ts ]; then cp pr-demo.spec.ts "$RUNNER_TEMP/out/"; echo "demo=true" >> "$GITHUB_OUTPUT"; fi
+          # .mjs as the pack asks; a .ts one from an agent that wrote TypeScript anyway still records.
+          for f in pr-demo.spec.mjs pr-demo.spec.ts; do
+            if [ -s "$f" ]; then cp "$f" "$RUNNER_TEMP/out/"; echo "demo=true" >> "$GITHUB_OUTPUT"; break; fi
+          done
           ls -l "$RUNNER_TEMP/out"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
@@ -728,8 +731,9 @@ jobs:
         id: record
         if: steps.mode.outputs.compose == 'true'
         run: |
-          bash .sdlc/bin/pr-demo-record.sh before _base _out/pr-demo.spec.ts _demo/before
-          bash .sdlc/bin/pr-demo-record.sh after _head _out/pr-demo.spec.ts _demo/after
+          SPEC=$(ls _out/pr-demo.spec.mjs _out/pr-demo.spec.ts 2>/dev/null | head -1)
+          bash .sdlc/bin/pr-demo-record.sh before _base "$SPEC" _demo/before
+          bash .sdlc/bin/pr-demo-record.sh after _head "$SPEC" _demo/after
           ls _demo/after/*.png _demo/after/*.mp4 >/dev/null 2>&1 && echo "media=true" >> "$GITHUB_OUTPUT" || true
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         if: steps.record.outputs.media == 'true'

@@ -33,3 +33,12 @@ Every new action that succeeds by changing the page adds its param pair to the v
 module and the page reads it back through the same validator; refusals keep returning inline
 because their forms stay mounted; forged notice params render nothing, which QA pinned
 (T-16 in PR #16's final round); notice copy is defined once on the server, not per component.
+
+**One recorded exception (2026-10-06, PR #48; lib/auth/actions.ts's comment carries it):** the
+profile island answers *success* inline. The ADR's rationale is that a success unmounts the
+form that would have shown its message; a form island that never unmounts does not meet that
+rationale, and the redirect did real damage there — it throws, so `useActionState` never left
+the state a refusal had put it in, and refusal-then-fix-then-save suppressed the confirmation
+the save had just earned. A stale `?saved=1` beside a later refusal is the failure mode of the
+redirect shape; inline answered both. An island keeps the redirect rule only while its success
+unmounts it.

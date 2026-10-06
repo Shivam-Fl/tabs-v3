@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { DeleteExpenseForm, ExpenseEditor } from '../../../../../../components/expense-editor';
 import { ExpenseScreen } from '../../../../../../components/expense-screen';
+import { EditorFormSkeleton } from '../../../../../../components/group-skeletons';
 import { withDb } from '../../../../../../lib/db/client';
 import { getExpenseEditorData, type ExpenseEditorData } from '../../../../../../lib/expenses/queries';
 import { expenseScope } from '../../../../../../lib/expenses/validation';
@@ -19,6 +21,14 @@ export const metadata: Metadata = { title: 'Edit an expense · Tabs' };
  *
  * The id is parsed before it reaches a query, so a malformed one is the same 404 as an id from
  * another group: the guard has already answered whether this caller may see the group at all.
+ *
+ * The guard, the id parse and the redirect all happen above the `<Suspense>` boundary that this
+ * page now hands its read to, and that ordering is the contract (AC-17). The segment above this
+ * route used to carry a `loading.tsx`, which Next wrapped the page in: the form skeleton was
+ * flushed and the response's status committed before the guard had answered, so a signed-out or
+ * stranger request to this URL got HTTP 200 with a form-shaped body. A fallback below the guard
+ * cannot do that — nothing streams until the guard has thrown — and a member still watches the
+ * form arrive instead of a blank route.
  */
 export default async function EditExpensePage({
   params,
@@ -38,12 +48,27 @@ export default async function EditExpensePage({
   const scope = expenseScope.safeParse(expenseId);
   if (!scope.success) notFound();
 
+  return (
+    <Suspense fallback={<EditorFormSkeleton place={access.group.name} />}>
+      <EditExpenseBody access={access} expenseId={scope.data} />
+    </Suspense>
+  );
+}
+
+/** The read and the screen, inside the boundary — this is the part a cold navigation waits on. */
+async function EditExpenseBody({
+  access,
+  expenseId,
+}: {
+  access: Extract<GroupAccess, { status: 'ok' }>;
+  expenseId: string;
+}) {
   const data = await withDb((handle) =>
-    getExpenseEditorData(handle.db, access.group.id, scope.data, access.membership.id),
+    getExpenseEditorData(handle.db, access.group.id, expenseId, access.membership.id),
   );
   if (!data) notFound();
 
-  return <EditExpenseScreen access={access} expenseId={scope.data} data={data} />;
+  return <EditExpenseScreen access={access} expenseId={expenseId} data={data} />;
 }
 
 function EditExpenseScreen({

@@ -30,7 +30,7 @@ if ! APP_DIR="$APP" node .sdlc/bin/wait-ready.mjs --url "$URL"; then
   echo "the $SIDE app never answered: nothing recorded for it"; tail -20 "$RUN.app.log"; stop; exit 0
 fi
 
-rm -rf qa-run/tests && mkdir -p qa-run/tests && cp "$SPEC" qa-run/tests/pr-demo.spec.ts
+rm -rf qa-run/tests && mkdir -p qa-run/tests && cp "$SPEC" "qa-run/tests/$(basename "$SPEC")"
 QA_EVIDENCE_DIR="$RUN" PREVIEW_URL="$URL" DEMO_URL="$URL" \
   qa-run/node_modules/.bin/playwright test -c qa-run/playwright.config.mjs \
   || echo "the demo did not pass on $SIDE — expected where the change is new"

@@ -8,9 +8,12 @@ import { ActivityFeed, FilterChips } from '../../components/activity-feed';
 import { Card } from '../../components/ui';
 import {
   ACTIVITY_FILTER_PARAM,
+  ACTIVITY_GROUP_PARAM,
+  DEFAULT_ACTIVITY_FILTER,
   activityFilterFrom,
   listActivityGroups,
   listUserActivity,
+  type ActivityFilter,
   type ActivityGroup,
   type ActivityRow,
 } from '../../lib/activity/queries';
@@ -34,11 +37,18 @@ export const metadata: Metadata = { title: 'Activity · Tabs' };
  * The filter lives in the URL, so a chosen chip survives a reload, a shared link and the retry
  * after a failed load. An unknown value falls back to every row with the chips still rendered,
  * because a bookmark somebody hand-edited should show them a feed rather than an error.
+ *
+ * `?group=` narrows the same feed to one group (IAC-2), which is where the group page's five-row
+ * excerpt sends somebody who wants the whole story. It is applied here, on rows the caller could
+ * already read — the scope is a filter, not an authorization, and it is resolved against the
+ * caller's own groups, so an id that is not theirs simply does not narrow anything. The header
+ * says which group is showing and offers the way back to every group, because a feed that is
+ * quietly missing rows is worse than one that says what it is showing.
  */
 export default async function ActivityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ activity?: string }>;
+  searchParams: Promise<{ activity?: string; group?: string }>;
 }) {
   const query = await searchParams;
   const filter = activityFilterFrom(query[ACTIVITY_FILTER_PARAM]);
@@ -65,22 +75,48 @@ export default async function ActivityPage({
     failed = true;
   }
 
+  // The scope only exists if it names a group the caller holds a seat in; anything else — a stale
+  // link, a typo, another group's id — shows the whole feed, exactly as an unknown chip does.
+  const scoped = groups.find((group) => group.id === query[ACTIVITY_GROUP_PARAM]) ?? null;
+  const shown = scoped === null ? rows : rows.filter((row) => row.groupId === scoped.id);
+
   // Built once: the empty state's sentence and its action are one decision about one case.
-  const empty = emptyFeed(groups);
+  const empty = emptyFeed(groups, scoped);
 
   return (
     <AppShell place="Activity" viewer={{ displayName: viewer.displayName }}>
       <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-page font-semibold text-ink">Activity</h1>
-          {/* The feed is every group at once, so its way back is Home — where the groups are. */}
-          <Link
-            className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
-            href="/"
-          >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            Back to Home
-          </Link>
+        <header className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-page font-semibold text-ink">Activity</h1>
+            {/* The feed is every group at once, so its way back is Home — where the groups are. */}
+            <Link
+              className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
+              href="/"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              Back to Home
+            </Link>
+          </div>
+
+          {scoped === null ? null : (
+            <p className="text-secondary text-ink-muted">
+              Showing{' '}
+              <Link
+                className="font-medium text-accent underline-offset-4 hover:underline"
+                href={`/groups/${scoped.id}`}
+              >
+                {scoped.name}
+              </Link>{' '}
+              only.{' '}
+              <Link
+                className="font-medium text-accent underline-offset-4 hover:underline"
+                href={activityHref(filter, null)}
+              >
+                Show every group
+              </Link>
+            </p>
+          )}
         </header>
 
         {failed ? (
@@ -101,7 +137,7 @@ export default async function ActivityPage({
                 </p>
                 <Link
                   className="text-body text-accent underline underline-offset-4"
-                  href={activityHref(filter)}
+                  href={activityHref(filter, scoped?.id ?? null)}
                 >
                   Retry
                 </Link>
@@ -110,9 +146,12 @@ export default async function ActivityPage({
           </>
         ) : (
           <ActivityFeed
-            rows={rows}
+            rows={shown}
             filter={filter}
             action="/activity"
+            // A chip submits only its own form, so without this the scope would be dropped by the
+            // one control on the page that is meant to narrow the feed further.
+            preserved={scoped === null ? {} : { [ACTIVITY_GROUP_PARAM]: scoped.id }}
             showGroup
             emptyText={empty.text}
             emptyAction={empty.action}
@@ -123,30 +162,52 @@ export default async function ActivityPage({
   );
 }
 
-/** This page's own URL, carrying the filter — what a retry or a chip submits to. */
-function activityHref(filter: string): string {
-  return filter === 'all'
-    ? '/activity'
-    : `/activity?${ACTIVITY_FILTER_PARAM}=${encodeURIComponent(filter)}`;
+/**
+ * This page's own URL, carrying the filter and the scope — what a retry, a chip and the
+ * way back to every group all resolve to. Only values that are set travel, so the unscoped,
+ * unfiltered feed stays `/activity` rather than gaining two empty parameters.
+ */
+function activityHref(filter: ActivityFilter, groupId: string | null): string {
+  const params = new URLSearchParams();
+  if (groupId !== null) params.set(ACTIVITY_GROUP_PARAM, groupId);
+  if (filter !== DEFAULT_ACTIVITY_FILTER) params.set(ACTIVITY_FILTER_PARAM, filter);
+
+  const search = params.toString();
+  return search === '' ? '/activity' : `/activity?${search}`;
 }
 
 /** The shared look of the two links an empty feed can offer. */
 const FEED_LINK = 'text-body text-accent underline underline-offset-4';
 
 /**
- * Why the feed is empty, in the three cases that would otherwise read identically (TR-11).
+ * Why the feed is empty, in the cases that would otherwise read identically (TR-11).
  *
  * "Nothing has happened yet" and "you are not in a group" call for different next steps, and a
  * viewer whose every group is archived is looking at a fourth thing again: history that exists
- * but can no longer grow. Each case therefore gets its own sentence *and* its own action — the
- * one thing that actually helps from there, rather than one shared "go home" link under three
- * different reasons. The filter is not one of these — a filtered-empty feed says so itself
- * inside the component, because that is the only case the chips can fix.
+ * but can no longer grow. A scoped feed has its own answer, because the reader is looking at one
+ * group and the reason there is nothing in it is about that group and not about the others. Each
+ * case therefore gets its own sentence *and* its own action — the one thing that actually helps
+ * from there, rather than one shared "go home" link under three different reasons. The filter is
+ * not one of these — a filtered-empty feed says so itself inside the component, because that is
+ * the only case the chips can fix.
  *
  * The sentence is one reason followed by its consequence, which is the shape the feed sets: the
  * first sentence becomes the empty state's title and the rest its body.
  */
-function emptyFeed(groups: ActivityGroup[]): { text: string; action: ReactNode } {
+function emptyFeed(
+  groups: ActivityGroup[],
+  scoped: ActivityGroup | null,
+): { text: string; action: ReactNode } {
+  if (scoped !== null) {
+    return {
+      text: `Nothing has been recorded in ${scoped.name} yet. Activity from your other groups is on the full feed.`,
+      action: (
+        <Link className={FEED_LINK} href="/activity">
+          Show every group
+        </Link>
+      ),
+    };
+  }
   if (groups.length === 0) {
     return {
       text: 'You are not in a group yet. Activity appears here once you create one or join somebody else’s.',

@@ -345,12 +345,15 @@
     "components/timestamp.tsx",
     "components/activity-feed.tsx",
     "app/activity/page.tsx",
+    "lib/activity/queries.ts",
     "lib/groups/validation.ts",
     "lib/dates.ts",
+    "components/groups-panels.tsx",
     "lib/dates.test.ts",
     "app/groups/[id]/loading.test.ts",
     "app/groups/[id]/expenses/loading.test.ts",
-    "lib/groups/validation.test.ts"
+    "lib/groups/validation.test.ts",
+    "components/groups-panels.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

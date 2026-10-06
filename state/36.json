@@ -475,6 +475,20 @@
         "severity": "minor",
         "category": "design",
         "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "The restyled per-member include switch shrank its touch target below the ui.md 44px minimum: the label carries no min-height and the visible track is h-6 (24px tall), where the control it replaces sat in a min-h-11 (44px) label.",
+        "detail": "The restyled per-member include switch shrank its touch target below the ui.md 44px minimum: the label carries no min-height and the visible track is h-6 (24px tall), where the control it replaces sat in a min-h-11 (44px) label.\n\n`components/expense-editor.tsx:131`\n\nEvidence: PR branch components/expense-editor.tsx:131 renders <label class=\"relative inline-flex shrink-0 cursor-pointer items-center\"> around an sr-only checkbox and an h-6 w-11 track, so the hit area is 24px tall; the replaced markup used <label class=\"flex min-h-11 items-center gap-2\">. ui.md Density requires touch targets of at least 44px.\n\nFix: Give the IncludeSwitch label a 44px hit area (e.g. min-h-11 min-w-11 justify-center, or padding around the track) while keeping the checkbox-underneath payload exactly as is.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/expense-editor.tsx"
+      },
+      {
+        "title": "Refused payment submissions now invalidate the home and activity caches although nothing changed: revalidateBalances(outcome.groupId) runs for every outcome with groupId undefined on refusals, and the undefined branch still calls revalidatePath('/') and revalidatePath('/activity'). Before, refusals returned early without revalidating anything.",
+        "detail": "Refused payment submissions now invalidate the home and activity caches although nothing changed: revalidateBalances(outcome.groupId) runs for every outcome with groupId undefined on refusals, and the undefined branch still calls revalidatePath('/') and revalidatePath('/activity'). Before, refusals returned early without revalidating anything.\n\n`lib/settle/actions.ts:215`\n\nEvidence: PR branch lib/settle/actions.ts:123-130 makes groupId optional and always revalidates '/' and '/activity'; calls at :215 and :279 run unconditionally after withDb. Old code called revalidateBalances(access.group.id) only on the two success paths. Full suite passes either way (466 tests), so this is cache churn, not wrong data.\n\nFix: Only revalidate when something changed, e.g. gate the call on outcome.groupId being set, restoring the previous refusal behavior exactly.",
+        "severity": "minor",
+        "category": "other",
+        "file": "lib/settle/actions.ts"
       }
     ],
     "pr": "43",

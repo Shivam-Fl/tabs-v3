@@ -5,7 +5,8 @@ import type { ReactNode } from 'react';
 import { ChevronDown, Plus, ReceiptText, SlidersHorizontal } from 'lucide-react';
 import { ActivityRows } from '../../../components/activity-feed';
 import { AppShell } from '../../../components/app-shell';
-import { ExpenseRowMenu, GroupSettingsEntry } from '../../../components/group-page';
+import { ExpenseRowMenu } from '../../../components/expense-row-menu';
+import { GroupSettingsEntry } from '../../../components/group-page';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
 import { ExpenseDate } from '../../../components/timestamp';
 import {
@@ -54,6 +55,14 @@ import { formatMinorUnits } from '../../../lib/money/format';
 import { computeNetBalances, type MemberBalance } from '../../../lib/settle/balances';
 import { listPayments, type PaymentRow } from '../../../lib/settle/queries';
 import { simplifyDebts, type Transfer } from '../../../lib/settle/simplify';
+import {
+  PAYMENT_NOTICE_FROM_PARAM,
+  PAYMENT_NOTICE_PARAM,
+  PAYMENT_NOTICE_TO_PARAM,
+  directedRemainderMinor,
+  paymentNoticePair,
+  paymentNoticeText,
+} from '../../../lib/settle/validation';
 
 export const metadata: Metadata = { title: 'Group · Tabs' };
 
@@ -102,6 +111,12 @@ export default async function GroupPage({
     section?: string;
     archived?: string;
     expense?: string;
+    // A just-recorded or just-deleted payment lands here carrying the outcome and the pair it was
+    // about (ADR-0008); the section the reader was on is not part of that URL, which is why the
+    // notice's slot is on the summary card rather than inside the Balances panel.
+    payment?: string;
+    from?: string;
+    to?: string;
     member?: string;
     category?: string;
     q?: string;
@@ -169,13 +184,42 @@ export default async function GroupPage({
 
   // The simplification is arithmetic on the numbers above, not another read: it is the same call
   // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
+  // It is computed once here rather than at the call below because the payment notice needs it too.
+  const transfers = simplifyDebts(ledger.balances);
+
+  // What a just-recorded or just-deleted payment has to say (AC-6, ADR-0008). The flag rides the
+  // redirect's query, and so does the pair it was about — because the sentence names what is still
+  // owed *between those two*, and that is a fact about the balances, not about the form that
+  // submitted. Both ids have to be seats of this group, in the same read the balances came from:
+  // anything else renders nothing at all, exactly as a forged flag does, so a hand-written URL
+  // cannot put a sentence about two strangers on somebody's screen. The remainder is recomputed
+  // here through the same simplification the suggested payments use, so the notice and the row
+  // under it can never disagree about who owes whom.
+  const seatIds = new Set(ledger.balances.map((balance) => balance.membershipId));
+  const paymentPair = paymentNoticePair(
+    { from: query[PAYMENT_NOTICE_FROM_PARAM], to: query[PAYMENT_NOTICE_TO_PARAM] },
+    seatIds,
+  );
+  const paymentNotice =
+    paymentPair === null
+      ? null
+      : paymentNoticeText(
+          query[PAYMENT_NOTICE_PARAM],
+          directedRemainderMinor(
+            transfers,
+            paymentPair.fromMembershipId,
+            paymentPair.toMembershipId,
+          ),
+          access.group.currency,
+        );
+
   return (
     <GroupDetail
       access={access}
       expenses={ledger.expenses}
       members={ledger.members}
       balances={ledger.balances}
-      transfers={simplifyDebts(ledger.balances)}
+      transfers={transfers}
       payments={ledger.payments}
       filters={filters}
       section={section}
@@ -184,6 +228,7 @@ export default async function GroupPage({
       retryHref={tabHref(groupId, section, filters)}
       justArchived={query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE}
       expenseNotice={expenseNoticeText(query[EXPENSE_NOTICE_PARAM])}
+      paymentNotice={paymentNotice}
     />
   );
 }
@@ -233,6 +278,7 @@ function GroupDetail({
   retryHref,
   justArchived,
   expenseNotice,
+  paymentNotice,
 }: {
   access: Extract<GroupAccess, { status: 'ok' }>;
   expenses: ExpenseListRow[];
@@ -247,6 +293,7 @@ function GroupDetail({
   retryHref: string;
   justArchived: boolean;
   expenseNotice: string | null;
+  paymentNotice: string | null;
 }) {
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
@@ -386,6 +433,23 @@ function GroupDetail({
             </p>
             <p className="text-secondary text-ink-muted">{heroNote}</p>
           </div>
+
+          {/* This card's own slot, and the only one a payment notice is ever rendered in (AC-6):
+              recording or deleting a payment redirects to this page with the outcome and the pair
+              it was about, and the row that held the form — with the region that would have
+              announced it — is gone by then. The expense notice above has its own slot for the same
+              reason, and neither borrows the other's. It sits on the summary card rather than in
+              the Balances panel because the redirect names no section: the reader lands on the
+              default tab and must still be told what just happened. */}
+          {paymentNotice ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="rounded-token border border-border bg-surface p-3 text-secondary text-lent"
+            >
+              {paymentNotice}
+            </p>
+          ) : null}
 
           {transfers.length === 0 ? (
             // Zero is neutral and says so in words: a settled group must never read as a debt.

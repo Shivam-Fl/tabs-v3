@@ -19,6 +19,7 @@ import {
   indexedRows,
   parseExpenseInput,
 } from './validation';
+import { splitValueText } from '../money/splits';
 
 /**
  * The expense boundary, proved without a database (TR-8, TR-4).
@@ -208,6 +209,75 @@ describe('parseExpenseInput', () => {
     expect(result.draft.splits).toEqual([
       { membershipId: ADa, included: true, value: 3 },
       { membershipId: BO, included: false, value: 5 },
+    ]);
+  });
+});
+
+describe('a member left out of a split, at the boundary (T-4, AC-9)', () => {
+  /**
+   * The T-4 form as the browser sends it: an exact split of 100.00, Ada covering the whole amount
+   * and Bo taken out of the split. `secondValue` is the one thing that varies — the text sitting
+   * in Bo's field when the form is submitted, or `undefined` for the field being absent entirely.
+   */
+  const t4 = (secondValue: string | undefined): FormSpec =>
+    validSpec({
+      amount: '100.00',
+      splitType: 'exact',
+      payers: [{ membershipId: ADa, amount: '100.00' }],
+      splits: [
+        { membershipId: ADa, included: true, value: '100' },
+        { membershipId: BO, included: false, value: secondValue },
+      ],
+    });
+
+  it('keeps the value typed beside the member who was taken out', () => {
+    // The value was lost at submit, never at read-back: the excluded row arrives carrying its 40,
+    // and the boundary stores it as typed — the same contract the shares case above proves.
+    const result = parse(t4('40'));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.splits).toEqual([
+      { membershipId: ADa, included: true, value: 10000 },
+      { membershipId: BO, included: false, value: 4000 },
+    ]);
+
+    // And the reopen prints that stored number back. lib/expenses/queries.ts renders the row as
+    // splitValueText(type, inputValue ?? null), so the unit the person typed '40' in comes out as
+    // '40.00' — the box AC-9 requires to be filled rather than blank.
+    expect(splitValueText('exact', result.draft.splits[1].value)).toBe('40.00');
+  });
+
+  it('reopens blank when the row submits nothing, which is the trap a disabled input springs', () => {
+    // A disabled control contributes no entry at all, so this form is byte-identical to one where
+    // nobody ever typed into the row. The boundary cannot tell the two apart — it reads '' and
+    // stores null — which is why the number has to survive on the client.
+    const result = parse(t4(undefined));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.splits[1]).toEqual({ membershipId: BO, included: false, value: null });
+    expect(splitValueText('exact', result.draft.splits[1].value)).toBe('');
+  });
+
+  it('leaves an equal split without per-member values, as it always was', () => {
+    // Equal rows have no value input to disable or protect, so the fix cannot reach them: the
+    // editor renders none, the form carries none, and the draft is what it has always been.
+    const result = parse(
+      validSpec({
+        splitType: 'equal',
+        splits: [
+          { membershipId: ADa, included: true },
+          { membershipId: BO, included: true },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.splits).toEqual([
+      { membershipId: ADa, included: true, value: null },
+      { membershipId: BO, included: true, value: null },
     ]);
   });
 });

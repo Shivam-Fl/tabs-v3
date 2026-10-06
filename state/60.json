@@ -227,5 +227,142 @@
       "Unexercised unless QA adds them: two 80-char names in one transfer, CJK/emoji/symbol-only 80-char names, more than TRANSFER_LINES long-name transfers, and a very wide amount beside a long name.",
       "Other tabs of the group page (Balances, Activity, Members) may be wider than 375px with an 80-char seat name; not in QA's report and out of scope, to be filed if found."
     ]
-  }
+  },
+  "approved_work_order": {
+    "issue": 60,
+    "version": 2,
+    "kind": "bug",
+    "mode": "committed",
+    "reproduced": true,
+    "understanding": "Issue #60 holds two QA follow-ups from PR #56 and says to re-check each before planning. Both were MEASURED in headless Chromium at 375x812 against a production build of current main (47b6b90), served on a spare port from a scratch copy of the repo. Item 2 REPRODUCES: after signing up, creating a group, adding a placeholder seat named 'z' x 80 on the members page and adding a 120 equal-split expense paid by the viewer, /groups/<id> reads documentElement.scrollWidth 740 vs clientWidth 375 (QA's 753 differs only by font/OS metrics); the only element whose right edge exceeds the viewport inside the card is the transfer row's name span (class `text-body text-lent`, right edge 739.9px; the other two elements past 376 are the tab strip's `li.shrink-0`/`a`, which sit in a horizontally scrolling strip and do not set the document width). Applying `min-w-0 break-words` to that span and `ml-auto` to the amount span in the live DOM brings the same page to 375 vs 375, and the screenshot shows the name wrapped over three lines inside the card with the amount '₹60.00' right-aligned beneath it. Item 1 does NOT reproduce: on the same build at 375px, with the owner's remove confirm expanded on the members page, scrollWidth is 375 vs 375 for a short seat ('Bo') and for an 80-char seat alike, and the screenshot shows the panel floating over the rows below with the question wrapping and naming member and group in full. The ticket's 'in-flow w-64' describes the build before #56's final round: components/groups-panels.tsx:692 now renders the panel as `absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-3rem)]` inside `details.relative.shrink-0`, asserted by app/overflow-wrap.test.ts. Item 1 is dropped. Source for item 2: app/groups/[id]/page.tsx:546-550 renders `transferWords(transfer, membership.id)` ('<80 z's> owes you') in a span with no wrap treatment inside `li.flex.flex-wrap.items-baseline.justify-between`; transferWords is defined at :1040 and called only at :549.",
+    "root_cause": "The name span in the summary card's transfer row is a flex item whose automatic minimum width equals its min-content (the whole unbroken 80-character name); overflow-wrap cannot lower that floor, so the row, the Card and the document grow past the viewport.",
+    "approach": "One-element class fix. On the name span add `min-w-0 break-words`: the long name's max-content exceeds the container so it takes its own line of the flex-wrap row, flex-shrink then shrinks it to the container because its min-width is 0, and break-words breaks the unbroken name inside it. `min-w-0` is required because overflow-wrap alone does not reduce a flex item's automatic minimum size (conventions.md). On the amount span add `ml-auto` so that when the name takes a line to itself the amount sits right-aligned beneath it, as ui.md requires for amounts in lists (justify-between leaves a lone item flush left); with the name and amount on one line ml-auto is a no-op. Short names render identically. Sentences wrap rather than truncate (conventions.md: only list rows truncate), so the direction words stay readable. No shared component changes. The exact class set was verified in the live DOM before planning (740 -> 375, see understanding), so the fix is not a guess. Add a source-level regression test next to the page (the page is an async Server Component starting with a session read, so nothing renders it; amounts-tabular.test.ts is the precedent and documents the limit) and state plainly that pixel width is proven only by the browser AC. Item 1 is dropped on the measurement above; AC-5 has QA re-confirm it on a verified-current build.",
+    "files": [
+      {
+        "path": "app/groups/[id]/page.tsx",
+        "action": "edit",
+        "change": "In the summary card transfer list (~lines 546-557): change the name span className from `text-body ${directionTone(transfer, membership.id)}` to `min-w-0 break-words text-body ${directionTone(transfer, membership.id)}`, and the amount span (the one with data-amount) className from `font-semibold tabular-nums ${directionTone(transfer, membership.id)}` to `ml-auto font-semibold tabular-nums ${directionTone(transfer, membership.id)}`. Leave the li and everything else untouched. Optionally a one-line comment: min-w-0 because overflow-wrap cannot lower a flex item's automatic min-content size; ml-auto keeps the amount right when the name takes the line.",
+        "why": "This is the element the measurement identified (span.text-body.text-lent, right edge 739.9px) and the only member-name sentence in the default tab without wrap treatment; ml-auto keeps the amount right-aligned per docs/ui.md when the row wraps."
+      }
+    ],
+    "tests": [
+      {
+        "path": "app/groups/[id]/transfer-line-wrap.test.ts",
+        "action": "create",
+        "cases": [
+          "page.tsx source: the opening tag of the span wrapping `{transferWords(transfer, membership.id)}` has `min-w-0` and `break-words` in its className (located by reading back from that call to the previous `<span`, scanning the template-literal className like amounts-tabular.test.ts's classesAt)",
+          "the same span still carries `text-body` and the `directionTone(transfer, membership.id)` interpolation, so direction colour is not lost",
+          "the amount span of the transfer row is located with source.indexOf('data-amount', indexOf of the transferWords call) so the hero's earlier data-amount is not read; it keeps `tabular-nums` and `font-semibold` and gains `ml-auto`",
+          "the string `{transferWords(` occurs exactly once in the page source (the function definition `function transferWords(` is not counted), guarding that the one fixed call site is the only one"
+        ]
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "With a placeholder seat named 'z' x 80 who owes the viewer money (seat added, expense of 120 split equally and paid by the viewer), the group page /groups/<id> at a 375px viewport has documentElement.scrollWidth <= clientWidth (was 740 vs 375 on main). The same scrollWidth <= clientWidth reading also holds on the Balances, Activity and Members tabs of that group page.",
+        "verify": "browser",
+        "how_to_verify": "Confirm the server serves the branch build first (build-id probe in qa/environment.md, or a fresh build on a spare port). Sign up, create a group, add a seat named 'z' x 80 on the members page, add expense 120 equal split paid by you, open /groups/<id> at 375x812 and read document.documentElement.scrollWidth and clientWidth. Then open the Balances, Activity and Members tabs of the same group and read the same two values on each (a pass/fail line, not a side report)."
+      },
+      {
+        "id": "AC-2",
+        "check": "The long transfer line names its member in full ('<80 z's> owes you' present unclipped, wrapped across lines, no ellipsis) and the amount (e.g. ₹60.00) is visible and right-aligned within the card, whether beside or beneath the name.",
+        "verify": "browser",
+        "how_to_verify": "Same page as AC-1; read the summary card's transfer li text content, take a 375px screenshot, and check the amount span's right edge sits at the card content's right edge."
+      },
+      {
+        "id": "AC-3",
+        "check": "With ordinary names (a short one like 'Bo' and a 25-30 character one) the transfer line renders as before: name words left and amount right on one row where they fit, direction colour unchanged (text-lent for 'owes you', text-owed for 'You owe'); the reverse direction ('You owe <80 z's>') also fits 375px. A ~60-character name made of words (wraps at spaces) and a name measured to land just under the container width (name on line one, amount wrapped beneath) both keep the amount right-aligned.",
+        "verify": "browser",
+        "how_to_verify": "Seat 'Bo' owing 60, compare the summary row at 375px and 1280px. Repeat with a ~28-char name. Then have the seat pay an expense so the viewer owes the 80-char seat and read scrollWidth vs clientWidth. Also a ~60-char multi-word name, and a length tuned at 375px so the name fits on the first line but the amount wraps; confirm the amount sits at the right edge."
+      },
+      {
+        "id": "AC-4",
+        "check": "The new source-level test passes on the fixed page and fails when `break-words`, `min-w-0` or `ml-auto` is removed; typecheck, test:ci and build (sdlc:verify) pass.",
+        "verify": "test",
+        "how_to_verify": "npm run sdlc:verify; temporarily drop each class and run the new test to see it fail."
+      },
+      {
+        "id": "AC-5",
+        "check": "Ticket item 1 stays not reproducing on a build of this branch: with the remove confirm expanded on the members page at 375px, scrollWidth <= clientWidth for a short and an 80-char name, and the question still names member and group in full.",
+        "verify": "browser",
+        "how_to_verify": "On a verified-current build (not a stale :3000 preview), sign up, create a group, add a seat, open its overflow menu ('Actions for <name>'), press Remove, read scrollWidth vs clientWidth at 375px (expect 375/375, as measured on main by the planner). Report as not reproducing; no code change is expected. A 390 on a stale preview is an environment finding, not a regression."
+      }
+    ],
+    "qa_script": [
+      "First confirm the server under test serves this branch's build (build-id probe from qa/environment.md, or serve a fresh build on a spare port).",
+      "Sign up a fresh account and create a group (any name, INR).",
+      "On the members page add a seat named 'z' repeated 80 times.",
+      "Add an expense of 120 split equally between you and that seat, paid by you.",
+      "At 375x812 open /groups/<id> (default Expenses tab); read document.documentElement.scrollWidth and clientWidth (expect scrollWidth <= clientWidth; main reads 740/375) and the summary card's transfer row text (full 80-char name plus 'owes you', amount ₹60.00 visible and right-aligned).",
+      "Open the Balances, Activity and Members tabs at 375px and read scrollWidth vs clientWidth on each; expect <= clientWidth (source reading says those surfaces already truncate or break-words). Report any width above 375 as a new finding naming the widest element rather than fixing it here.",
+      "Reverse direction: add an expense paid by the 80-char seat so the viewer owes it; confirm the 'You owe <name>' row fits 375px.",
+      "Repeat with a short seat name ('Bo') and a ~28-char name: one row, name left, amount right at 375px and 1280px.",
+      "Item 1 re-check: on /groups/<id>/members at 375px open the seat's overflow menu ('Actions for <name>'), press Remove, read scrollWidth vs clientWidth with the confirm expanded (expect 375/375 for a short and an 80-char seat), then Cancel.",
+      "Optionally repeat the AC-1 read at 320px."
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Also rework MemberRow's remove-confirm geometry (narrower panel or full-width sheet) for item 1.",
+        "rejected_because": "Measured not reproducing on main (375/375 with a short and an 80-char seat); the panel is already absolute (groups-panels.tsx:692, asserted by app/overflow-wrap.test.ts) and the ticket says to drop items that no longer reproduce."
+      },
+      {
+        "approach": "A shared NameText component or break-words/min-w-0 added to ListRow/Card for every name on the page.",
+        "rejected_because": "One call site is wrong; ListRow already truncates with the full value in title. An abstraction with one caller is unwarranted, and page-wide overflow-x:hidden would clip content."
+      },
+      {
+        "approach": "`truncate` plus `title` on the transfer-words span like list rows.",
+        "rejected_because": "The line is a sentence whose point is who owes whom; ellipsis could clip the direction words. conventions.md: sentences wrap, list rows truncate."
+      },
+      {
+        "approach": "`break-words` without `min-w-0`.",
+        "rejected_because": "overflow-wrap does not lower a flex item's automatic min-content width, so the page would stay wide (conventions.md, issue #49's replan)."
+      },
+      {
+        "approach": "Extract the transfer row into a small component so renderToStaticMarkup can render it in the test.",
+        "rejected_because": "Would add a component and a refactor for a one-span fix; renderToStaticMarkup proves classes, not pixel width, so it buys little over the source-level precedent. Width is proven by AC-1."
+      }
+    ],
+    "assumptions": [
+      "The 740 vs QA's 753 difference is font/OS metrics (local Chromium 154 on Linux); both are the same overflow from the same element.",
+      "Wrapping the amount under the name on narrow screens is accepted for the degenerate 80-char case (the screenshot with the fix applied shows it reads cleanly).",
+      "The tab strip's li.shrink-0 and a (right edge 454px) sit in an overflow-x scrolling container and do not affect the document width: after the fix scrollWidth is exactly 375."
+    ],
+    "unknowns": [
+      "Whether the Activity and Members tabs of the group page widen at 375px with an 80-char seat name; not in QA's report, not measured here, outside this ticket (the QA walk reads and reports them).",
+      "Exact pixel result on the pipeline's own build: the planner's build is production main in headless Chromium 154 via playwright-core, not the pipeline's QA browser."
+    ],
+    "risks": [
+      "A source-level test is brittle to JSX reformatting and cannot detect width; it locates the span by the transferWords call, states its limit in its header, and AC-1 is the only proof of pixel width in the PR.",
+      "The summary card's long names wrap while Balances-tab list rows truncate; intentional per conventions.md but QA might note the inconsistency.",
+      "conventions.md's note that the #55 follow-ups are in flight is the Librarian's to update; no .sdlc/memory, docs or .github path is touched.",
+      "frontend-design's rule 'truncate long names, never wrap a row into three lines' is deliberately not followed on this one sentence: the direction words ('owes you') come after the name, so truncating would hide who owes whom; conventions.md sets the exception (sentences wrap, list rows truncate). Review should not reopen it."
+    ],
+    "out_of_scope": [
+      "Re-implementing the members-page remove-confirm overlay (already on main, measured fitting).",
+      "Any other long-name surface not named in the ticket, including other tabs found wide during the QA walk.",
+      "Changes to shared components in components/ui.tsx."
+    ],
+    "evidence": [
+      "MEASURED on production build of main 47b6b90, headless Chromium at 375x812 (repo copy in $TMPDIR since node_modules in the checkout is a locked mount; playwright-core driving /usr/bin/chromium): group page with 80-z seat owing the viewer reads scrollWidth 740 / clientWidth 375; widest in-card element is span.text-body.text-lent with right edge 739.9px.",
+      "MEASURED fix: adding `min-w-0 break-words` to that span and `ml-auto` to the amount span in the live DOM gives scrollWidth 375 / clientWidth 375; screenshot shows the name wrapped in 3 lines inside the summary card, '₹60.00' right-aligned beneath, 'Add expense' and 'Settle up' unchanged.",
+      "MEASURED item 1 on the same build: members page with the remove confirm expanded, short seat 'Bo' -> 375/375; 80-char seat -> 375/375; screenshot shows the absolute panel over the rows below, question 'Remove <80 z's> from \"Flat\"?' wrapping in full with Remove member and Cancel buttons.",
+      "components/groups-panels.tsx:692 — `absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-3rem)]` panel inside details.relative.shrink-0; app/overflow-wrap.test.ts:317-321 asserts the owner's confirm panel contains `absolute`.",
+      "app/groups/[id]/page.tsx:541-557 — transfer li `flex flex-wrap items-baseline justify-between gap-2`; name span `text-body ${directionTone(...)}` with no break-words/min-w-0; amount span has no ml-auto.",
+      "grep: transferWords is defined at page.tsx:1040 and called only at page.tsx:549.",
+      "docs/ui.md:77 — amount right-aligned in list rows; conventions.md:27-32 — names wrap with break-words and min-w-0 at each flex level.",
+      "qa/environment.md — the :3000 preview lags the branch, so a stale build can still show 390 for item 1.",
+      "Arbiter source read of the other name surfaces on the group page: Balances ListRow title uses `truncate` inside `flex min-w-0` (page.tsx ~777), Members ListRow title goes through ListRow's truncate span, Activity rows use `min-w-0 break-words`; none is a sibling of the unwrapped span, so the single-span fix is the whole of item 2.",
+      "Arbiter check: `transferWords(` matches twice in page.tsx (call :549, definition :1040), and the first data-amount is the hero at :503, so the test must count `{transferWords(` and locate the transfer amount after the call."
+    ],
+    "confidence": 93,
+    "confidence_rationale": "The failing element, the exact class fix and item 1's non-reproduction were all measured in a browser on current main (740 -> 375; 375/375); call-site uniqueness and the idiom are verified in source. Not higher because the Activity/Members tabs and exotic names (CJK, two long names in one transfer) were not exercised, and the planner's browser is not the pipeline's QA browser.",
+    "debate_summary": "This is the replan after plan-review rejected v1 for reproduced=false. The proposer now measured both items in headless Chromium on current main: item 2 reproduces (740 vs 375, widest in-card element the transfer name span; the fix class set brings it to 375/375), item 1 does not (375/375 with short and 80-char names; the panel is already absolute at groups-panels.tsx:692). I re-read the source and it agrees with those measurements; I did not re-run the browser. The critic called the plan sound with three minor findings, all accepted and folded in: (1) the test's once-only case would miscount because `transferWords(` appears in the definition too, and the first data-amount is the hero's, so the test now counts `{transferWords(` and finds the amount after the call; (2) AC-1 now explicitly includes the other three tabs as pass/fail, with the source reading of those surfaces (already truncate/break-words) recorded as evidence; (3) the frontend-design skill's no-three-line-wrap rule is recorded in risks as a deliberate sentence exception. Missed edge cases: the spaced ~60-char name and the just-under-width boundary name are added to AC-3; 320px is an optional QA step; two-long-names, CJK/emoji and >3 transfers stay residual since the same two classes govern them. Nothing was dismissed wholesale; the critic and proposer did not disagree on diagnosis. No decision in brief.md applied (none recorded). Item 1 is dropped as not reproducing, as the ticket instructs.",
+    "residual_risks": [
+      "Pixel width is proven in the PR only by the browser ACs; the unit test checks class names.",
+      "Unexercised unless QA adds them: two 80-char names in one transfer, CJK/emoji/symbol-only 80-char names, more than TRANSFER_LINES long-name transfers, and a very wide amount beside a long name.",
+      "Other tabs of the group page (Balances, Activity, Members) may be wider than 375px with an 80-char seat name; not in QA's report and out of scope, to be filed if found."
+    ]
+  },
+  "approved_too_high": false
 }

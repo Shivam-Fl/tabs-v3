@@ -32,6 +32,7 @@ import { readLedger, updateLedger } from './lib/state-io.js';
 import { checkBudget, failedAttempt } from './lib/ledger.js';
 import { resolveStage, retryHint } from './lib/flow-graph.js';
 import { readWorkOrder } from './lib/work-order.js';
+import { classifyRollup, checkName } from './lib/checks.js';
 
 const repo = process.env.GITHUB_REPOSITORY ?? die('GITHUB_REPOSITORY is not set');
 const stage = process.env.STAGE ?? die('STAGE is required: the stage that failed, as the flow graph names it');
@@ -170,20 +171,23 @@ async function collectRaw() {
     if (note) parts.push(note);
   }
 
-  // The failing checks on the PR, whoever ran them — ours or the repo's own. This is what
-  // makes the loop work on a repo with existing CI, which is most of them.
+  // The failing checks that gate the PR, whoever ran them — ours or the repo's own. This is what
+  // makes the loop work on a repo with existing CI, which is most of them. Only the gating ones,
+  // as the gate decides them (lib/checks.js): tabs-v3 #55's QA agent was refused by a bad token,
+  // and the packet named the Vercel preview's rate limit — a status nothing gates on, printed as
+  // check "undefined" — so root-cause blamed Vercel for a stage that never needed it.
   if (pr) {
     const rollup = await ghJson(['pr', 'view', String(pr), '--json', 'statusCheckRollup'])
       .then((d) => d.statusCheckRollup ?? []).catch(() => []);
     const failedRuns = new Set();
-    for (const c of rollup) {
+    for (const c of classifyRollup(rollup, cfg).wanted) {
       const bad = /^(FAILURE|ERROR|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STARTUP_FAILURE)$/i
         .test(String(c.conclusion ?? c.state ?? ''));
       if (!bad) continue;
       const id = String(c.detailsUrl ?? c.targetUrl ?? '').match(/\/actions\/runs\/(\d+)/)?.[1];
       if (id) failedRuns.add(id);
       if (id) failingCheckRun ??= id;
-      else parts.push(`check "${c.name}" reported ${c.conclusion ?? c.state} and has no Actions log to read`);
+      else parts.push(`check "${checkName(c)}" reported ${c.conclusion ?? c.state} and has no Actions log to read`);
     }
     for (const id of failedRuns) {
       const log = await gh(['run', 'view', id, '--log-failed']).catch(() => '');

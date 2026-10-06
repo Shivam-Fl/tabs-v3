@@ -1028,7 +1028,8 @@
         "suspected_cause": "Suspense/loading.tsx streaming: resolved content streams into a hidden container that only hydration-time scripts reveal, so it never reveals without JS. Pre-existing app-wide pattern (members page, same layout, untouched by this PR); the new group loading.tsx follows the same convention.",
         "title": "No-JS group and member pages show only the loading skeleton while page content sits hidden"
       }
-    ]
+    ],
+    "filed": 58
   },
   "qa": {
     "verdict": "pass",

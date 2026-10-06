@@ -1,81 +1,81 @@
-# Roadmap (survey 2026-10-05)
+# Roadmap (survey 2026-10-06)
 
-Rebuilt from what is actually open: issues #24, #31, #33, #34, #35, #36,
-#37, #38, #39; PR #40; recently closed #1, #3, #4, #5, #6, #7, #8
-(+ follow-ups #10, #13, #15, #18, #21, #26, #29). No untrusted entries.
-Previous roadmap was `maintainer/roadmap.md`; this rebuild starts from the
-repo as it stands, under the recorded decisions on #31–#37 (replan-project
-by @Shivam-Fl): UI redesign only — stack, data model, money rules, TRs and
-every other decision stay exactly as they are, and docs/ui.md is approved
-as written.
+Rebuilt from what is actually open: issues #24, #31, #35, #49, #52;
+PRs #46, #53; recently closed #33, #34, #36, #37, #38, #39, #41, #47, #50
+(+ earlier v1 slices #3–#8 with follow-ups #10, #13, #15, #18, #21, #26, #29).
+No untrusted entries. Under the recorded decisions on #31/#35
+(replan-project by @Shivam-Fl): UI redesign only — stack, data model, money
+rules, TRs and every other decision stay exactly as they are, and docs/ui.md
+is approved as written; and the replan on #49 (fix the width where it comes
+from — headings/breadcrumbs, not the notices; acceptance criteria stand).
 
 ## Shipped
 
 What a user can do now that they could not before:
 
-- Boot the app with one command on the embedded database and prove it is
-  alive via the health endpoint.
-- Sign up, sign in and sign out with email and password; keep a profile
-  with display name and default currency.
-- Create groups with currency and type, invite by link (disable/rotate),
-  add placeholder members and claim them on join, rename/remove/archive as
-  owner; removal and leave are blocked by a non-zero balance.
-- Record expenses with description, amount, date, one or many payers, all
-  four split types with validation naming the shortfall and its size,
-  remainder to the first payer, member/category filter and description
-  search, newest first; edit and delete commit atomically with activity rows.
-- See per-group net balances with simplified who-pays-whom (at most N-1
-  transfers), cross-group you-owe/you-are-owed totals on Home, and record
-  full/partial settle-up payments that appear in the feed and settle to an
-  explicit all-zero state.
-- Follow per-group and cross-group activity (expense added/edited/deleted
-  with structured before/after, payments, member join/leave/remove), seed
-  QA data covering every split type plus a multi-payer expense, payments
-  and a placeholder, and deploy from scratch via the README guide.
+- Use one consistent app shell on every signed-in page (Tabs mark to Home,
+  current place, account menu with Profile and Sign out), with a way back
+  from every nested page; signing in lands on Home, and no developer
+  artefacts are linked or shown anywhere.
+- Read a real landing page that explains Tabs and leads to sign up / sign in.
+- See Home as a balance summary with the key number as hero, people owed /
+  owing with avatars, and groups as rich rows with the primary action obvious.
+- Edit expenses amount-first with sensible defaults (paid by me, split
+  equally), a segmented split-type control with live per-member shares,
+  multi-payer inputs revealed only when needed, styled controls, sticky save
+  and cancel; settle up from a sheet with the suggested amount prefilled and
+  editable; row actions in an overflow menu with destructive choices
+  confirming by name.
+- Manage members, read per-group and cross-group activity, and keep a profile
+  with display name and default currency, with human dates carrying their
+  absolute day, times in the viewer zone, zero balances neutral, direction
+  always in words and colour, designed empty/loading/error states, 44px touch
+  targets, keyboard, focus and reduced-motion rules holding at 375px
+  and 1280px; archived groups read-only with blocked leave linking to settle.
+- Retry a refused expense save quietly, with the form state kept as set.
 
 ## In flight
 
-- #33 Foundation, app shell, landing page and auth screens — PR #40 open
-  (`sdlc/issue-33`, ready, not draft). The tokens, Inter via next/font,
-  lucide-react, and the shared component set this piece defines are what
-  every later slice consumes unchanged.
-- #34 Home dashboard, #35 Group page, #36 Expense editor and settle-up
-  sheet, #37 Members/activity/profile sweep — open, each `Depends on #33`,
-  so parked until #33 closes. Neither PR nor work has started on them.
-- #38 No-dev-artefacts sweep and #39 sign-in-lands-on-Home plus shell
-  acceptance — deferred from #33 by its work order, labelled `sdlc:blocked`,
-  each `Depends on #33`. Small close-outs of #33, not separate builds.
-- #24 Spec coverage — open tracking issue, not work. It still names the
-  retired epic #1 slices (#3–#8); its rows flip to the #31 slices as they
-  land. Nothing to action from it.
-- Nothing has sat long enough to call stalled: #33–#39 were filed today
-  and PR #40 is the current review.
+- #35 Group page with sections, expenses list and settings entry — PR #46
+  open (`sdlc/issue-35`, ready, not draft). The last unmerged slice of #31.
+- #52 Refused expense save silently resets split include switches — PR #53
+  open (`sdlc/issue-52`, ready, not draft). Depends on closed #50, so
+  unblocked; a retry currently resubmits a different split than the user set.
+- #49 375px horizontal scroll from max-length group names — in planning, no
+  PR. Depends on closed #34, so unblocked. Re-scoped by the person's replan:
+  the width comes from the unbroken group name in the page headings (group
+  h1, members h1 plus breadcrumbs), not the two notices; plan the fix there.
+- #31 redesign epic — 6 of 7 slices closed (#33, #34, #36, #37 plus deferred
+  close-outs #38, #39); #35 in review, follow-ups #49 planning and #52
+  in review.
+- #24 Spec coverage — open tracking issue, not work. Its S-8 row still names
+  #34–#37 as in flight; actually #34, #36, #37 are built and only #35
+  remains. Nothing to action from it.
+- Nothing reads as stalled: #35 and #52 both have open PRs from this week,
+  #49 got its scoping decision yesterday.
 
 ## Next
 
-1. Land #33 (via PR #40), then start #34 and #35. Reason: #33 defines the
-   theme, shell and component set the others consume unchanged — reviewing
-   anything else first would review it against components that do not exist
-   yet.
-2. Then #36 (expense editor + settle-up sheet). Reason: it is the only
-   slice touching the money-writing surfaces, with an explicit
-   no-logic-change risk flag — it goes while review attention is free, not
-   batched behind lower-risk screen work.
-3. Then #37 (members, activity, profile + display/accessibility sweep).
-   Reason: it is the close-out — it consumes everything above and its
-   global sweep (neutral zeros, words-plus-colour, human dates, five states
-   at both viewports) is the check that the redesign reads as one product.
+1. Land #35 (via PR #46), then #52 (via PR #53). Reason: both PRs are open
+   and #35 is the last epic slice — merging it closes the redesign build;
+   #52 rides alongside because a refused-save path that silently changes the
+   split is the one follow-up that can corrupt the next retry.
+2. Then #49 (max-length-name overflow at 375px). Reason: it is the last
+   known viewport violation against the redesign's explicit 375px promise,
+   and the implementer's measurement plus the person's replan already say
+   where the fix goes — small, evidence-led, no dependencies.
+3. Then nothing filed. Reason: after #35, #52 and #49 the redesign slices,
+   their deferred close-outs and every known follow-up are landed; the
+   deliberately-deferred items (password reset, native apps, in-app payment,
+   receipts, recurring expenses, multi-currency rates, charts, email
+   notifications) are eventual per the PRD, not next, so they stay out of
+   the backlog.
 
 ## Blocked, and on whom
 
-- #33 is labelled `sdlc:needs-human` — on a person, per the label. The
-  recorded replan-project decisions answer the product question (UI only,
-  keep docs/ui.md as approved); what the human action needs is whatever the
-  label was set for, not a product decision this survey can see.
-- #34, #35, #36, #37 wait on #33 (`Depends on #33` in each body) — on the
-  pipeline, not on a person. They start when #33 closes.
-- #38, #39 wait on #33 (deferred by its work order, `sdlc:blocked`) — on
-  the pipeline. They close out #33's own acceptance lines.
+- Nothing open is labelled `sdlc:blocked` or `sdlc:needs-human`, and every
+  `Depends on` points at a closed issue (#35 on closed #33; #49 on closed
+  #34; #52 on closed #50) — on the pipeline, nothing waiting on a person.
 - First production deploy is blocked on a person: per the README and the
   `project.md` open questions, someone must connect the repo to Vercel, add
   Neon from the Storage tab (pooled URL), set the required secrets, and run
@@ -85,15 +85,12 @@ What a user can do now that they could not before:
 
 ## Epics
 
-- #31 Make Tabs look and feel like a professional, market-ready product —
-  in flight (foundation #33 in review via PR #40; #34–#37 waiting on #33;
-  deferred #38–#39 waiting on #33). No dependencies.
+- #31 Make Tabs look and feel like a professional, market-ready product — in flight (6 of 7 slices closed; #35 in review via PR #46; follow-ups #49 planning, #52 in review via PR #53). No dependencies.
 
 ## Survey notes
 
-No new issues filed. The redesign slices (#33–#37) plus their deferred
-close-outs (#38–#39) already cover the whole UI scope in `docs/ui.md` under
-the UI-only constraint, and the shipped v1 slices (#3–#8 with their
-follow-ups) cover every TR. `patterns/` holds no recurrence to abstract,
-and no doc drift beyond what open tickets own was found. Filing more now
-would be noise.
+No new issues filed. The two known defects (#49 overflow, #52 include-switch
+reset) already have tickets with owners and stages, the last slice (#35) is
+in review, and the coverage tracker (#24) names nothing uncovered beyond the
+in-flight slice. `patterns/` shows no new recurrence and no doc drift beyond
+what open tickets own was found. Filing more now would be noise.

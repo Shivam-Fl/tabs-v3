@@ -474,5 +474,24 @@
       "run": "37387048231"
     }
   ],
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "A repeated ?section= query key crashes the group page instead of defaulting to expenses.",
+        "detail": "A repeated ?section= query key crashes the group page instead of defaulting to expenses.\n\n`lib/groups/validation.ts:165`\n\nEvidence: lib/groups/validation.ts:165 does (raw ?? '').trim().toLowerCase(). Next.js delivers searchParams values as string | string[], so ?section=expenses&section=balances hands groupSectionFrom a string[], on which .trim() throws TypeError. GroupPage parses section at app/groups/[id]/page.tsx:119 before the ledger try/catch, so the throw escapes to the route error boundary rather than rendering the expenses panel that AC-2/AC-10 require for malformed input.\n\nFix: Coerce before trimming, e.g. const value = (Array.isArray(raw) ? raw[0] : raw ?? '').trim().toLowerCase(). Note activityFilterFrom and expenseFiltersFrom share the pattern; fixing only the new parser leaves the same crash on ?activity= and ?q=.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "lib/groups/validation.ts"
+      },
+      {
+        "title": "The diff edits a file the work order does not name: lib/activity/queries.ts gains ACTIVITY_GROUP_PARAM, but work-order.json files[] lists only nine paths and this is not one of them.",
+        "detail": "The diff edits a file the work order does not name: lib/activity/queries.ts gains ACTIVITY_GROUP_PARAM, but work-order.json files[] lists only nine paths and this is not one of them.\n\n`lib/activity/queries.ts:56`\n\nEvidence: work-order.json files[] names app/groups/[id]/page.tsx, app/groups/[id]/loading.tsx, app/groups/[id]/expenses/loading.tsx, components/group-page.tsx, components/timestamp.tsx, components/activity-feed.tsx, app/activity/page.tsx, lib/groups/validation.ts and lib/dates.ts (the four *.test.ts paths live under tests[], not files[]); gh pr diff 46 --name-only adds lib/activity/queries.ts, whose PR-branch line 56 is the new `export const ACTIVITY_GROUP_PARAM = 'group';` inside hunk @@ -41,6 +41,20 @@ with a comment block and no read, signature or endpoint change.\n\nFix: Name lib/activity/queries.ts in files[] as the supporting edit for the authorized app/activity/page.tsx ?group= scope (the constant sits beside ACTIVITY_FILTER_PARAM so the writer and reader cannot drift), or keep it and record the exception; no behavior change is needed.",
+        "severity": "minor",
+        "category": "design",
+        "file": "lib/activity/queries.ts"
+      }
+    ],
+    "pr": "46"
+  }
 }

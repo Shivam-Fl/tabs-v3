@@ -26,18 +26,22 @@ import { readLedger, updateLedger } from './state-io.js';
 import { newLedger } from './ledger.js';
 import { decisionsOf, upsertDecisions } from './issue-body.js';
 
-// Elements GitHub's sanitiser drops together with everything inside them.
-const DROPPED = 'script|style|svg|math|noscript|iframe|xmp|noembed|noframes|plaintext|template';
 // Characters that take no visible space: format controls (zero-width, bidi, tag characters, the
 // soft hyphen), control characters bar tab and newline, private-use and unassigned code points,
 // variation selectors, the combining grapheme joiner and the Hangul fillers.
 const INVISIBLE = /[\p{Cf}\p{Co}\p{Cn}\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F͏ᅟᅠㅤﾠ︀-️\u{E0100}-\u{E01EF}]/gu;
 
+// Checked against GitHub's own renderer (POST /markdown), not assumed. It hides a comment, and an
+// unterminated one only where it opens an HTML block — at the start of a line, where it hides the
+// rest of the body; mid-sentence it renders as text. It hides no element's content: <script>,
+// <style> and <iframe> render as escaped text, and <noscript>, <template>, <svg> and <math> lose
+// the tag and keep what is inside. This dropped those elements with everything after an unclosed
+// one, so a review finding that mentioned "the <noscript> notice" in a sentence cut tabs-v3 #58's
+// body after six of its eighteen findings, and the planner stopped on a ticket it could not see.
 const pass = (t) => t
   .replace(/\r\n?/g, '\n')
-  // An unterminated comment hides the rest of the body, as GitHub renders it.
-  .replace(/<!--[\s\S]*?(?:-->|$)/g, '')
-  .replace(new RegExp(`<(${DROPPED})\\b[^>]*>[\\s\\S]*?(?:<\\/\\1\\s*>|$)`, 'gi'), '')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/(^|\n) {0,3}<!--(?![\s\S]*?-->)[\s\S]*$/, '$1')
   // Link reference definitions render nothing: `[//]: # (…)` is the markdown comment idiom.
   .replace(/^ {0,3}\[[^\]\n]+\]:[^\n]*$/gm, '')
   .replace(INVISIBLE, '')

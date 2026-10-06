@@ -529,6 +529,27 @@
         "severity": "minor",
         "suspected_cause": "Row geometry untouched by this PR: MemberRow renders the confirm in a div.mt-2.w-64.max-w-[calc(100vw-3rem)] inside details.relative.shrink-0 (components/groups-panels.tsx MemberRow), so the 256px dropdown cannot shrink inside the ~309px Card content width (Card p-4 inside main px-4 at 375px). The PR diff adds only break-words to the shared question <p> and never touches MemberRow (verified: the groups-panels.tsx hunk touches ClaimSeatForm/JoinPanel only); the T-14 short-name control overflows identically, so the defect predates the PR. The fix belongs with the row (e.g. an overlay dropdown or a narrower panel), not with the wrapping classes.",
         "title": "Remove-member confirm open widens members page past 375px viewport"
+      },
+      {
+        "id": "BUG-1",
+        "severity": "minor",
+        "area": "group page balances",
+        "title": "Group page balance row with an 80-character seat name widens the page to 753px at 375px",
+        "expected": "The group page fits a 375px viewport (scrollWidth <= clientWidth) when a member with an 80-character unbroken name owes money.",
+        "actual": "document scrollWidth is 753 vs clientWidth 375: the \"<name> owes you ₹60.00\" row (li.flex.flex-wrap > span.text-body.text-lent in the balances section) has no overflow-wrap treatment.",
+        "repro": [
+          "Sign up and create any group.",
+          "On the members page add a seat named \"z\" repeated 80 times.",
+          "Add an expense of 120 split equally (paid by you).",
+          "Open /groups/<id> at a 375px viewport and read document.documentElement.scrollWidth: 753."
+        ],
+        "introduced_by_pr": false,
+        "reproducible": "always",
+        "suspected_cause": "app/groups/[id]/page.tsx balance list renders the member name in a span.text-body without break-words/min-w-0; the PR diff does not touch that file (same shape as the spots the PR fixes elsewhere).",
+        "evidence": [
+          "test-results/overflow-T-19-group-page-b-0c627-s-375px-neighbouring-route--chromium/attachments/group-balance-80-88ad38216329f6ded744b6b3c720c7ebb24f7bf8.png",
+          "test-results/overflow-T-19-group-page-b-0c627-s-375px-neighbouring-route--chromium/trace.zip"
+        ]
       }
     ]
   },

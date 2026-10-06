@@ -680,5 +680,38 @@
   "work_order_posted_at": "2026-10-06T11:47:39.145Z",
   "work_order_from": "plan",
   "work_order_comment": "6015575205",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "The /activity loading fallback lost the screen-reader announcement and busy state that the deleted loading.tsx carried and that the sibling group skeletons keep.",
+        "detail": "The /activity loading fallback lost the screen-reader announcement and busy state that the deleted loading.tsx carried and that the sibling group skeletons keep.\n\n`app/activity/page.tsx:67`\n\nEvidence: Deleted app/activity/loading.tsx had aria-busy=\"true\" on <main> and <p role=\"status\" className=\"sr-only\">Loading activity…</p>. The new fallback is <Skeleton/> plus ActivityFeedSkeleton, whose root is a plain <div className=\"flex flex-col gap-3\"> with neither. components/group-skeletons.tsx:43-46 (GroupPageSkeleton) keeps both, and docs ux says status changes are announced. git grep 'Loading activity' on the PR branch finds nothing.\n\nFix: Wrap the fallback in <div aria-busy=\"true\" className=\"flex flex-col gap-5\"> with <p role=\"status\" className=\"sr-only\">Loading activity…</p>, as GroupPageSkeleton does, and add a case to failed-feed.test.ts.",
+        "severity": "major",
+        "category": "design",
+        "file": "app/activity/page.tsx"
+      },
+      {
+        "title": "On a failed feed the raw ?group= uuid is carried into the chips and Retry even when the groups read succeeded and the id is not one of the viewer's groups.",
+        "detail": "On a failed feed the raw ?group= uuid is carried into the chips and Retry even when the groups read succeeded and the id is not one of the viewer's groups.\n\n`app/activity/page.tsx:140`\n\nEvidence: ActivityContent line 140: groupId={scoped?.id ?? rawGroupScope(rawGroup)}. If listActivityGroups succeeds, scoped is null for a stranger's uuid, but rawGroupScope still returns it, so ActivityFailed puts that uuid in the hidden group input and the Retry href. The success branch drops it (scoped === null gives preserved={}).\n\nFix: Use the raw fallback only when the groups read is what failed, for example track groupsFailed and write groupsFailed ? rawGroupScope(rawGroup) : (scoped?.id ?? null). Low impact: the scope is a filter, not an authorization, and the next successful load discards the id.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/activity/page.tsx"
+      },
+      {
+        "title": "Moving the \"Showing X only\" line out of the header changes its spacing on the loaded screen: it was gap-2 under the title row and is now a gap-5 sibling of the feed.",
+        "detail": "Moving the \"Showing X only\" line out of the header changes its spacing on the loaded screen: it was gap-2 under the title row and is now a gap-5 sibling of the feed.\n\n`app/activity/page.tsx:150`\n\nEvidence: Before: <header className=\"flex flex-col gap-2\"> held the title row and the scope line. After: the header is only the title row and ActivityContent's fragment is a child of <main className=\"... gap-5\">, so the scope line sits 20px below the title instead of 8px. The work order's AC list does not mention it and the skeleton fallback reserves an h-6 block that no longer matches the old rhythm.\n\nFix: Keep the old 8px rhythm by wrapping the scope line and feed in a flex-col gap-2 / or give the scope line -mt-3; or accept it and say so in the PR description.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/activity/page.tsx"
+      },
+      {
+        "title": "The failed branch's comment says the raw id is carried only when the groups read failed, but the code carries it whenever the feed failed and the id is not a confirmed scope; the wire test pins the loose expression, so tightening it later breaks the test.",
+        "detail": "The failed branch's comment says the raw id is carried only when the groups read failed, but the code carries it whenever the feed failed and the id is not a confirmed scope; the wire test pins the loose expression, so tightening it later breaks the test.\n\n`app/activity/page.tsx:140`\n\nEvidence: page.tsx: `groupId={scoped?.id ?? rawGroupScope(rawGroup)}` under the comment 'When the groups read is what failed ... the raw id is carried'. guard-wire-status.test.ts third case is titled 'when the groups read is what failed' but only matches /groupId=\\{scoped\\?\\.id \\?\\? rawGroupScope\\(/.\n\nFix: Track groupsFailed separately from rows failing and use it in the expression; update the regex and the comment together.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/activity/page.tsx"
+      }
+    ],
+    "pr": "59"
+  }
 }

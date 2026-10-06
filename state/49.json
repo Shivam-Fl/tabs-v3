@@ -335,5 +335,6 @@
       "kind": "replan",
       "note": "The implementer measured in a browser that adding break-words to the two notices cannot meet AC-1 or AC-2: at 375px the page is still 1136px wide, and the notices are never the widest element. What sets the width is the unbroken group name in the page headings: the h1 at app/groups/[id]/page.tsx:253 (wrapping it alone takes the group page from 1136 to 375) and the h1 at components/members-screen.tsx:75 plus the breadcrumbs at :66-72 and :160-167 on the members page. Plan the fix where the width comes from; the acceptance criteria stand."
     }
-  ]
+  ],
+  "implemented_version": 2
 }

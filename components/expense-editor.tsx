@@ -541,13 +541,17 @@ export function ExpenseEditor({
                   </div>
 
                   {payers.length > 1 ? (
+                    // The label names a member, so it wraps rather than being clipped — and its
+                    // own `min-w-0` box plus `min-w-0` on the button is what lets both be
+                    // narrower than an 80-character unbroken name in this flex-wrap row (AC-3).
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="min-w-0"
                       onClick={() => changePayers(payers.filter((_, position) => position !== index))}
                     >
-                      {`Remove ${payer.displayName}`}
+                      <span className="min-w-0 break-words">{`Remove ${payer.displayName}`}</span>
                     </Button>
                   ) : null}
                 </li>

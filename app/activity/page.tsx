@@ -233,8 +233,15 @@ function emptyFeed(
   }
   return {
     text: 'No activity yet. The feed fills as your groups record expenses, payments and members.',
+    // The one action here that names a group in full, so it is the one that can be handed an
+    // 80-character unbroken name. `max-w-full` is load-bearing and the other two links do not
+    // need it: this action is an item of the EmptyState's `items-start` column, so without a cap
+    // it is laid out at its max-content width and `break-words` alone has nothing to wrap into.
     action: (
-      <Link className={FEED_LINK} href={`/groups/${groups[0].id}`}>
+      <Link
+        className={`${FEED_LINK} min-w-0 max-w-full break-words`}
+        href={`/groups/${groups[0].id}`}
+      >
         {`Open ${groups[0].name}`}
       </Link>
     ),

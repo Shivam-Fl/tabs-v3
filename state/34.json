@@ -222,7 +222,11 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/home-panels.tsx",
+    "app/page.tsx",
+    "app/home.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

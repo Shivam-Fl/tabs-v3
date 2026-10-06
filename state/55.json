@@ -204,6 +204,14 @@
       "attempt": 2,
       "at": "2026-10-06T10:59:31.164Z",
       "digest": "The qa stage failed and no known error pattern matched. The raw output is below."
+    },
+    {
+      "stage": "qa",
+      "error_signature": "996ea31548488a85",
+      "error_type": "unknown",
+      "attempt": 3,
+      "at": "2026-10-06T11:25:13.876Z",
+      "digest": "The qa stage failed and no known error pattern matched. The raw output is below."
     }
   ],
   "review_history": [],

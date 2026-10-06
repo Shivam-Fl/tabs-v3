@@ -527,8 +527,8 @@
     ]
   },
   "qa": {
-    "verdict": "pass",
-    "introduced_bugs": 0,
+    "verdict": "fail",
+    "introduced_bugs": 1,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -539,10 +539,15 @@
       "AC-7",
       "AC-8"
     ],
-    "sha": "8232595e50538faf17415ce95ddfe3cbdc6277e9",
-    "run_id": "37395629929",
+    "sha": "bbc3fcb1e4344c61358be26a3ead5696542be062",
+    "run_id": "37403734767",
     "work_order_version": 1,
-    "at": "2026-10-06T01:51:09.815Z"
+    "at": "2026-10-06T03:30:39.577Z"
   },
-  "qa_open_bugs": []
+  "qa_open_bugs": [
+    {
+      "id": "BUG-1",
+      "title": "Excluded member's typed split value is silently discarded on save"
+    }
+  ]
 }

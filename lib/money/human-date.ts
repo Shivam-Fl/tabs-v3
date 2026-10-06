@@ -71,9 +71,17 @@ function dayNumber(date: CalendarDate): number {
  * `date` in words, read against `today`.
  *
  * Today, yesterday and tomorrow are named, because those are the three a person is most likely to
- * be entering and the three a raw date reads worst for. Everything else is the day and the month
- * ("13 Jan"), with the year added only when it is not `today`'s — a date from another year is the
- * one case where the day and month alone are ambiguous.
+ * be entering and the three a raw date reads worst for — and every named day carries its absolute
+ * day and month beside it ("Today · 5 Oct"). The relative word never stands alone, because it is
+ * only ever as right as the `today` it was handed: the group page's rows are rendered on the
+ * server, where "today" is the UTC clock, so a viewer a zone away can be reading their own
+ * yesterday under the word "Today". The absolute half is the same day the row's `datetime`
+ * attribute holds, so such a row is never *wrong*, only less chatty.
+ *
+ * Everything else is the day and the month ("13 Jan"), with the year added only when it is not
+ * `today`'s — a date from another year is the one case where the day and month alone are
+ * ambiguous. That rule is the absolute half's rule wherever it appears, so a named day across a
+ * year boundary reads "Tomorrow · 1 Jan 2027".
  *
  * A date it cannot read, or a `today` it cannot read, comes back as the input unchanged.
  */
@@ -82,13 +90,16 @@ export function humanDateLabel(date: string, today: string): string {
   const base = parseCalendarDate(today);
   if (target === null || base === null) return date;
 
-  const distance = dayNumber(target) - dayNumber(base);
-  if (distance === 0) return 'Today';
-  if (distance === -1) return 'Yesterday';
-  if (distance === 1) return 'Tomorrow';
-
   const month = MONTHS[target.month - 1] ?? '';
-  return target.year === base.year
-    ? `${target.day} ${month}`
-    : `${target.day} ${month} ${target.year}`;
+  const absolute =
+    target.year === base.year
+      ? `${target.day} ${month}`
+      : `${target.day} ${month} ${target.year}`;
+
+  const distance = dayNumber(target) - dayNumber(base);
+  if (distance === 0) return `Today · ${absolute}`;
+  if (distance === -1) return `Yesterday · ${absolute}`;
+  if (distance === 1) return `Tomorrow · ${absolute}`;
+
+  return absolute;
 }

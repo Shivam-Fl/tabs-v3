@@ -119,14 +119,19 @@ function paymentNoticePath(
  * The group page, home and the cross-group feed, refreshed after anything that moves a balance.
  * The feed is on the list because a recorded or deleted payment is what puts its row there: the
  * balances and the record of what moved them have to move together.
+ *
+ * The group is **required**, and that is the type doing a job rather than naming a parameter: the
+ * only outcomes that have a group are the ones that wrote something, so a success path that
+ * forgot to name its group fails to compile instead of quietly refreshing nothing. A refusal
+ * changed no ledger and has no group to name, so it refreshes nothing — an unmoved balance is not
+ * a cache to drop, and revalidating home and the feed for a rejected amount is churn the reader
+ * pays for in a refetch of the page they were already looking at.
  */
-function revalidateBalances(groupId?: string): void {
+function revalidateBalances(groupId: string): void {
   revalidatePath('/');
   revalidatePath('/activity');
-  if (groupId) {
-    revalidatePath(`/groups/${groupId}`);
-    revalidatePath(`/groups/${groupId}/members`);
-  }
+  revalidatePath(`/groups/${groupId}`);
+  revalidatePath(`/groups/${groupId}/members`);
 }
 
 export async function createPayment(
@@ -212,7 +217,8 @@ export async function createPayment(
     };
   });
 
-  revalidateBalances(outcome.groupId);
+  // Only an outcome that changed the ledger names a group; a refusal names none and refreshes none.
+  if (outcome.groupId) revalidateBalances(outcome.groupId);
   return finish(outcome);
 }
 
@@ -276,6 +282,7 @@ export async function deletePayment(
     };
   });
 
-  revalidateBalances(outcome.groupId);
+  // As above: a payment that is gone (or was never the caller's to delete) moved nothing.
+  if (outcome.groupId) revalidateBalances(outcome.groupId);
   return finish(outcome);
 }

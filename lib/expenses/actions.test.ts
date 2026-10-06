@@ -85,6 +85,7 @@ const {
   UNAUTHENTICATED_MESSAGE,
 } = await import('../groups/validation');
 const {
+  AMOUNT_INVALID_MESSAGE,
   EXPENSE_ADDED,
   EXPENSE_DELETED,
   EXPENSE_NOT_FOUND_MESSAGE,
@@ -594,6 +595,32 @@ describe('createExpense', () => {
     // The whole is still the whole: a member left out does not leave part of the expense owing
     // to nobody.
     expect(splits.reduce((total, split) => total + split.shareMinor, 0)).toBe(1000);
+  });
+
+  it('refuses an unparseable amount without writing the split it carried', async () => {
+    // The server half of #52: a refusal that arrives with a member left out must write nothing at
+    // all, so the retry the person sends next is the only expense that exists. The client half —
+    // the switch that used to flip back to included across this refusal — is not reachable from
+    // here; AC-1 to AC-4 drive it in the browser. This pins the boundary the retry depends on.
+    const state = await createExpense(
+      IDLE_EXPENSE_STATE,
+      expenseForm({
+        groupId,
+        description: 'Cinema',
+        amount: 'not-a-number',
+        date: '2026-10-01',
+        payers: [{ membershipId: ada, amount: '10.00' }],
+        splits: [{ membershipId: ada, included: true }, { membershipId: bo }],
+      }),
+    );
+
+    expect(state.status).toBe('error');
+    expect(state.fieldErrors?.amount).toBe(AMOUNT_INVALID_MESSAGE);
+
+    // No expense, no payer and no split line: the refused save left the group exactly as it was.
+    expect(await expenseRowsOf(groupId)).toHaveLength(0);
+    expect(await allPayers()).toHaveLength(0);
+    expect(await allSplits()).toHaveLength(0);
   });
 
   it('refuses a signed-out caller and writes nothing', async () => {

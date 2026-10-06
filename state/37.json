@@ -426,6 +426,20 @@
         "severity": "minor",
         "category": "functional",
         "file": "app/groups/[id]/members/page.tsx"
+      },
+      {
+        "title": "A ?saved=1 success notice from an earlier save stays on screen beside a later inline refusal: the page renders the notice from searchParams at server render, and the island refusal navigates nowhere, so 'Profile saved.' and fresh field errors show at once.",
+        "detail": "A ?saved=1 success notice from an earlier save stays on screen beside a later inline refusal: the page renders the notice from searchParams at server render, and the island refusal navigates nowhere, so 'Profile saved.' and fresh field errors show at once.\n\n`app/profile/page.tsx:39`\n\nEvidence: git show pr44:app/profile/page.tsx lines 39-44: notice derives from searchParams (?saved=1/?error=invalid) and renders in the role=status slot; git show pr44:components/profile-form.tsx:38: refusal returns inline via useActionState with no navigation, so the param (and its notice) survives the refusal render. On main (git show main:lib/auth/actions.ts) a refusal redirected to /profile?error=invalid, which replaced the param — this staleness is new with the inline transport.\n\nFix: Pass the saved/error flags into ProfileForm (or lift the notice into the island) and suppress the query-param notice once the action state holds a refusal (state.status === 'error'), so the page never claims 'Profile saved.' beside fresh field errors.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/profile/page.tsx"
+      },
+      {
+        "title": "An archived group with only its owner shows a 'Share the invite link' empty state with no action: the solo-owner EmptyState ignores group.archived, and SoloOwnerAction returns null for archived groups, leaving share-the-link copy directly above the archived read-only note.",
+        "detail": "An archived group with only its owner shows a 'Share the invite link' empty state with no action: the solo-owner EmptyState ignores group.archived, and SoloOwnerAction returns null for archived groups, leaving share-the-link copy directly above the archived read-only note.\n\n`app/groups/[id]/members/page.tsx:187`\n\nEvidence: git show pr44:app/groups/[id]/members/page.tsx:109: soloOwner is isOwner && members.length === 1 with no archived condition; lines 187-193 render the EmptyState ('Share the invite link and the rest can join') unconditionally on it; SoloOwnerAction (lines 227-234) returns null when group.archived, so the archived solo group gets the sharing copy, no action, then the line-196 'archived, so seats cannot be added' note.\n\nFix: Render the solo-owner EmptyState only when !group.archived, or give archived solo groups their own sentence that points at the read-only note instead of the invite link.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/members/page.tsx"
       }
     ],
     "pr": "44"

@@ -228,7 +228,7 @@
   "stopped_at": null,
   "dispatched_stage": "plan",
   "validated_from": "plan",
-  "validated_at": "2026-10-06T07:04:43.025Z",
+  "validated_at": "2026-10-06T07:17:16.789Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
   "work_order_version": 1,
@@ -243,5 +243,150 @@
       "kind": "replan",
       "note": "The implementer measured in a browser that adding break-words to the two notices cannot meet AC-1 or AC-2: at 375px the page is still 1136px wide, and the notices are never the widest element. What sets the width is the unbroken group name in the page headings: the h1 at app/groups/[id]/page.tsx:253 (wrapping it alone takes the group page from 1136 to 375) and the h1 at components/members-screen.tsx:75 plus the breadcrumbs at :66-72 and :160-167 on the members page. Plan the fix where the width comes from; the acceptance criteria stand."
     }
-  ]
+  ],
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "Group page with an 80-character unbroken group name shows no horizontal scroll at a 375px viewport",
+        "how_to_verify": "Create a group named 'x' * 80, open /groups/<id> at 375px width, assert document.documentElement.scrollWidth <= document.documentElement.clientWidth",
+        "id": "AC-1",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "Members page with an 80-character unbroken group name shows no horizontal scroll at a 375px viewport",
+        "how_to_verify": "Open /groups/<id>/members at 375px width with the same group, assert scrollWidth <= clientWidth",
+        "id": "AC-2",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "The removed-member notice still names the member and group in full while its paragraph wraps inside the viewport",
+        "how_to_verify": "Unit case in app/groups/[id]/members/long-name-wrap.test.ts renders MembersScreen with 80-character unbroken member and group names and asserts the notice sentence is present in full and its <p> carries break-words",
+        "id": "AC-3",
+        "source": "TR-11",
+        "verify": "test"
+      },
+      {
+        "check": "The just-archived notice still names the group in full while wrapping inside the viewport at 375px",
+        "how_to_verify": "Archive the 80-character-named group, open /groups/<id> at a 375px viewport, assert the just-archived sentence names the group in full and scrollWidth <= clientWidth (browser-only: GroupDetail is not exported from the page file, so no unit case can render it)",
+        "id": "AC-4",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "Rows that already truncate (group list, member rows, shell place) are unchanged: long names still ellipsis with a title attribute",
+        "how_to_verify": "Existing app/home.test.ts and app-shell cases pass unmodified under sdlc:verify, plus the new unit case pins the member-row truncate-and-title with an 80-character displayName",
+        "id": "AC-5",
+        "source": "TR-11",
+        "verify": "test"
+      },
+      {
+        "check": "Group page with an 80-character unbroken person name shows no horizontal scroll at a 375px viewport with at least one expense on the page",
+        "how_to_verify": "Set an 80-character placeholder member name and viewer display name, add one expense paid by the long-named viewer so the Paid-by line renders, open /groups/<id> at 375px, assert scrollWidth <= clientWidth",
+        "id": "AC-6",
+        "source": "TR-11",
+        "verify": "browser"
+      },
+      {
+        "check": "The placeholder-seat explainer on the members page wraps inside the viewport while the row name still truncates with its full value in title",
+        "how_to_verify": "Unit case in app/groups/[id]/members/long-name-wrap.test.ts renders MembersScreen with an 80-character unbroken placeholder displayName and asserts the explainer paragraph carries break-words and the row name span carries truncate with the name in full in title",
+        "id": "AC-7",
+        "source": "TR-11",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Truncate the h1s and back-links with ellipsis + title, the way list rows already handle long names",
+        "rejected_because": "The binding route-note decision directs wrapping, and truncating a page title would hide the group's identity while a heading must confirm which group it names. Rows keep truncate; headings wrap."
+      },
+      {
+        "approach": "Apply break-words to only the two notice <p> elements (the review finding's suggested fix)",
+        "rejected_because": "The binding implementer measurement shows this cannot meet AC-1 or AC-2: the page stays 1136px wide because the notices are never the widest element in those scenarios — the h1s and back-links are. Notices alone treat a symptom."
+      },
+      {
+        "approach": "Put a global overflow-wrap:anywhere (or overflow-x:hidden) on the page <main> so no future long string can widen any page",
+        "rejected_because": "Too broad: it would mask the next overflow instead of fixing this one, could wrap content that must not wrap (amounts), and violates the smallest-change rule. Per-element classes match the existing break-words precedent in home-panels and activity-feed."
+      }
+    ],
+    "approach": "Add the one-class overflow-wrap treatment where an 80-character unbroken name actually sets the document width, per the binding route-note decision: break-words on the group-page h1 and the members-page h1, the members-page top back-link rebuilt so wrapping can engage (its label moved into a min-w-0 break-words span, because break-words alone on a shrink-to-fit inline-flex container does not reduce its min-content size), and break-words on the bottom back-link paragraph. Apply the same one-class break-words to the two notice <p> elements (removed-member in groups-panels, just-archived on the group page) — justified by the review finding with AC-3 (unit) and AC-4 (browser). Extend the same proven-idiom treatment to the three person-name renderings the critique proves are the same bug shape on the same pages: the group-page header viewer-name line and the expense Paid-by line get break-words, the debts-card name span gets min-w-0 plus break-words (the activity-feed idiom, not an unverified anywhere utility), and the members-page placeholder-seat explainer gets break-words. Drop the proposed group-page breadcrumb change: its li.truncate already zeroes the flex minimum so the ellipsis engages today. No markup, copy, or behavior changes beyond the top back-link label span; rows and the shell keep their truncate treatment.",
+    "assumptions": [
+      "Chromium's scrollWidth figures match the Firefox ones quoted — every browser criterion re-asserts scrollWidth <= clientWidth rather than trusting the quoted figures.",
+      "No other element on these two pages carries an unbroken 80-character string at first paint (amounts are formatted with separators, badges are closed-set); the member-filter select options carry long names but native selects clip their options so they cannot widen the document."
+    ],
+    "confidence": 74,
+    "confidence_rationale": "Every fix location was verified bare in the current tree today (h1s, both back-links, both notices, header viewer line, debts-card name span, Paid-by line, placeholder explainer) and the break-words plus min-w-0 idiom is the proven precedent already pinned by tests on the home and activity screens. Confidence is not higher because the scrollWidth figures are cited from the binding decision and the critique rather than re-run here, Chromium was never measured, and GroupDetail has no unit harness so the whole group page rests on the browser QA steps.",
+    "debate_summary": "The critique survived judgement on all five findings and each changed the plan. Major 1 (placeholder-seat explainer re-prints the 80-char name with no wrapping one line below the truncating row) is real and becomes a groups-panels edit plus AC-7. Major 2 (expense Paid-by line re-prints payer names with no wrapping, so AC-6 fails the moment one expense exists) is real and becomes a page.tsx edit plus a stronger AC-6 that requires an expense on the page. Minor 3 (wrap-anywhere is used nowhere in the repo and fails silently green) is real: the debts-card fix now uses the proven min-w-0 plus break-words idiom instead of the unverified utility. Minor 4 (no test pins the member-row truncate-and-title that AC-5 claims as verified) is real: AC-5 now names the new member-row unit case. Minor 5 (max-w-full on the back-link is inert; the label span does the work) is real: files[] now states the span is the fix and drops max-w-full. Explicitly dismissed: the regression claim that wrapping the h1 violates docs/ui.md ellipsis (the binding route-note decision chose wrapping, so that cost is settled); the breadcrumb-truncate versus h1-wrap and back-link multi-line icon-centering observations (intended consequences of that decision, kept as residual risks, not defects); the 80+80 both-long and sub-375px/zoom edges (covered by the width-independent class plus scrollWidth steps, 375px is the specified viewport); the member-filter select options (native selects clip, safe, recorded in assumptions).",
+    "evidence": [
+      "components/home-panels.tsx:487 LeftGroupNotice already carries break-words, pinned by app/home.test.ts:524-535 — the QA home ?left= finding no longer reproduces; dropped, not re-fixed.",
+      "Binding route-note reproduction (cited with exact figures): group page with an 80-character unbroken group name measures 1136px document width at a 375px viewport; wrapping the h1 alone returns it to 375px; on the members page the width-setters are the h1 at components/members-screen.tsx:75 plus the back-links at :66-72 and :160-167.",
+      "Markup verified in the current tree today: app/groups/[id]/page.tsx:297 h1 renders {group.name} with no wrapping class; :290 breadcrumb li already carries truncate; :298-301 header line interpolates user.displayName with no wrapping; :388-389 debts-card name span interpolates balance.displayName with no wrapping inside a flex row; :312-318 just-archived <p> interpolates archivedNoticeText(group.name) with no break-words; :552 Paid-by <p> interpolates payer displayNames with no wrapping class.",
+      "Markup verified in the current tree today: components/members-screen.tsx:75 h1 renders {group.name} plain; :66-72 top back-link is an inline-flex Link whose label is a bare text node with no wrapping class; :160-167 bottom back-link is a plain inline <a> inside a <p> with no wrapping class.",
+      "Markup verified in the current tree today: components/groups-panels.tsx:716-724 removedNotice <p> renders removedNoticeText(memberName, groupName) with no break-words; :642-647 placeholder-seat explainer <p className=\"text-secondary text-ink-muted\"> interpolates member.displayName in full with no wrapping class, one block below the truncating row at :630; invite/expense notices are closed-set fixed strings and safe.",
+      "Proven idiom in the current tree: components/activity-feed.tsx:249-261 and :281 use min-w-0 on the column plus break-words on the lines for the identical audit-line shape; grep finds no wrap-anywhere anywhere in the repo, so the debts-card fix must use that idiom. GROUP_NAME_MAX and PLACEHOLDER_NAME_MAX are both 80 (lib/groups/validation.ts:21-22)."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "h1 (line ~297) gains break-words so an 80-character unbroken group name wraps instead of setting the document width; header viewer-name line (lines ~298-301) gains break-words; debts-card name span (line ~389) and its flex parent gain min-w-0 plus break-words per the activity-feed idiom; just-archived notice <p> (lines ~312-318) gains break-words; expense Paid-by <p> (line ~552) gains break-words so long payer names wrap inside the row. No change to the breadcrumb li: its truncate already contains the flex item.",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "Binding decision: wrapping the h1 takes the group page from 1136px to 375px. The header line, debts name span, and Paid-by line are verified width-setters for 80-character person names on the same page. The archived notice is justified by the review finding and AC-4."
+      },
+      {
+        "action": "edit",
+        "change": "h1 (line ~75) gains break-words; top 'Back to <name>' link (lines ~66-72) keeps its shape with its label moved into a <span className=\"min-w-0 break-words\"> so wrapping can engage inside the shrink-to-fit flex container (the span is the load-bearing fix); bottom back-link paragraph (lines ~160-167) gains break-words",
+        "path": "components/members-screen.tsx",
+        "why": "Binding decision names exactly these elements as what sets the members-page width. Naive break-words on the top link measures 703px; the span form measures 375px. Back-links wrap rather than truncate so the destination group is still named in full."
+      },
+      {
+        "action": "edit",
+        "change": "removedNotice <p> (lines ~716-724) gains break-words; placeholder-seat explainer <p> (lines ~642-647) gains break-words",
+        "path": "components/groups-panels.tsx",
+        "why": "Same unbroken member/group-name shape as the home notice that measured 753px; the removed notice is justified by the review finding and AC-3, the explainer by AC-7 — it re-prints the same 80-character name the row above truncates."
+      }
+    ],
+    "issue": 49,
+    "kind": "bug",
+    "out_of_scope": [
+      "Home ?left= leave notice (QA finding): LeftGroupNotice already wraps via break-words, pinned by app/home.test.ts:524 — verified still-fixed, not re-implemented.",
+      "Invite/expense/payment notices: closed-set fixed strings with no interpolated names, no overflow shape.",
+      "Member-filter select options: carry the same 80-character names but native selects clip their options and cannot widen the document — safe, no change.",
+      "Viewport narrower than 375px or 200% zoom: the class fix is width-independent; criteria assert the specified 375px viewport only."
+    ],
+    "qa_script": [
+      "Sign up a fresh account and create a group named with 80 unbroken characters (GROUP_NAME_MAX).",
+      "Open /groups/<id> at a 375px viewport: read document.documentElement.scrollWidth and clientWidth — expect scrollWidth <= clientWidth, no sideways scroll.",
+      "Add one expense paid by the long-named viewer, set an 80-character placeholder member name, and re-check the group page at 375px: scrollWidth <= clientWidth with the Paid-by line on screen.",
+      "Open /groups/<id>/members at 375px: same scrollWidth check, including with the placeholder seat visible; remove the member and archive the group — each notice names the member/group in full and the pages stay within the viewport.",
+      "Run the verify suite (npm ci && npm run typecheck && npm run test:ci && npm run build)."
+    ],
+    "reproduced": true,
+    "residual_risks": [
+      "components/expense-screen.tsx interpolates groupName in its breadcrumb link and 'Back to <name>' link with no wrapping class — same shape on a page with no acceptance criterion here; unmeasured, left for a follow-up if QA reproduces it.",
+      "Home excluded/incomplete notes (home-panels.tsx:170-173) interpolate group names in plain <p> without break-words; only reachable with foreign-currency or failed groups, unmeasured, left as-is.",
+      "All scrollWidth numbers come from headless Firefox; Chromium was never measured in this container — the QA browser steps must re-assert AC-1/AC-2/AC-6 rather than trusting the quoted figures.",
+      "The group-page h1 now wraps a long group name onto several lines where docs/ui.md says long names truncate with ellipsis and a title. The binding decision chose wrapping so the name stays fully visible; rows keep truncate. If design later prefers ellipsis on h1s, that is a design change, not this fix.",
+      "The group page breadcrumb truncates the same name the h1 below wraps, and the members top back-link may render multi-line with its icon centred — intended consequences of crumbs-truncate plus headings-wrap, noted for QA awareness rather than fixed here."
+    ],
+    "root_cause": "Unbroken 80-character names (GROUP_NAME_MAX, PLACEHOLDER_NAME_MAX) render in headings, back-links, header lines, the debts card, the expense Paid-by line, the placeholder-seat explainer, and notice sentences with no overflow-wrap treatment, so at a 375px viewport the longest such string sets the document width (measured 753-1136px depending on the page and element).",
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "MembersScreen with an 80-character unbroken group name: h1 carries break-words, top back-link label span carries min-w-0 and break-words, bottom back-link paragraph carries break-words",
+          "MembersScreen with 80-character member and group names: removedNotice sentence renders in full and its <p> carries break-words, including the member-name-only variant",
+          "MembersScreen with an 80-character placeholder displayName: seat explainer paragraph carries break-words while the row name span keeps truncate with the name in full in title",
+          "Short names render unchanged and the existing archived-readonly cases pass unmodified"
+        ],
+        "path": "app/groups/[id]/members/long-name-wrap.test.ts"
+      }
+    ],
+    "understanding": "Issue #49 collects two unfixed overflow findings from the PR #45 review and QA (for #34): sibling removed/archived notices interpolating group/member names share the ?left= notice's exact overflow shape, plus the QA ?left= finding itself. The home notice is already fixed (break-words plus a pinning test) and is dropped, not re-fixed. The binding route-note decision re-scopes the work: notices alone cannot meet the criteria because the width comes from unbroken names in the page headings (group-page h1; members-page h1 plus back-links), so the fix must wrap those elements; the acceptance criteria stand. The critique proves the same unbroken-name shape also widens three more renderings on the same two pages (expense Paid-by line, debts-card name span, placeholder-seat explainer) plus the header viewer-name line, and corrects the back-link mechanism and the unverified anywhere utility.",
+    "unknowns": [
+      "Whether Chromium's scrollWidth figures match the Firefox ones — re-asserted by the QA browser steps, which use scrollWidth <= clientWidth rather than a literal 375.",
+      "Whether min-w-0 plus break-words fully contains the debts-card name span at 375px in a real browser the way the cited anywhere measurement did — the browser QA step for AC-6 proves it; if it does not hold, that step files the follow-up."
+    ],
+    "version": 3
+  }
 }

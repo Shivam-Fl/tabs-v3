@@ -661,7 +661,17 @@ function MemberRow({
             </span>
             <span className="sr-only">{`Actions for ${member.displayName}`}</span>
           </summary>
-          <div className="mt-2 w-64 max-w-[calc(100vw-3rem)]">
+          {/* The panel floats over the rows below rather than sitting in this one's flow: it is a
+              fixed 256px box, and the row's own content — avatar, gaps and this disclosure —
+              plus that box is wider than the `li` has inside the Card at a 375px viewport, so
+              the row, and with it the page, overflowed with *any* name length (AC-7: short names
+              read byte-identical to 80-character ones, which is how the wrapping diagnosis was
+              disproved). `absolute` pairs with the `relative` above to take the panel's width
+              out of the row's arithmetic entirely, `w-64 max-w-[calc(100vw-3rem)]` still caps it,
+              and the surface card is the MenuPanel idiom every other overlay in the app uses. The
+              disclosure, the form and the shared ConfirmStep are untouched, so the keyboard path
+              and the question's own wrapping are unchanged. */}
+          <div className="absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-3rem)] rounded-token border border-border bg-surface p-3 shadow-md">
             <RemoveMemberForm groupId={groupId} groupName={groupName} member={member} />
           </div>
         </details>

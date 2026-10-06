@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ExpenseEditor } from '../components/expense-editor';
 import { ExpenseScreen } from '../components/expense-screen';
-import { JoinPanel } from '../components/groups-panels';
+import { JoinPanel, MembersPanel } from '../components/groups-panels';
 import { ConfirmStep, StateMessage } from '../components/ui';
 import type { ExpenseEditorData } from '../lib/expenses/queries';
 import { DESCRIPTION_MAX } from '../lib/expenses/validation';
@@ -149,6 +149,33 @@ function joinPanel(groupName: string, seatName: string): string {
   );
 }
 
+/** The roster as the members page hands it over: the viewer owns the group and is not the seat. */
+function membersPanel(groupName: string, memberName: string): string {
+  return renderToStaticMarkup(
+    createElement(MembersPanel, {
+      groupId: GROUP_ID,
+      groupName,
+      members: [
+        { id: ADA, userId: 'user-ada', displayName: 'Ada', role: 'member', balanceMinor: 0 },
+        { id: SEAT, userId: null, displayName: memberName, role: 'member', balanceMinor: 0 },
+      ],
+      viewerMembershipId: ADA,
+      isOwner: true,
+      archived: false,
+      currency: 'INR',
+    }),
+  );
+}
+
+/** The box the row's overflow disclosure opens: the div wrapping the remove form. */
+function removePanel(html: string): string {
+  const button = html.indexOf('>Remove</button>');
+  expect(button, 'expected the row to render its Remove action').toBeGreaterThanOrEqual(0);
+  // Nothing between that button and the panel opens a div — the form and its hidden inputs sit
+  // in between — so the nearest div before it is the panel itself.
+  return tagBefore(html, button, '<div');
+}
+
 describe('the new-expense screen with a max-length group name', () => {
   it('wraps the heading rather than setting the page width', () => {
     const html = expenseScreen({ title: NEW_TITLE, subtitle: NEW_SUBTITLE, groupName: LONG_GROUP });
@@ -277,6 +304,70 @@ describe('the join panel', () => {
 
     expect(row).toContain('truncate');
     expect(row).toContain(`title="${LONG_SEAT}"`);
+  });
+});
+
+describe('the members-row remove confirm', () => {
+  it('floats the remove panel out of the row instead of leaving it in flow', () => {
+    const html = membersPanel('Goa trip', 'Bo');
+    const panel = removePanel(html);
+
+    // Not a wrapping defect at all: the panel is a fixed 256px box, and the row's own content
+    // (avatar, gaps, this disclosure) plus that box is wider than the `li` has inside the Card
+    // at 375px, so the row overflowed with short names too. `absolute` against the disclosure's
+    // `relative` takes the panel's width out of the row's arithmetic, and the surface card is
+    // the overlay idiom the app's other menus already use (AC-7).
+    expect(html).toContain('<details class="relative shrink-0">');
+    expect(panel).toContain('absolute');
+    expect(panel).toContain('right-0');
+    expect(panel).toContain('bg-surface');
+    expect(panel).toContain('rounded-token');
+    // Still capped to the viewport, exactly as it was in flow.
+    expect(panel).toContain('w-64');
+    expect(panel).toContain('max-w-[calc(100vw-3rem)]');
+  });
+
+  it('floats it identically at the maximum name length — the geometry is name-independent', () => {
+    const short = membersPanel('Goa trip', 'Bo');
+    const long = membersPanel(LONG_GROUP, LONG_SEAT);
+
+    // Byte-identical panels are the point: QA's short-name control overflowed the same 390px the
+    // 80-character case did, so the fix must not depend on how long the names are (AC-7).
+    expect(removePanel(long)).toBe(removePanel(short));
+    // The names still reach the row whole, so nothing about the confirm's own sentence — built
+    // from these same values — was shortened to make room.
+    expect(long).toContain(`title="${LONG_SEAT}"`);
+    expect(long).toContain(`picks ${LONG_SEAT} takes over everything recorded for them.`);
+  });
+
+  it('leaves the shared ConfirmStep in normal flow, naming its object in full', () => {
+    // The overlay belongs to this row, not to the confirm: the archive, rotate, disable, leave,
+    // settle-up and expense-delete confirms all render ConfirmStep in flow and pass, so the
+    // shared box gains no positioning class. Its question renders whole at both name lengths —
+    // the row builds this exact sentence in `RemoveMemberForm`; the open confirm itself is
+    // behind the disclosure's click, so its pixels are QA's under AC-7, not a cold render's.
+    const cases: [string, string][] = [
+      ['Goa trip', 'Bo'],
+      [LONG_GROUP, LONG_SEAT],
+    ];
+
+    for (const [groupName, memberName] of cases) {
+      const question = `Remove ${memberName} from “${groupName}”?`;
+      const html = renderToStaticMarkup(
+        createElement(ConfirmStep, {
+          question,
+          confirmLabel: 'Remove member',
+          pendingLabel: 'Removing…',
+          isPending: false,
+          onCancel: () => {},
+        }),
+      );
+
+      const root = html.slice(0, html.indexOf('>') + 1);
+      expect(root).not.toContain('absolute');
+      expect(root).not.toContain('relative');
+      expect(html).toContain(question);
+    }
   });
 });
 

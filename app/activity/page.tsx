@@ -2,17 +2,18 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { AppShell } from '../../components/app-shell';
-import { ActivityFeed, FilterChips } from '../../components/activity-feed';
-import { Card } from '../../components/ui';
+import { ActivityFailed, ActivityFeed, ActivityFeedSkeleton } from '../../components/activity-feed';
+import { Skeleton } from '../../components/ui';
 import {
   ACTIVITY_FILTER_PARAM,
   ACTIVITY_GROUP_PARAM,
-  DEFAULT_ACTIVITY_FILTER,
   activityFilterFrom,
+  activityHref,
   listActivityGroups,
   listUserActivity,
+  rawGroupScope,
   type ActivityFilter,
   type ActivityGroup,
   type ActivityRow,
@@ -48,16 +49,69 @@ export const metadata: Metadata = { title: 'Activity · Tabs' };
 export default async function ActivityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ activity?: string; group?: string }>;
+  searchParams: Promise<{ activity?: string | string[]; group?: string | string[] }>;
 }) {
   const query = await searchParams;
   const filter = activityFilterFrom(query[ACTIVITY_FILTER_PARAM]);
 
+  // The guard decides the wire status, and it decides it here: outside the Suspense boundary
+  // below and before the first read. A route-level `loading.tsx` sits above this and would commit
+  // a 200 and a skeleton before the redirect ran, so this route has none.
   const viewer = await withDb((handle) => getSessionUser(handle.db));
   if (!viewer) {
     redirect(`/signin?next=${encodeURIComponent('/activity')}`);
   }
 
+  // Reserves the "Showing X only" line only when the URL holds a group id, so an unscoped feed
+  // does not gain a gap when the data lands.
+  const fallback = (
+    <>
+      {rawGroupScope(query[ACTIVITY_GROUP_PARAM]) === null ? null : <Skeleton className="h-6 w-64" />}
+      <ActivityFeedSkeleton />
+    </>
+  );
+
+  return (
+    <AppShell place="Activity" viewer={{ displayName: viewer.displayName }}>
+      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-page font-semibold text-ink">Activity</h1>
+          {/* The feed is every group at once, so its way back is Home — where the groups are. */}
+          <Link
+            className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
+            href="/"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Back to Home
+          </Link>
+        </header>
+
+        <Suspense fallback={fallback}>
+          <ActivityContent
+            viewerId={viewer.id}
+            filter={filter}
+            rawGroup={query[ACTIVITY_GROUP_PARAM]}
+          />
+        </Suspense>
+      </main>
+    </AppShell>
+  );
+}
+
+/**
+ * Everything the feed screen shows that needs a read first: the scope line, the feed, and the
+ * failed and empty states. A component of its own only because a Suspense boundary can stand in
+ * for something that suspends — the reads have to be inside it for the fallback to be one.
+ */
+async function ActivityContent({
+  viewerId,
+  filter,
+  rawGroup,
+}: {
+  viewerId: string;
+  filter: ActivityFilter;
+  rawGroup: string | string[] | undefined;
+}) {
   // One read at a time: the embedded backend serves a single connection, so two queries in
   // flight together are a queue pretending to be a race.
   let groups: ActivityGroup[] = [];
@@ -65,8 +119,8 @@ export default async function ActivityPage({
   let failed = false;
 
   try {
-    groups = await withDb((handle) => listActivityGroups(handle.db, viewer.id));
-    rows = await withDb((handle) => listUserActivity(handle.db, viewer.id, filter));
+    groups = await withDb((handle) => listActivityGroups(handle.db, viewerId));
+    rows = await withDb((handle) => listUserActivity(handle.db, viewerId, filter));
   } catch (error) {
     // Both reads are the same failure to the reader: the feed did not load. The technical
     // detail goes to the server log and the screen gets a message and one way out, carrying
@@ -77,103 +131,52 @@ export default async function ActivityPage({
 
   // The scope only exists if it names a group the caller holds a seat in; anything else — a stale
   // link, a typo, another group's id — shows the whole feed, exactly as an unknown chip does.
-  const scoped = groups.find((group) => group.id === query[ACTIVITY_GROUP_PARAM]) ?? null;
+  const scopeId = rawGroupScope(rawGroup);
+  const scoped = groups.find((group) => group.id === scopeId) ?? null;
   const shown = scoped === null ? rows : rows.filter((row) => row.groupId === scoped.id);
+
+  if (failed) {
+    // When the groups read is what failed there is no confirmed scope, so the raw id is carried.
+    return <ActivityFailed filter={filter} groupId={scoped?.id ?? rawGroupScope(rawGroup)} />;
+  }
 
   // Built once: the empty state's sentence and its action are one decision about one case.
   const empty = emptyFeed(groups, scoped);
 
   return (
-    <AppShell place="Activity" viewer={{ displayName: viewer.displayName }}>
-      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
-        <header className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-page font-semibold text-ink">Activity</h1>
-            {/* The feed is every group at once, so its way back is Home — where the groups are. */}
-            <Link
-              className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
-              href="/"
-            >
-              <ArrowLeft aria-hidden="true" className="size-4" />
-              Back to Home
-            </Link>
-          </div>
+    <>
+      {scoped === null ? null : (
+        <p className="text-secondary text-ink-muted">
+          Showing{' '}
+          <Link
+            className="font-medium text-accent underline-offset-4 hover:underline"
+            href={`/groups/${scoped.id}`}
+          >
+            {scoped.name}
+          </Link>{' '}
+          only.{' '}
+          <Link
+            className="font-medium text-accent underline-offset-4 hover:underline"
+            href={activityHref(filter, null)}
+          >
+            Show every group
+          </Link>
+        </p>
+      )}
 
-          {scoped === null ? null : (
-            <p className="text-secondary text-ink-muted">
-              Showing{' '}
-              <Link
-                className="font-medium text-accent underline-offset-4 hover:underline"
-                href={`/groups/${scoped.id}`}
-              >
-                {scoped.name}
-              </Link>{' '}
-              only.{' '}
-              <Link
-                className="font-medium text-accent underline-offset-4 hover:underline"
-                href={activityHref(filter, null)}
-              >
-                Show every group
-              </Link>
-            </p>
-          )}
-        </header>
-
-        {failed ? (
-          <>
-            {/* The chips stay: the filter is where the reader was when the read failed, so the
-                control that says which feed this is outlives the feed, and the retry below
-                carries the same value (AC-4). */}
-            <FilterChips filter={filter} action="/activity" />
-            {/* A card, like every other surface on the page: the failure is one section of the
-                screen rather than the screen, and the shared Card is what says so (TR-11). */}
-            <Card>
-              <section className="flex flex-col gap-3" aria-labelledby="activity-error">
-                <h2 id="activity-error" className="text-section font-semibold text-ink">
-                  We could not load your activity
-                </h2>
-                <p className="text-body text-ink-muted">
-                  Nothing has been lost — the feed did not come back this time. Try again.
-                </p>
-                <Link
-                  className="text-body text-accent underline underline-offset-4"
-                  href={activityHref(filter, scoped?.id ?? null)}
-                >
-                  Retry
-                </Link>
-              </section>
-            </Card>
-          </>
-        ) : (
-          <ActivityFeed
-            rows={shown}
-            filter={filter}
-            action="/activity"
-            // A chip submits only its own form, so without this the scope would be dropped by the
-            // one control on the page that is meant to narrow the feed further.
-            preserved={scoped === null ? {} : { [ACTIVITY_GROUP_PARAM]: scoped.id }}
-            showGroup
-            emptyText={empty.text}
-            emptyAction={empty.action}
-          />
-        )}
-      </main>
-    </AppShell>
+      <ActivityFeed
+        rows={shown}
+        filter={filter}
+        action="/activity"
+        // A chip submits only its own form, so without this the scope would be dropped by the
+        // one control on the page that is meant to narrow the feed further.
+        preserved={scoped === null ? {} : { [ACTIVITY_GROUP_PARAM]: scoped.id }}
+        showGroup
+        emptyText={empty.text}
+        emptyAction={empty.action}
+      />
+    </>
   );
-}
-
-/**
- * This page's own URL, carrying the filter and the scope — what a retry, a chip and the
- * way back to every group all resolve to. Only values that are set travel, so the unscoped,
- * unfiltered feed stays `/activity` rather than gaining two empty parameters.
- */
-function activityHref(filter: ActivityFilter, groupId: string | null): string {
-  const params = new URLSearchParams();
-  if (groupId !== null) params.set(ACTIVITY_GROUP_PARAM, groupId);
-  if (filter !== DEFAULT_ACTIVITY_FILTER) params.set(ACTIVITY_FILTER_PARAM, filter);
-
-  const search = params.toString();
-  return search === '' ? '/activity' : `/activity?${search}`;
 }
 
 /** The shared look of the two links an empty feed can offer. */

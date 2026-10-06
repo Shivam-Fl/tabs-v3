@@ -13,6 +13,7 @@ import {
   type SplitType,
 } from '../money/splits';
 import { fieldErrorsFrom, type FieldErrors } from '../auth/validation';
+import { firstQueryValue } from '../groups/validation';
 
 export type { FieldErrors };
 
@@ -591,13 +592,17 @@ export const EXPENSE_SEARCH_PARAM = 'q';
  * filter is the unfiltered list, not an error card.
  */
 export function expenseFiltersFrom(query: {
-  member?: string;
-  category?: string;
-  q?: string;
+  member?: string | string[];
+  category?: string | string[];
+  q?: string | string[];
 }): ExpenseFilters {
-  const member = (query[EXPENSE_MEMBER_PARAM as 'member'] ?? '').trim();
-  const category = (query[EXPENSE_CATEGORY_PARAM as 'category'] ?? '').trim().toLowerCase();
-  const search = (query[EXPENSE_SEARCH_PARAM as 'q'] ?? '').trim().slice(0, EXPENSE_SEARCH_MAX);
+  const member = firstQueryValue(query[EXPENSE_MEMBER_PARAM as 'member']).trim();
+  const category = firstQueryValue(query[EXPENSE_CATEGORY_PARAM as 'category'])
+    .trim()
+    .toLowerCase();
+  const search = firstQueryValue(query[EXPENSE_SEARCH_PARAM as 'q'])
+    .trim()
+    .slice(0, EXPENSE_SEARCH_MAX);
 
   return {
     memberId: z.uuid().safeParse(member).success ? member : null,

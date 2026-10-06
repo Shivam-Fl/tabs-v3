@@ -3,6 +3,7 @@ import {
   formatExpenseDate,
   formatViewerTimestamp,
   formatZoneNeutralDate,
+  isRealCalendarDay,
   localDay,
 } from './dates';
 
@@ -104,5 +105,34 @@ describe('localDay', () => {
   it('reads the day off the clock it is handed, zero-padded', () => {
     expect(localDay(new Date(2026, 0, 3, 23, 30))).toBe('2026-01-03');
     expect(localDay(new Date(2026, 9, 6, 0, 1))).toBe('2026-10-06');
+  });
+});
+
+describe('isRealCalendarDay', () => {
+  it('rejects a day the month does not have and a month the year does not have', () => {
+    expect(isRealCalendarDay(2026, 2, 30)).toBe(false);
+    expect(isRealCalendarDay(2026, 13, 1)).toBe(false);
+    expect(isRealCalendarDay(2026, 0, 1)).toBe(false);
+    expect(isRealCalendarDay(2026, 4, 31)).toBe(false);
+  });
+
+  it('accepts a leap day only in a leap year', () => {
+    expect(isRealCalendarDay(2024, 2, 29)).toBe(true);
+    expect(isRealCalendarDay(2025, 2, 29)).toBe(false);
+  });
+
+  it('accepts the edges of a real month', () => {
+    expect(isRealCalendarDay(2026, 1, 1)).toBe(true);
+    expect(isRealCalendarDay(2026, 12, 31)).toBe(true);
+  });
+});
+
+describe('the formatExpenseDate ladder', () => {
+  it('is unchanged: Today, Yesterday, a weekday, then a date', () => {
+    expect(formatExpenseDate(TODAY, TODAY)).toBe('Today');
+    expect(formatExpenseDate('2026-10-05', TODAY)).toBe('Yesterday');
+    expect(formatExpenseDate('2026-10-02', TODAY)).toBe('Fri');
+    expect(formatExpenseDate('2026-01-13', TODAY)).toBe('13 Jan');
+    expect(formatExpenseDate('2025-10-03', TODAY)).toBe('3 Oct 2025');
   });
 });

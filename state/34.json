@@ -18,14 +18,14 @@
   },
   "halted": null,
   "pending": {
-    "stage": "implement",
+    "stage": "root-cause",
     "rework": null,
     "requested_at_head": null,
-    "qa_run": null,
-    "from": null,
-    "pr": null,
+    "qa_run": "37402822093",
+    "from": "qa",
+    "pr": "45",
     "work_order_version": 1,
-    "at": "2026-10-06T00:19:01.531Z"
+    "at": "2026-10-06T02:51:12.712Z"
   },
   "work_order": {
     "acceptance": [
@@ -416,7 +416,7 @@
     "decided_at": "2026-10-05T23:38:09.264Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "qa",
+  "dispatched_stage": "root-cause",
   "validated_from": "plan",
   "validated_at": "2026-10-06T00:15:55.344Z",
   "validated_ac_changes": [],

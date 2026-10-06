@@ -966,6 +966,20 @@
         "severity": "minor",
         "category": "design",
         "file": "components/ui-interactive.tsx"
+      },
+      {
+        "title": "The Timestamp cluster in components/ui-interactive.tsx (utcTimestampText, relativeTimestamp, humanTimestamp, timestampLabel, Timestamp) is production-dead after this PR and its pinned contract contradicts AC-7: every production call site moved to the components/timestamp.tsx islands, leaving app/ui-set.test.ts as the only renderer, and that test pins a UTC-labelled server first paint that AC-7 bans from the app's HTML.",
+        "detail": "The Timestamp cluster in components/ui-interactive.tsx (utcTimestampText, relativeTimestamp, humanTimestamp, timestampLabel, Timestamp) is production-dead after this PR and its pinned contract contradicts AC-7: every production call site moved to the components/timestamp.tsx islands, leaving app/ui-set.test.ts as the only renderer, and that test pins a UTC-labelled server first paint that AC-7 bans from the app's HTML.\n\n`components/ui-interactive.tsx:232`\n\nEvidence: On base, components/activity-feed.tsx:20 imported Timestamp from './ui-interactive' and rendered it at :262; on head 1155ab5 no production file imports Timestamp from ui-interactive (Timestamp/ExpenseDate come from components/timestamp.tsx in page.tsx:12 and activity-feed.tsx:19). The old export at ui-interactive.tsx:232 is still rendered by app/ui-set.test.ts ('renders the UTC label on the server', expects html to contain 'UTC'), so Reviewer A's 'dead export, never rendered' understates it: it is dead in production but alive in tests, pinning the exact output the ticket removed.\n\nFix: Delete the five orphaned exports and their UTC-pinning tests now that the islands own every production call site, or mark the old Timestamp deprecated/internal so a later screen cannot reintroduce the UTC label by importing from the shared module.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/ui-interactive.tsx"
+      },
+      {
+        "title": "Calendar-day parsing and the date-in-words ladder now exist twice: calendarDay in lib/dates.ts and parseCalendarDate in lib/money/human-date.ts are the same round-trip UTC validation, and formatExpenseDate and humanDateLabel are two ladders over it with different output shapes ('Today' vs 'Today · 5 Oct', weekday rung vs Tomorrow rung). A future ladder change must be made in both places and the two call sites already render different strings for the same date.",
+        "detail": "Calendar-day parsing and the date-in-words ladder now exist twice: calendarDay in lib/dates.ts and parseCalendarDate in lib/money/human-date.ts are the same round-trip UTC validation, and formatExpenseDate and humanDateLabel are two ladders over it with different output shapes ('Today' vs 'Today · 5 Oct', weekday rung vs Tomorrow rung). A future ladder change must be made in both places and the two call sites already render different strings for the same date.\n\n`lib/dates.ts:67`\n\nEvidence: lib/dates.ts:67 calendarDay round-trips Date.UTC parts exactly like human-date.ts parseCalendarDate; lib/dates.ts:115 formatExpenseDate ladders Today/Yesterday/weekday/date while humanDateLabel ladders Today/Yesterday/Tomorrow plus an absolute suffix. Callers: timestamp.tsx (page/feed rows) vs expense-editor.tsx (editor preview).\n\nFix: Share one calendar-day parser between the modules and either converge the ladders or document why the editor preview and the ledger rows must word the same day differently.",
+        "severity": "minor",
+        "category": "design",
+        "file": "lib/dates.ts"
       }
     ],
     "pr": "46",

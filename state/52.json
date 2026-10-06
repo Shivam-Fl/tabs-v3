@@ -131,7 +131,10 @@
     "understanding": "Issue #52 is a single QA follow-up from PR #51 (for #50): a refused expense save (e.g. amount 'not-a-number') silently flips every excluded member's Include switch back to included, while description, amount text and payer inclusion persist — so retrying submits a different split than the user set. Verified live in headless Chrome (always reproducible as filed, severity minor stands). A scope check during verification found the same defect class in the category select (Travel reverted to the default across refusal; the date persisted), so the fix covers the shared root cause in the one component rather than the one switch. No split criteria to answer (no ## Acceptance (from the split) section); TR-8 and docs/ui.md ('Failed save keeps all input') govern. plan/brief.md records no human decisions and no prior rejection.",
     "version": 1
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/expense-editor.tsx",
+    "lib/expenses/actions.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "debug",

@@ -374,7 +374,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-06T08:14:21.517Z"
   },
-  "resume_at": null,
+  "resume_at": "qa",
   "flow_plan": {
     "kind": "bug",
     "confidence": 80,
@@ -383,7 +383,7 @@
     "councils": {},
     "decided_at": "2026-10-06T08:34:28.284Z"
   },
-  "stopped_at": null,
+  "stopped_at": "qa",
   "dispatched_stage": "qa",
   "validated_from": "plan",
   "validated_at": "2026-10-06T09:05:08.680Z",

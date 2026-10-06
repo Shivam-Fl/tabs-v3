@@ -680,5 +680,149 @@
     "understanding": "V1's diagnosis was not wrong, and this is not a re-roll of a mistaken plan: the signed-in Home did need the ui.md migration, PR #45 delivered it, and QA passed 12/13 tests with every acceptance criterion green except AC-5, which fails only on exploratory T-11. What v1 got wrong was narrower and was inside its own spec: it moved the ?left= leave notice above the Suspense boundary but specified no wrapping treatment for it, and the new LeftGroupNotice paragraph — like the old app/page.tsx notice before it — renders the sentence in a plain <p> with no word-breaking. A group name at GROUP_NAME_MAX (80 characters, unbroken, the exact value the leave flow redirects with) therefore sets the notice's intrinsic width past the phone viewport: scrollWidth 753 at 375px. QA marks BUG-1 introduced_by_pr false — the defect predates the diff — but the PR owns the component now and AC-5's no-horizontal-scroll contract already covers it, so the fix belongs to this ticket, not a follow-up.",
     "version": 2,
     "mode": "committed"
+  },
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Home shows the app shell plus a balance summary card whose hero number is the net position (owed minus owe, viewer currency, largest text on screen) rendered with a direction sentence — 'You are owed' when net positive, 'You owe' when net negative, 'All settled up' when net zero with nothing outstanding — in the matching tone (lent / owed / neutral), with you-are-owed and you-owe totals beside it.",
+        "how_to_verify": "Seed two groups with expenses, sign in, open /: hero figure equals owed minus owe with the direction sentence beside it in the matching tone; totals beside it.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Per-person rows show who the user owes and who owes the user, each with avatar, name, and words-plus-colour direction; group list shows rich rows with name, member count, per-group balance, and chevron; the left-group notice and the All activity link (the only UI path to /activity) render above the Suspense boundary on the loaded page. Survival through a section failure is proven by the AC-9 unit cases, not by a live failure drive.",
+        "how_to_verify": "Same session: People rows each carry Avatar plus owes-you/you-owe words in lent/owed colour; each group row links to /groups/[id] with count, balance, chevron, words and the sr-only Balance label; ?left=name renders role=status above the boundary on the loaded page; All activity link renders above the boundary and reaches /activity on the loaded page.",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Zero balances read neutral, never debt red: the settled-up sentence renders only when nothing is outstanding (owedMinor is 0 and oweMinor is 0); a net of zero with live rows in both directions renders a neutral figure with both totals visible, the neutral direction sentence, and no settled-up claim; a person row whose cross-group net cancels to exactly zero renders neutral settled-up words with no amount. The hero never carries direction by sign and colour alone. Cross-group totals format in the viewer currency and group rows in their group currency, all through formatMinorUnits with data-amount, words plus colour, never colour alone. The excluded-currency note names every foreign-currency group beside the totals, including a zero-balance foreign group whose row still shows its own zero balance.",
+        "how_to_verify": "Settle a group to zero and check the neutral banner and neutral zero-net person row; construct A-owes-you-100 plus you-owe-B-100 and check the hero shows a neutral zero with both totals, the neutral sentence, and no settled-up claim. Covered by zero-net and net-zero-gross-nonzero unit cases in app/home.test.ts.",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Empty state (zero groups) renders HomeEmpty only — illustration or icon, one sentence on what Tabs does, and a Create-your-first-group button that owns the Create action while groups are empty, with no balance summary card and no People section mounted. A user with no groups never sees the failure card (groupCount 0 forces the empty branch even though failedCount is also 0). Boot/session failure renders BootFailure in MarketingFrame with retry and never presents cached or zeroed balances as current; group-read failure with a live session renders HomeFailure inside the shell with retry and no numbers. Both retries are links to / whose refetch is asserted: after the database restarts, clicking Retry renders the loaded Home.",
+        "how_to_verify": "Fresh account sees empty state with a single Create action, no failure card, no hero, no People sentence; stop the database to see the boot failure card with retry and no numbers (the session read fails first); restart the database, click Retry, and the loaded Home renders with figures. The section failure card for a session-intact group-read failure is proven by the AC-9 homeSections failure/partial unit cases in app/home.test.ts, not by a live drive.",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Primary Create group action is obvious: group-list section-header button on desktop (AppShell has no action slot and is untouched) and thumb-reachable fixed button on phones, mutually exclusive per breakpoint so exactly one tab stop, with compensating bottom padding; cards stack vertically at 375px and lay out up to 1024px with no horizontal scroll. All hand-built action surfaces (section-header button, fixed mobile button, inline retry rows) meet the 44px minimum.",
+        "how_to_verify": "Playwright screenshots at 375x812 (fixed bottom button visible, single column, last row not covered) and 1280x800 (section-header button, max 1024 column).",
+        "id": "AC-5",
+        "source": "IAC-5",
+        "verify": "browser"
+      },
+      {
+        "check": "Row hit targets are 44px, keyboard path and visible focus hold, one h1 (rendered by the page above the cards at text-page, never via Card title which renders h2) with heading hierarchy, icons are lucide-react aria-hidden next to text, and the ui.md checklists pass including long names and large amounts at 375px. Person rows pass a string title so the ListRow tooltip holds; identical display names in different groups render as separate rows with no group context (documented limitation, see residual risks).",
+        "how_to_verify": "Keyboard-only walk: tab order matches visual order, focus ring visible, rows activatable; axe/aria check for single h1 and labelled controls; run the frontend-design craft checklist and the UX checklist.",
+        "id": "AC-6",
+        "source": "IAC-6",
+        "verify": "browser"
+      },
+      {
+        "check": "Home consumes the shell, tokens, and shared rows/cards/avatars/badges/skeletons from piece 1 unchanged and reads the existing home balance and group queries through the current server path with no new endpoint or data shape (calls only regrouped into withDb blocks, the established activity/group-page pattern). Skeleton blocks use the shared Skeleton component inside data-skeleton wrapper divs so the contract face holds and the QA hook survives.",
+        "how_to_verify": "Review: no change to lib/settle, lib/groups/queries, lib/money, components/ui.tsx, components/app-shell.tsx, or globals.css; sdlc:verify passes (typecheck, test:ci, build).",
+        "id": "AC-7",
+        "source": "TR-11",
+        "verify": "test"
+      },
+      {
+        "check": "Loading renders HomeSkeleton with one data-skeleton block per loaded region — summary card, people rows, and group rows — through a Suspense boundary that actually suspends around the async SignedInGroups child, so the served Flight stream carries the skeleton marker plus data-skeleton attributes ahead of the resolved content on real (Neon) latency. The skeleton container carries aria-busy and the sr-only 'Loading your balances' text carries no role=status, so it never mounts a second live region beside the ?left= notice. Locally PGlite resolves inside the microtask queue so the marker may never appear in the served stream, and that is an explicit pass, not a failure.",
+        "how_to_verify": "QA curls the served / stream while signed in: passes if the skeleton marker plus data-skeleton attributes arrive ahead of the resolved content; if the local stream resolves too fast to observe the marker, passes on the app/home.test.ts skeleton-markup unit case plus the fallback markup present in the file. Never proven by network throttling, which PGlite renders useless.",
+        "id": "AC-8",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Partial failure honesty: loaded groups render with balances and failed ones show inline retry rows, and whenever any group failed the summary card carries an explicit incomplete-totals note (mirroring the excluded-currency sentence) instead of a bare hero — a number the screen could not compute is never rendered as a number. The section decision is the pure exported homeSections({groupCount, failedCount}) function the page calls, with a unit case per branch. This is the proof for the group-section failure branches QA cannot induce live (the AC-2 and AC-4 browser clauses are narrowed accordingly).",
+        "how_to_verify": "CI cases in app/home.test.ts: homeSections maps groupCount 0 to empty, failedCount === groupCount (groupCount > 0) to failure, 0 < failedCount < groupCount to partial with the note, failedCount 0 to loaded; and a failed group absent from the summary inputs forces the incomplete-totals note. A live single-group failure is not inducible in QA (PGlite serves one connection), so the unit cases are the proof.",
+        "id": "AC-9",
+        "source": "IAC-4",
+        "verify": "test"
+      },
+      {
+        "check": "The visitor landing half of app/page.tsx renders exactly as before: hero headline, three-step how-it-works list, trust line, both footer links, and Create account reaching /signup — verified signed out, since every other QA step assumes a signed-in account and no test renders that file.",
+        "how_to_verify": "Signed out, open /: hero headline 'Split the bill. Settle up in a tap.', the Record/Split/Settle steps, the exact-money-math trust line, and both footer links render as before; Create account reaches /signup.",
+        "id": "AC-10",
+        "verify": "browser"
+      },
+      {
+        "check": "At a 375px viewport, /?left=<80 unbroken characters> (the longest group name the product allows) keeps the leave notice inside the viewport with no horizontal scroll: document scrollWidth stays at or under 375 while the notice still reads the full group name.",
+        "how_to_verify": "Sign up a fresh account, open /?left=<80 x 'x'> at 375px wide, assert document.documentElement.scrollWidth is <= 375 and the single role=status notice names the full 80-character value.",
+        "id": "AC-11",
+        "source": "IAC-5",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Truncate the notice name with ellipsis or a max-width instead of wrapping.",
+        "rejected_because": "The notice confirms which group was left; hiding characters weakens that confirmation while wrapping keeps the full name QA's other T-11 branches already assert."
+      },
+      {
+        "approach": "Clamp or shorten GROUP_NAME_MAX below 80 characters.",
+        "rejected_because": "The 80-character limit is validated product behavior shared with group create and rename; changing it for a wrapping defect widens the ticket and moves the goalposts."
+      }
+    ],
+    "approach": "Fix-forward on the PR branch, changing nothing from v1 except the defect: add Tailwind break-words (overflow-wrap) to the LeftGroupNotice paragraph in components/home-panels.tsx — the one-class fix QA's hint names — with no markup, copy, boundary-placement, or data-path change. Add a unit case in app/home.test.ts rendering the notice with an 80-character unbroken name asserting it carries the wrapping treatment, and add AC-11 as the permanent browser contract for notice wrapping. Verify by re-running the exact T-11 repro (/?left=<80 x 'x'> at 375px, document scrollWidth <= 375) plus the existing home suite; no new endpoint, query, token, or dependency.",
+    "assumptions": [
+      "The PR branch owns the ?left= notice in components/home-panels.tsx as LeftGroupNotice, per QA's attribution; the fix lands there. On main the same plain-<p> notice still sits in app/page.tsx, which is why this order edits the component, not the page."
+    ],
+    "confidence": 90,
+    "confidence_rationale": "QA isolated the failure to one deterministic boundary case and named the exact one-class fix; the defect is visible in the markup (no break-words/overflow-wrap anywhere in app/ or components/); the other two T-11 branches (hostile markup escaped, blank renders nothing) already pass, so the change cannot move any other assertion; and the 375px scrollWidth assert decides the outcome mechanically.",
+    "evidence": [
+      "T-11 error-context.md: expect(scrollWidth).toBeLessThanOrEqual(375) — Received 753, on /?left=<80 unbroken chars> at a 375px viewport",
+      "T-11 page snapshot: a single role=status node reading 'You left xxx...(80 unbroken chars)' with the Your balances h1 intact — the escaping and blank branches of the same test passed, only the max-length boundary failed",
+      "lib/groups/validation.ts:21 GROUP_NAME_MAX = 80; :137-139 leftNoticeText; pre-PR app/page.tsx:290-298 renders the notice in a plain <p> with no wrapping class",
+      "grep for break-words|overflow-wrap|break-all across app/ and components/: no hits — neither the old nor the migrated markup breaks unbroken strings",
+      "qa-report suspected_cause attributes the overflow to LeftGroupNotice (components/home-panels.tsx) with no word-breaking; vitest-home.txt 40/40 pass and health ok, so nothing else regressed"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add Tailwind break-words (overflow-wrap: break-word) to the LeftGroupNotice paragraph that renders leftNoticeText(leftName), so a max-length unbroken group name wraps inside the phone viewport instead of forcing horizontal scroll. One class only: no markup, copy, role=status, boundary-placement, or data-path change.",
+        "path": "components/home-panels.tsx",
+        "why": "QA T-11 proved an 80-character unbroken ?left= value pushes document scrollWidth to 753 at a 375px viewport because the notice paragraph has no word-breaking; this is the one-class fix QA's hint names."
+      }
+    ],
+    "issue": 34,
+    "kind": "feature",
+    "out_of_scope": [
+      "Any other v1 scope: the migration itself is proven (12/13 QA tests green), so this order changes only the notice wrapping.",
+      "Renaming, truncating, or re-limiting group names: the 80-character GROUP_NAME_MAX is validated product behavior shared with create/rename.",
+      "Other notices (removed/archived/invite): they share the plain-<p> shape but are unproven failing and outside BUG-1; carried as a residual risk, not widened into this ticket.",
+      "Approved docs, memory, and framework paths (.sdlc/**, .github/**, docs/**): untouched."
+    ],
+    "qa_script": [
+      "Sign up a fresh account, set the viewport to 375x812, open /?left=<80 x 'x'>: the single role=status notice reads the full name, document.documentElement.scrollWidth is <= 375, the page does not scroll sideways; screenshot.",
+      "Re-run the full T-11 spec (hostile markup stays escaped text with no dialog, blank ?left= renders no notice) plus T-2 and T-8 to confirm the notice change moved nothing else."
+    ],
+    "reproduced": false,
+    "residual_risks": [
+      "Sibling notices (removed/archived/invite) share the plain-<p> shape and may overflow on max-length names the same way; unproven, left for a follow-up if QA shows it."
+    ],
+    "risks": [
+      "If the PR branch laid the notice out somewhere a lone break-words cannot constrain (e.g. inside a flex row without min-w-0), the class alone may not hold — the 375px scrollWidth assert in AC-11 is the proof, and min-w-0 on the parent is the fallback inside the same one-file edit, not a second ticket."
+    ],
+    "root_cause": "The LeftGroupNotice paragraph in components/home-panels.tsx carries no overflow-wrap (no break-words class), so an unbroken 80-character group name in the ?left= notice cannot wrap and forces the document past the 375px phone viewport (measured scrollWidth 753). The v1 plan moved the notice above the Suspense boundary but never named a wrapping treatment for it, so the migrated markup inherited the old plain-<p> behavior verbatim — correct numbers and structure, one missing overflow class.",
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "an 80-character unbroken ?left= group name renders the leave notice with the wrapping treatment (break-words) so the notice cannot force the layout past the viewport",
+          "normal and hostile ?left= values still render as escaped text in exactly one role=status node, and a blank value renders no notice"
+        ],
+        "path": "app/home.test.ts"
+      }
+    ],
+    "understanding": "V1's diagnosis was not wrong, and this is not a re-roll of a mistaken plan: the signed-in Home did need the ui.md migration, PR #45 delivered it, and QA passed 12/13 tests with every acceptance criterion green except AC-5, which fails only on exploratory T-11. What v1 got wrong was narrower and was inside its own spec: it moved the ?left= leave notice above the Suspense boundary but specified no wrapping treatment for it, and the new LeftGroupNotice paragraph — like the old app/page.tsx notice before it — renders the sentence in a plain <p> with no word-breaking. A group name at GROUP_NAME_MAX (80 characters, unbroken, the exact value the leave flow redirects with) therefore sets the notice's intrinsic width past the phone viewport: scrollWidth 753 at 375px. QA marks BUG-1 introduced_by_pr false — the defect predates the diff — but the PR owns the component now and AC-5's no-horizontal-scroll contract already covers it, so the fix belongs to this ticket, not a follow-up.",
+    "version": 2,
+    "mode": "committed"
   }
 }

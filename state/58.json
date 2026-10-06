@@ -12,7 +12,6 @@
     "qa": 0
   },
   "attempt_run": null,
-  "halted": null,
   "pending": null,
   "work_order": null,
   "touch_paths": [],
@@ -84,7 +83,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-06T10:11:00.716Z"
   },
-  "resume_at": "plan",
+  "resume_at": null,
   "flow_plan": {
     "kind": "bug",
     "confidence": 82,
@@ -96,6 +95,6 @@
     },
     "decided_at": "2026-10-06T10:22:49.641Z"
   },
-  "stopped_at": "plan",
+  "stopped_at": null,
   "dispatched_stage": "plan"
 }

@@ -285,7 +285,31 @@
   "implemented_version": 1,
   "follow_ups": {
     "review": [],
-    "pr": "51"
+    "pr": "51",
+    "qa": [
+      {
+        "actual": "After a refused save, every excluded member's Include switch reads included again. Description, amount and payer inclusion persist; only the included flags are discarded. The retry then submits a different split than the user set.",
+        "area": "expense editor",
+        "evidence": [
+          "qa-evidence/test-results/pr51-T-6-refused-expense-s-8ec63-cluding-who-is-in-the-split-chromium/trace.zip",
+          "qa-evidence/test-results/pr51-T-6-refused-expense-s-8ec63-cluding-who-is-in-the-split-chromium/video.webm",
+          "qa-evidence/base-check/test-results/pr51-T-6-refused-expense-s-8ec63-cluding-who-is-in-the-split-chromium/trace.zip",
+          "qa-evidence/base-check/test-results/pr51-T-6-refused-expense-s-8ec63-cluding-who-is-in-the-split-chromium/video.webm"
+        ],
+        "expected": "A refused expense save keeps every input exactly as the user set it, including which members are left out of the split, so correcting the flagged field and retrying submits the intended split.",
+        "id": "BUG-1",
+        "introduced_by_pr": false,
+        "repro": [
+          "Sign up as A, create a group, add a placeholder seat Bo via the members page.",
+          "Open /groups/:id/expenses/new, fill a description, turn Bo's Include switch off (Bo reads excluded).",
+          "Fill the amount with not-a-number and press Add expense.",
+          "Observe the amount refusal AND Bo's switch silently back to included, while description, amount and payer inclusion persist."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "title": "Refused expense save silently resets split include switches to included"
+      }
+    ]
   },
   "qa": {
     "verdict": "pass",

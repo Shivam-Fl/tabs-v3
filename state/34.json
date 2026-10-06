@@ -433,7 +433,28 @@
   "implemented_version": 1,
   "follow_ups": {
     "review": [],
-    "pr": "45"
+    "pr": "45",
+    "qa": [
+      {
+        "id": "BUG-1",
+        "severity": "minor",
+        "title": "Leave notice with a max-length group name scrolls the phone layout horizontally",
+        "expected": "The ?left= notice wraps within the viewport at 375px; no horizontal scroll",
+        "actual": "An 80-character unbroken group name (GROUP_NAME_MAX) in the notice pushes document scrollWidth to 753px at a 375px viewport",
+        "repro": [
+          "Sign up a fresh account",
+          "Open /?left=<80 x characters> (the value the leave flow redirects with for a max-length group name)",
+          "Set the viewport to 375px wide and read document.documentElement.scrollWidth — 753, the page scrolls sideways"
+        ],
+        "introduced_by_pr": false,
+        "reproducible": "always",
+        "area": "home-notice",
+        "evidence": [
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/home-stream-security-T-11--a0df1-kup-blank-renders-no-notice-chromium/test-failed-1.png"
+        ],
+        "suspected_cause": "LeftGroupNotice (components/home-panels.tsx) renders the sentence in a plain <p> with no word-breaking; the pre-PR notice had the same unbroken markup, so the defect predates this diff — but this PR owns the component now and a break-words class fixes it."
+      }
+    ]
   },
   "qa": {
     "verdict": "fail",

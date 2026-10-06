@@ -530,6 +530,27 @@
         "severity": "minor",
         "category": "design",
         "file": "lib/activity/queries.ts"
+      },
+      {
+        "title": "Failed-state filter chips on a scoped /activity feed drop the ?group= scope",
+        "detail": "Failed-state filter chips on a scoped /activity feed drop the ?group= scope\n\n`app/activity/page.tsx:127`\n\nEvidence: app/activity/page.tsx:127 renders <FilterChips filter={filter} action=\"/activity\" /> with no preserved prop, while the success branch at :154 passes preserved={{ [ACTIVITY_GROUP_PARAM]: scoped.id }}. FilterChips (components/activity-feed.tsx:142-156) submits only its own form plus hidden inputs from preserved, so clicking any chip on a failed scoped feed navigates to unscoped /activity. The retry link on the same screen does preserve the scope.\n\nFix: Pass the same preserved value to the failed-branch FilterChips: preserved={scoped === null ? {} : { [ACTIVITY_GROUP_PARAM]: scoped.id }}.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/activity/page.tsx"
+      },
+      {
+        "title": "Members-excerpt placeholder badge wording contradicts its own comment and the members page",
+        "detail": "Members-excerpt placeholder badge wording contradicts its own comment and the members page\n\n`app/groups/[id]/page.tsx:935`\n\nEvidence: app/groups/[id]/page.tsx:935 renders label 'Hasn't joined yet' under comment 'in the words the members page already uses', but the members page (components/groups-panels.tsx:616) renders <Badge>Placeholder</Badge>. Same seat, two names across one navigation.\n\nFix: Use label 'Placeholder' to match the members page, or correct the comment if the new wording is deliberate.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "lib/activity/queries.ts is edited by the PR but listed in neither the work order's files[] nor its tests[]: the ACTIVITY_GROUP_PARAM const lives there.",
+        "detail": "lib/activity/queries.ts is edited by the PR but listed in neither the work order's files[] nor its tests[]: the ACTIVITY_GROUP_PARAM const lives there.\n\n`lib/activity/queries.ts:56`\n\nEvidence: gh pr diff 46 --name-only lists 14 files including lib/activity/queries.ts; work-order.json files[] names 9 paths without it and tests[] names only the four *.test.ts paths. The hunk is const-only (+14 lines: ACTIVITY_GROUP_PARAM = 'group' beside ACTIVITY_FILTER_PARAM, no read, signature or schema change). Required by the feature and correctly placed per the GROUP_SECTION_PARAM convention, so de minimis — but unlisted is unlisted.\n\nFix: Amend the work order's files[] to include lib/activity/queries.ts (const-only addition). Do not move the const: beside ACTIVITY_FILTER_PARAM is where the key convention says it lives, since the group page link writer and the /activity reader must share one spelling.",
+        "severity": "minor",
+        "category": "other",
+        "file": "lib/activity/queries.ts"
       }
     ],
     "pr": "46"

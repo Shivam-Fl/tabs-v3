@@ -533,6 +533,26 @@
         "severity": "minor",
         "suspected_cause": "The editor's state writers (changeParticipant and the field setters in _pr/components/expense-editor.tsx) preserve values across the useActionState refusal resync, but nothing re-applies the included flags after the action state resets them; the controlled checked={participant.included} binding plus the identical action wiring exist unchanged on the base commit, so this reads as a pre-existing state-resync defect, not a regression from this PR's IncludeSwitch restyle. A direct behavioral check on the base commit was attempted but the base preview wedges under Playwright traffic (health timeouts, aborted requests), so the call rests on the identical code architecture, not on a green base run.",
         "title": "Any refused expense save silently resets all split include switches to included"
+      },
+      {
+        "actual": "The activity entry renders the description as a plain untruncated link (class 'text-accent underline underline-offset-4', measured 1088px wide at x=105 on a 375px viewport), so the group page scrolls horizontally whenever a long expense name exists. The expense row itself (ListRow) truncates correctly.",
+        "area": "group page / activity excerpt",
+        "evidence": [
+          "qa-evidence/test-results/regression-T-16-long-names-337e1-nts-stay-tabular-on-a-phone-chromium/trace.zip",
+          "qa-evidence/test-results/regression-T-16-long-names-337e1-nts-stay-tabular-on-a-phone-chromium/test-finished-1.png"
+        ],
+        "expected": "No horizontal scroll on a phone viewport (qa_script viewport sweep); long names shorten instead of widening the page.",
+        "id": "BUG-2",
+        "introduced_by_pr": false,
+        "repro": [
+          "Sign up, create a group, add an expense with a 140-character description.",
+          "Open the group page at 375px width.",
+          "document.documentElement.scrollWidth (1193) exceeds clientWidth (375); the widest element is the activity entry link to the expense edit page."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "suspected_cause": "components/activity-feed.tsx renders the expense description as raw link text with no truncation. That file is byte-identical between main and _pr (verified with diff), and the activity excerpt is explicitly a sibling piece in the work order out_of_scope list — pre-existing, found in passing.",
+        "title": "Activity excerpt renders long expense names as an untruncated link, scrolling the page at 375px"
       }
     ]
   },

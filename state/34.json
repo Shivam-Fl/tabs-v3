@@ -1,7 +1,7 @@
 {
   "issue": 34,
   "pr": 45,
-  "state": "qa-fail",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -249,7 +249,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-05T18:00:01.071Z",
-  "updated_at": "2026-10-06T02:51:08.190Z",
+  "updated_at": "2026-10-06T02:51:14.765Z",
   "history": [
     {
       "at": "2026-10-05T23:24:56.727Z",
@@ -390,6 +390,11 @@
       "at": "2026-10-06T02:51:08.190Z",
       "agent": "qa",
       "action": "-> qa-fail"
+    },
+    {
+      "at": "2026-10-06T02:51:14.765Z",
+      "agent": "qa",
+      "action": "-> planning"
     }
   ],
   "epic": 31,

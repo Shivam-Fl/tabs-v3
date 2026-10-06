@@ -257,7 +257,7 @@
   "stopped_at": null,
   "dispatched_stage": "plan",
   "validated_from": "plan",
-  "validated_at": "2026-10-06T10:41:32.899Z",
+  "validated_at": "2026-10-06T11:44:07.497Z",
   "validated_ac_changes": [],
   "failure_packet": {
     "issue": 58,
@@ -304,5 +304,306 @@
       "diagnosis": "the triage agent itself did not finish",
       "run": "37457150086"
     }
-  ]
+  ],
+  "validated_work_order": {
+    "issue": 58,
+    "version": 2,
+    "kind": "bug",
+    "reproduced": true,
+    "mode": "committed",
+    "understanding": "Issue #58 collects 18 follow-ups from PR #46. Re-checked against current main (line numbers in the issue have drifted; current ones are cited below). Reproduced by running the real function bodies: a repeated query key makes groupSectionFrom, activityFilterFrom and expenseFiltersFrom throw TypeError, and GroupPage/ActivityPage call them with raw Next.js searchParams before any error handling, so the route error boundary renders. Confirmed by reading the code on main: the failed /activity branch drops the ?group= scope from its chips and, when the groups read itself failed, from its retry; the group-page members excerpt says 'Hasn't joined yet' where ui.md and the members page say Placeholder; summary-card transfer lines never badge a departed seat although the Balances rows do; the expense-filter disclosure rotates both svgs and leaves a hidden checkbox focusable at >=sm; app/activity/loading.tsx sits above the session redirect so raw HTTP gets 200 plus skeleton; the UTC-labelled Timestamp cluster in components/ui-interactive.tsx has no production importer; calendar-day validation exists twice; the GroupPage docblock promises scriptless readers all four panels; members and activity skeletons give a scriptless reader no explanation. Dropped, with reason: the two ACTIVITY_GROUP_PARAM files[] findings (a work-order bookkeeping note about PR #46, the const is correctly placed, nothing to change) and the 'feed renders a UTC label' symptom (the live feed already uses components/timestamp.tsx; only the dead export and its test remain, so this is deletion, not a visible defect). No decisions were recorded in plan/brief.md. This is a replan: the last rejection asked for reproduction evidence and for a failed-load criterion QA can actually verify; both are answered below.",
+    "root_cause": "Query parsers typed string | undefined receive string | string[] at runtime and call .trim() on it; the failed /activity branch was written as a separate code path that forgot the scope the success branch carries; the remaining findings are drift left by PR #46 (a duplicated parser, a dead module, a stale comment, a wording mismatch, a missing departed-seat label, a pre-existing boundary-above-guard route, a pre-existing silent no-JS skeleton).",
+    "approach": "Fix each live finding at its root, and make the failed-feed behaviour testable by extracting it. (1) Add firstQueryValue in lib/groups/validation.ts and use it in all three filter parsers. (2) Move activityHref into lib/activity/queries.ts, add rawGroupScope there, and extract the failed /activity card into an exported ActivityFailed component in components/activity-feed.tsx that takes filter and groupId, renders FilterChips with the group scope preserved and a Retry link built by activityHref; the page passes scoped?.id ?? rawGroupScope(raw param), so a groups-read failure keeps the scope too. (3) Rebuild /activity with the session guard above an in-page Suspense (feed reads in an async child), delete app/activity/loading.tsx, mirroring the group page. (4) Label a departed transfer endpoint in the summary card with the existing Badge, unify the placeholder badge on 'Placeholder', scope the disclosure rotation to the chevron, take the checkbox out of the tab order at >=sm, and reword the docblock to the AC-16 contract. (5) Delete the dead UTC Timestamp cluster and its pinning tests, replacing them with one test that the module exports none of it. (6) Share one calendar-day validator between lib/dates.ts and lib/money/human-date.ts and document why the two date ladders differ. (7) Add the JavaScript-required noscript notice to the members and activity skeletons.",
+    "files": [
+      {
+        "path": "lib/groups/validation.ts",
+        "action": "edit",
+        "change": "Add exported firstQueryValue(raw: string | string[] | undefined): string returning Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? ''); groupSectionFrom (around line 194) widens its parameter to string | string[] | undefined and trims firstQueryValue(raw)",
+        "why": "One coercion for every filter parser; the crash comes from calling .trim() on string[]"
+      },
+      {
+        "path": "lib/activity/queries.ts",
+        "action": "edit",
+        "change": "activityFilterFrom (line ~93) widens to string | string[] | undefined and coerces via firstQueryValue (extend the existing ../groups/validation import). Add exported activityHref(filter, groupId) moved verbatim from app/activity/page.tsx:170, and exported rawGroupScope(raw: string | string[] | undefined): string | null returning the first value only when it parses as a uuid (z.uuid().safeParse; import z from zod if not already imported), else null",
+        "why": "Pure, unit-testable home for the href builder and the raw-scope fallback used when the groups read failed"
+      },
+      {
+        "path": "lib/expenses/validation.ts",
+        "action": "edit",
+        "change": "expenseFiltersFrom (line ~593) query fields member/category/q widen to string | string[]; import firstQueryValue from ../groups/validation (that module imports only ../auth/validation, so no cycle) and coerce each before trim/lower-case/slice",
+        "why": "Same crash on ?q=a&q=b, ?member= and ?category="
+      },
+      {
+        "path": "app/groups/[id]/page.tsx",
+        "action": "edit",
+        "change": "Widen GroupSearchParams section/member/category/q (line ~83) to string | string[]. Reword the GroupPage docblock (line ~105 'a reader without JavaScript gets all four') to: sections are linkable server-rendered navigations for readers with JavaScript; a reader without it gets the skeleton plus the JavaScript-required notice. In the summary transfer lines (line ~541-550) compute fromGone/toGone against currentIds (hoist the set so the summary card has it) and render <Badge>No longer in the group</Badge> in a shrink-0 span beside transferWords when an endpoint departed. memberBadges (line ~1074): label 'Placeholder'. FilterDisclosure (line ~969): checkbox className 'peer sr-only sm:hidden'; label rotation peer-checked:[&_.chevron]:rotate-180 instead of [&>svg]; ChevronDown gets className including 'chevron'; update the nearby comment",
+        "why": "Findings 4, 5/9/12, 6/13, 10, 11 on current main"
+      },
+      {
+        "path": "app/activity/page.tsx",
+        "action": "edit",
+        "change": "Widen searchParams to { activity?: string | string[]; group?: string | string[] }. Keep the getSessionUser redirect at the top; move groups/rows reads and the scoped note, empty and failed UI into an async ActivityContent child rendered inside <Suspense fallback={...}> below the h1/back-link header, with fallback = ActivityFeedSkeleton (plus a Skeleton line h-6 w-64 only when rawGroupScope(raw group) is non-null, so the 'Showing X only' line does not shift the layout). In the failed branch render <ActivityFailed filter={filter} groupId={scoped?.id ?? rawGroupScope(query.group)} />; the success branch keeps preserved={scoped === null ? {} : {group: scoped.id}}. Import activityHref from lib/activity/queries and delete the local copy",
+        "why": "Guard above boundary (raw GET 3xx), failed-state scope, array-safe group param"
+      },
+      {
+        "path": "app/activity/loading.tsx",
+        "action": "delete",
+        "change": "Delete the route-level boundary; the skeleton now streams from the in-page Suspense below the guard",
+        "why": "A route-level loading.tsx commits 200 before the redirect runs"
+      },
+      {
+        "path": "components/activity-feed.tsx",
+        "action": "edit",
+        "change": "Add exported ActivityFailed({ filter, groupId }: { filter: ActivityFilter; groupId: string | null }) holding what the failed branch renders today: FilterChips with preserved={groupId === null ? {} : {[ACTIVITY_GROUP_PARAM]: groupId}} then the Card 'We could not load your activity' / 'Nothing has been lost — the feed did not come back this time. Try again.' / Retry link href={activityHref(filter, groupId)} (import Card from ./ui, activityHref and ACTIVITY_GROUP_PARAM from ../lib/activity/queries). Add at the top of ActivityFeedSkeleton a <noscript> notice: 'Tabs needs JavaScript to load your activity. Turn it on and reload the page.' in the same classes as the group skeleton's notice",
+        "why": "Makes the failed state renderable in a unit test and carries the scope in chips and retry"
+      },
+      {
+        "path": "app/groups/[id]/members/loading.tsx",
+        "action": "edit",
+        "change": "Add a <noscript> notice at the top of the main content, same classes as components/group-skeletons.tsx: 'Tabs needs JavaScript to load this group’s members. Turn it on and reload the page.'",
+        "why": "A scriptless reader otherwise watches a skeleton that never resolves"
+      },
+      {
+        "path": "components/ui-interactive.tsx",
+        "action": "edit",
+        "change": "Delete the orphaned time cluster (line ~130-243): UTC_LABEL, utcTimestampText, relativeTimestamp, dayKeyIn, humanTimestamp, timestampLabel, viewerTimeZone, Timestamp, MINUTE_MS/HOUR_MS/DAY_MS/RELATIVE_LIMIT_MS and its section comment; leave SegmentedControl, stepSegment, Menu, Dialog, Toast untouched; remove any import left unused",
+        "why": "Zero production importers; its only renderer pins the UTC label the product bans"
+      },
+      {
+        "path": "lib/dates.ts",
+        "action": "edit",
+        "change": "Export interface CalendarDay and a new isRealCalendarDay(year, month, day): boolean holding the Date.UTC round-trip check; calendarDay (line ~67) calls it",
+        "why": "One calendar-day validator for both modules"
+      },
+      {
+        "path": "lib/money/human-date.ts",
+        "action": "edit",
+        "change": "parseCalendarDate keeps its strict YYYY-MM-DD anchor but validates the triple with isRealCalendarDay imported from ../dates (drop its own round-trip block and local CalendarDate interface in favour of CalendarDay); add a header comment on humanDateLabel and on formatExpenseDate (lib/dates.ts) saying why the ladders differ: the editor preview pairs the relative word with the absolute day and names Tomorrow because its 'today' is the viewer's local day while it is being typed; ledger rows use Today/Yesterday/weekday/date. Output strings do not change",
+        "why": "Findings 15/16: shared parser, documented ladder difference"
+      }
+    ],
+    "tests": [
+      {
+        "path": "lib/groups/validation.test.ts",
+        "action": "edit",
+        "cases": [
+          "groupSectionFrom(['expenses','balances']) returns expenses and does not throw",
+          "groupSectionFrom(['bogus']) and groupSectionFrom([]) default to expenses",
+          "single strings behave as before (balances, ' MEMBERS ', undefined)",
+          "firstQueryValue returns '' for undefined and [], the first element for arrays, the string itself otherwise"
+        ]
+      },
+      {
+        "path": "lib/activity/queries.test.ts",
+        "action": "edit",
+        "cases": [
+          "activityFilterFrom(['expenses','members']) returns expenses; array of unknowns returns all; single values unchanged",
+          "activityHref: no scope and default filter is /activity; group only is /activity?group=<id>; group plus filter is /activity?group=<id>&activity=expenses",
+          "rawGroupScope returns the first uuid of a repeated value, null for a non-uuid, an empty string, [] and undefined"
+        ]
+      },
+      {
+        "path": "lib/expenses/validation.test.ts",
+        "action": "edit",
+        "cases": [
+          "expenseFiltersFrom takes the first of repeated q, member and category values",
+          "repeated garbage yields null member/category/search and never throws"
+        ]
+      },
+      {
+        "path": "app/activity/failed-feed.test.ts",
+        "action": "create",
+        "cases": [
+          "ActivityFailed with groupId renders the filter form with a hidden input name=group value=<id> and a Retry link whose href is /activity?group=<id>",
+          "ActivityFailed with filter=expenses and a groupId keeps both in the Retry href",
+          "ActivityFailed with groupId null renders no hidden group input and Retry href /activity",
+          "ActivityFailed shows 'We could not load your activity' and the chips stay rendered",
+          "ActivityFeedSkeleton renders a noscript notice naming JavaScript"
+        ]
+      },
+      {
+        "path": "app/activity/guard-wire-status.test.ts",
+        "action": "create",
+        "cases": [
+          "app/activity/loading.tsx does not exist",
+          "in app/activity/page.tsx the getSessionUser redirect appears before '<Suspense fallback='",
+          "the page passes the failed branch scoped?.id ?? rawGroupScope(...) to ActivityFailed"
+        ]
+      },
+      {
+        "path": "app/groups/[id]/members/loading.test.ts",
+        "action": "edit",
+        "cases": [
+          "members loading markup contains a <noscript> block that names JavaScript"
+        ]
+      },
+      {
+        "path": "app/ui-set.test.ts",
+        "action": "edit",
+        "cases": [
+          "remove the timestamps describe block and the Timestamp/humanTimestamp/relativeTimestamp/timestampLabel/utcTimestampText imports",
+          "add: the ui-interactive module exports none of Timestamp, timestampLabel, utcTimestampText, relativeTimestamp, humanTimestamp",
+          "avatar, button, money and segmented-control cases stay green"
+        ]
+      },
+      {
+        "path": "lib/dates.test.ts",
+        "action": "edit",
+        "cases": [
+          "isRealCalendarDay rejects 2026-02-30 and month 13, accepts leap day 2024-02-29 and rejects 2025-02-29",
+          "formatExpenseDate ladder outputs unchanged for today, yesterday, weekday and older dates"
+        ]
+      },
+      {
+        "path": "lib/money/human-date.test.ts",
+        "action": "edit",
+        "cases": [
+          "humanDateLabel for today reads 'Today · <day month>' while formatExpenseDate for the same day reads 'Today' (the documented split)",
+          "existing cases unchanged, including the Tomorrow rung, year suffix and rejection of 2026-02-30"
+        ]
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "Opening /groups/<id>?section=expenses&section=balances shows the group page on its first value (expenses) instead of the error boundary",
+        "verify": "browser",
+        "how_to_verify": "Sign up, create a group with one expense, open /groups/<id>?section=expenses&section=balances: the expenses panel and expense row render, no error card"
+      },
+      {
+        "id": "AC-2",
+        "check": "Repeated ?activity= on /activity and repeated ?q=, ?member=, ?category= on the group page use the first value instead of crashing",
+        "verify": "browser",
+        "how_to_verify": "Open /activity?activity=expenses&activity=members (feed renders with Expenses chip pressed) and /groups/<id>?section=expenses&q=a&q=b (expenses panel renders, search field shows a)"
+      },
+      {
+        "id": "AC-3",
+        "check": "On a loaded /activity?group=<id> every filter-chip form carries a hidden group input with that id",
+        "verify": "browser",
+        "how_to_verify": "View source of /activity?group=<id> for a group the user is in: the chip form contains input type=hidden name=group value=<id>; clicking the Expenses chip lands on /activity?group=<id>&activity=expenses with the 'Showing <name> only' line still present"
+      },
+      {
+        "id": "AC-4",
+        "check": "When the feed fails to load, the filter chips keep the group scope and Retry links to /activity?group=<id> (with the filter), including when only the raw ?group= param is known",
+        "verify": "test",
+        "how_to_verify": "app/activity/failed-feed.test.ts renders ActivityFailed (the component the page's failed branch renders) and asserts the hidden group input and Retry href; lib/activity/queries.test.ts pins rawGroupScope/activityHref; app/activity/guard-wire-status.test.ts pins that the page passes scoped?.id ?? rawGroupScope(...). The live app gives no way to make the read fail, so QA does not drive this"
+      },
+      {
+        "id": "AC-5",
+        "check": "The group page members excerpt labels an unclaimed seat 'Placeholder', the same word as the members page",
+        "verify": "browser",
+        "how_to_verify": "Add a placeholder member, open /groups/<id>?section=members: the badge reads Placeholder; open /groups/<id>/members: same word; the text 'Hasn't joined yet' appears nowhere"
+      },
+      {
+        "id": "AC-6",
+        "check": "A summary-card transfer line naming a departed seat shows the 'No longer in the group' badge beside it, as the Balances rows do",
+        "verify": "browser",
+        "how_to_verify": "As owner A in a group with B: A pays an expense split equally with B; B records a full payment to A (balances zero); owner removes B; A deletes the expense. The summary card now shows 'You owe <B>' with the badge, and the Balances section row for B carries the same badge"
+      },
+      {
+        "id": "AC-7",
+        "check": "The dead UTC-labelled Timestamp cluster is gone from components/ui-interactive.tsx and its UTC-pinning tests are removed; the feed still shows no UTC text",
+        "verify": "test",
+        "how_to_verify": "app/ui-set.test.ts case 'the ui-interactive module exports none of the time helpers' passes and the timestamps describe block is gone; QA also confirms by reading /activity that no row contains the text UTC"
+      },
+      {
+        "id": "AC-8",
+        "check": "Opening the expense-filter disclosure at 375px rotates only the chevron; the sliders icon stays upright",
+        "verify": "browser",
+        "how_to_verify": "At 375px open /groups/<id>?section=expenses, press 'Search and filters': the chevron points up, the sliders glyph is unchanged"
+      },
+      {
+        "id": "AC-9",
+        "check": "At 1280px the hidden disclosure checkbox is not in the keyboard tab order",
+        "verify": "browser",
+        "how_to_verify": "At 1280px on /groups/<id>?section=expenses press Tab repeatedly from the page top: focus passes from the tab bar straight to the member select; no step lands on an invisible control"
+      },
+      {
+        "id": "AC-10",
+        "check": "An anonymous raw HTTP GET /activity returns a 3xx redirect to /signin, not 200 with a skeleton",
+        "verify": "api",
+        "how_to_verify": "curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost:3000/activity with no cookie prints 307 (or 3xx) ending in /signin?next=%2Factivity; signed in, the page still shows a skeleton on a cold load and then the feed"
+      },
+      {
+        "id": "AC-11",
+        "check": "With JavaScript disabled, the members and activity screens show a visible notice that JavaScript is required instead of only a pulsing skeleton",
+        "verify": "browser",
+        "how_to_verify": "In a browser context with JavaScript disabled and the session cookie, open /groups/<id>/members and /activity: each shows the skeleton and the sentence 'Tabs needs JavaScript to load …. Turn it on and reload the page.'"
+      },
+      {
+        "id": "AC-12",
+        "check": "The expense editor date preview still reads the relative word plus the absolute day (e.g. 'Today · 6 Oct') and the ledger rows still read Today/Yesterday/weekday",
+        "verify": "browser",
+        "how_to_verify": "Open /groups/<id>/expenses/new: the preview under the date reads Today · <day month>; after saving, the expense row reads Today"
+      },
+      {
+        "id": "AC-13",
+        "check": "lib/dates.ts and lib/money/human-date.ts validate calendar days through one shared function and still reject impossible days",
+        "verify": "test",
+        "how_to_verify": "lib/dates.test.ts isRealCalendarDay case and lib/money/human-date.test.ts existing 2026-02-30 rejection case pass"
+      }
+    ],
+    "qa_script": [
+      "Sign up a fresh account, create a group with currency INR, add a placeholder member and one equal-split expense, open /groups/<id>?section=expenses&section=balances and confirm the expenses panel shows (AC-1)",
+      "Open /groups/<id>?section=expenses&q=a&q=b and /activity?activity=expenses&activity=members: both render, no error card (AC-2)",
+      "Open /activity?group=<id>, view source for the hidden group input in the chip form, click a chip and confirm the scope survives (AC-3)",
+      "Open ?section=members on the group page and /groups/<id>/members: the badge word is Placeholder in both (AC-5)",
+      "Build the departed-seat case from AC-6 (needs a second account that joined by invite link) and check the summary transfer line and the Balances row for the badge",
+      "At 375px expand the filter disclosure and check the sliders icon stays upright (AC-8); at 1280px Tab through the page and confirm no invisible stop (AC-9)",
+      "curl -I /activity anonymously and read the status (AC-10); then open it signed in from a cold load",
+      "Disable JavaScript and open /groups/<id>/members and /activity (AC-11)",
+      "Open /groups/<id>/expenses/new and read the date preview (AC-12)"
+    ],
+    "evidence": [
+      "Ran the real bodies of groupSectionFrom (lib/groups/validation.ts), activityFilterFrom (lib/activity/queries.ts) and expenseFiltersFrom (lib/expenses/validation.ts) extracted from the files, with array input: groupSectionFrom(['expenses','balances']) -> TypeError '(raw ?? \"\").trim is not a function'; activityFilterFrom(['expenses','members']) -> same TypeError; expenseFiltersFrom({q:['a','b']}), ({member:[...]}) and ({category:[...]}) -> TypeError; groupSectionFrom('balances') -> 'balances' (single strings fine)",
+      "app/groups/[id]/page.tsx:162-163 calls groupSectionFrom(query[section]) and expenseFiltersFrom(query) on raw searchParams before the ledger try/catch; app/activity/page.tsx:54 does the same with activityFilterFrom, so the TypeError escapes to the route error boundary",
+      "app/activity/page.tsx: failed branch renders <FilterChips filter={filter} action=\"/activity\" /> with no preserved prop, while the success branch passes preserved={scoped === null ? {} : {[ACTIVITY_GROUP_PARAM]: scoped.id}}; scoped is computed from groups, initialised [] and left [] when listActivityGroups throws, so the Retry href scoped?.id ?? null is null on a groups-read failure",
+      "app/groups/[id]/page.tsx:1074 label 'Hasn\\u2019t joined yet'; components/groups-panels.tsx:654 <Badge>Placeholder</Badge>; docs/ui.md:89 and :217 name the badge Placeholder",
+      "app/groups/[id]/page.tsx:541-550 summary transfers render transferWords with no departed check; :469-471 and :782-786 show the Balances rows use currentIds and render <Badge>No longer in the group</Badge>; :470 filter comment confirms departed seats keep non-zero balances (ADR-0007)",
+      "app/groups/[id]/page.tsx:969 checkbox className 'peer sr-only' with no sm:hidden while its label (:972) carries sm:hidden and peer-checked:[&>svg]:rotate-180 with two svg children (SlidersHorizontal, ChevronDown)",
+      "app/activity/loading.tsx exists and app/activity/page.tsx awaits getSessionUser then redirect() beneath it; app/groups/[id]/guards-wire-status.test.ts documents the same mechanism committing 200 before the guard on the group segments",
+      "git grep for Timestamp, timestampLabel, utcTimestampText, relativeTimestamp, humanTimestamp outside components/ui-interactive.tsx finds only app/ui-set.test.ts; the live feed uses components/timestamp.tsx",
+      "lib/dates.ts:67 calendarDay and lib/money/human-date.ts parseCalendarDate both round-trip Date.UTC parts; humanDateLabel is imported only by components/expense-editor.tsx",
+      "app/groups/[id]/members/loading.tsx and ActivityFeedSkeleton contain no <noscript>, while components/group-skeletons.tsx:52-56 does",
+      "expenseNoticeText and paymentNoticeText compare with ===, parseNoticeName guards typeof string, paymentNoticePair uses z.uuid().safeParse: all array-safe, no change",
+      "Not reproduced live: node_modules is empty in this run, so no server was started; the boundary-above-guard, failed-branch, badge and disclosure findings are confirmed by reading the exact lines on main, not by driving a browser"
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Converge formatExpenseDate and humanDateLabel into one ladder",
+        "rejected_because": "The shapes serve different readers: the editor preview pairs the relative word with the absolute day and names Tomorrow, ledger rows use the weekday ladder; merging changes shipped copy. Share the parser and document the difference instead"
+      },
+      {
+        "approach": "Leave the failed branch inline in the page and verify AC-4 by giving QA a way to cause a feed failure",
+        "rejected_because": "The live app offers no way to make one read fail; extracting ActivityFailed lets a render test pin the chips and retry"
+      },
+      {
+        "approach": "Restructure the members page guard below its loading boundary too",
+        "rejected_because": "No finding asks for it and it changes first-paint auth behaviour on a second route; members keeps its route-level loading file and only gains the noscript notice"
+      }
+    ],
+    "assumptions": [
+      "Next.js delivers repeated query keys as string[], which is what makes .trim() throw (the function-level reproduction used exactly that input)",
+      "Group ids are uuids (schema uses uuid primary keys), so rawGroupScope can reject non-uuid raw values safely"
+    ],
+    "unknowns": [
+      "The AC-6 browser path needs a second account that joined and was then removed; if QA cannot build it, the Badge render is covered only by reading the page, since the summary card is a server component with no render test"
+    ],
+    "risks": [
+      "The 'Showing X only' line on /activity moves below the Suspense boundary; the fallback reserves a line only when ?group= holds a uuid, so a stale uuid shows a brief gap that then closes",
+      "Deleting app/activity/loading.tsx changes cold-navigation first paint: header and shell now render from the page and only the feed shows the skeleton",
+      "expenseFiltersFrom's widened signature means a caller passing pre-trimmed strings still works, but future callers must pass raw query values",
+      "ActivityFailed is a new exported component in components/activity-feed.tsx; the failed-state copy is unchanged",
+      "No file in forbidden_paths, .sdlc, .github, docs/** or .sdlc/memory is touched; no new host is contacted"
+    ],
+    "out_of_scope": [
+      "ACTIVITY_GROUP_PARAM const placement and the 'name queries.ts in files[]' bookkeeping findings about PR #46: the const already sits beside ACTIVITY_FILTER_PARAM; nothing to change",
+      "Converging the two date ladders into one output shape: kept distinct deliberately and documented",
+      "Moving the members page guard above its loading boundary: not asked for",
+      "Other notice parsers (parseNoticeName, expenseNoticeText, paymentNoticeText, paymentNoticePair): verified array-safe, no change",
+      "Rendering the resolved ledger for scriptless readers: the contract stays skeleton plus JavaScript-required notice (AC-16)"
+    ],
+    "confidence": 82,
+    "confidence_rationale": "The crash was reproduced by executing the actual function bodies with array input; every other finding was re-read at its current line on main and, where a finding was a non-defect (const placement, UTC label on the live feed), dropped or reduced to deletion. Not driven in a browser because dependencies are not installed in this run."
+  }
 }

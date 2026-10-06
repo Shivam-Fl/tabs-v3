@@ -21,6 +21,7 @@ import {
   FIELD_MESSAGE,
   NEUTRAL_CREDENTIALS_MESSAGE,
   PROFILE_REFUSAL_MESSAGE,
+  PROFILE_SAVED_MESSAGE,
   SIGNUP_SUCCESS_MESSAGE,
   THROTTLE_MESSAGE,
   fieldErrorsFrom,
@@ -165,8 +166,19 @@ export async function signOut(): Promise<void> {
  * (AC-5, ui.md "failed saves never clear what the person typed"). Returning them inline is only
  * half of that — the state carries the submitted values back in `values`, because the island
  * renders from the *saved* props and would otherwise have nothing to restore the choice from.
- * Success still changes the page, so success still redirects with its notice — `?saved=1` is
- * untouched, and `?error=invalid` stays readable by the page for a direct hit.
+ *
+ * **Success is answered inline too, which is a recorded deviation from ADR-0008's redirect rule
+ * (AC-3).** That ADR exists because a success unmounts the form that would have shown its message
+ * (patterns/success-note-never-renders.md); this form does not unmount, so the rule's rationale
+ * does not reach it. What the redirect did cost is real: it threw, so `useActionState` never left
+ * the state a refusal had put it in, and the refusal-then-fix-then-save walk — a refusal, then a
+ * corrected save — would have kept the refusal's state alive and suppressed the confirmation the
+ * save had just earned. Answering inline makes every submit carry its own outcome, and no stale
+ * `?saved=1` is left in the URL for a later refusal to sit beside.
+ *
+ * `?saved=1` and `?error=invalid` are still *read* by the page for a direct hit — a bookmark, a
+ * back button, a link somebody pasted — through `profileNoticeText`, which renders nothing for a
+ * value outside its closed vocabulary.
  *
  * The `(previous, formData)` signature is what `useActionState` calls this with; nothing else
  * in the app calls it.
@@ -210,5 +222,7 @@ export async function updateProfile(
   if (!saved) redirect('/signin');
 
   revalidatePath('/profile');
-  redirect('/profile?saved=1');
+  // Answered to the form that submitted it — see the record above for why this one success does
+  // not ride home as a query param the way every other success in the app does.
+  return { status: 'success', message: PROFILE_SAVED_MESSAGE };
 }

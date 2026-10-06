@@ -126,6 +126,55 @@ export const IDLE_AUTH_STATE: AuthFormState = { status: 'idle', message: '' };
 export const PROFILE_REFUSAL_MESSAGE = 'Check the highlighted fields and try again.';
 
 /**
+ * The sentence a saved profile reads, in one place (AC-3).
+ *
+ * It is both what `updateProfile` hands back on success and what the island paints, so the two
+ * cannot become two phrasings of the same confirmation — the same reason the auth messages above
+ * are constants rather than string literals at their call sites.
+ */
+export const PROFILE_SAVED_MESSAGE = 'Profile saved.';
+
+/** The values the two profile notice params carry. They are a closed set: the saved value is the
+ * one the action used to redirect with, and the error value is what a bookmark of the old refusal
+ * URL still spells. Anything else — forged, blank, or repeated — says nothing at all. */
+export const PROFILE_SAVED_VALUE = '1';
+export const PROFILE_ERROR_VALUE = 'invalid';
+
+/** Which of the two notices the query carried, and the tone it wears. */
+export interface ProfileNotice {
+  tone: 'danger' | 'lent';
+  text: string;
+}
+
+/**
+ * The profile notice the URL is carrying, read the way every other notice is (ADR-0008): a closed
+ * vocabulary in, one sentence out, and nothing for anything else.
+ *
+ * The page used to test these two params for truthiness, so `?saved=yes` rendered "Profile saved."
+ * for a save that never happened and `?error=lol` rendered the refusal sentence for a refusal that
+ * never happened. Both now cross this function, which is the only reader of either param.
+ *
+ * Its arguments are `unknown` rather than `string | undefined` on purpose: Next hands a repeated
+ * param over as an array, and `['1']` is not the value it spells, so a repeated param renders
+ * nothing instead of a sentence.
+ *
+ * Error is tested first because a URL carrying both is a refusal with a stale success beside it —
+ * the one outcome the two must never render together (AC-3).
+ */
+export function profileNoticeText(params: {
+  error?: unknown;
+  saved?: unknown;
+}): ProfileNotice | null {
+  if (params.error === PROFILE_ERROR_VALUE) {
+    return { tone: 'danger', text: PROFILE_REFUSAL_MESSAGE };
+  }
+  if (params.saved === PROFILE_SAVED_VALUE) {
+    return { tone: 'lent', text: PROFILE_SAVED_MESSAGE };
+  }
+  return null;
+}
+
+/**
  * The two values the profile form displays, and the shape both the island and the page pass
  * around.
  *

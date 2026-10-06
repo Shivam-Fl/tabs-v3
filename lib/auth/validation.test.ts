@@ -4,12 +4,14 @@ import {
   IDLE_PROFILE_STATE,
   NEUTRAL_CREDENTIALS_MESSAGE,
   PROFILE_REFUSAL_MESSAGE,
+  PROFILE_SAVED_MESSAGE,
   SIGNUP_SUCCESS_MESSAGE,
   SUPPORTED_CURRENCIES,
   fieldErrorsFrom,
   normalizeCurrency,
   normalizeEmail,
   profileFormDefaults,
+  profileNoticeText,
   profileSchema,
   signinSchema,
   signupSchema,
@@ -152,6 +154,48 @@ describe('profileFormDefaults', () => {
     };
 
     expect(profileFormDefaults(state, saved)).toEqual(saved);
+  });
+});
+
+describe('profileNoticeText', () => {
+  it('reads saved=1 as the saved sentence, in the success tone', () => {
+    expect(profileNoticeText({ saved: '1' })).toEqual({
+      tone: 'lent',
+      text: PROFILE_SAVED_MESSAGE,
+    });
+  });
+
+  it('reads error=invalid as the refusal sentence, in the danger tone', () => {
+    expect(profileNoticeText({ error: 'invalid' })).toEqual({
+      tone: 'danger',
+      text: PROFILE_REFUSAL_MESSAGE,
+    });
+  });
+
+  it('lets the error win when a URL carries both, rather than rendering the pair', () => {
+    // A stale success beside a fresh refusal is exactly what AC-3 forbids; one notice slot and one
+    // winning value is what makes it structurally impossible.
+    expect(profileNoticeText({ error: 'invalid', saved: '1' })).toEqual({
+      tone: 'danger',
+      text: PROFILE_REFUSAL_MESSAGE,
+    });
+  });
+
+  it('says nothing for a value outside the closed vocabulary', () => {
+    // The page used to test these for truthiness, so each of these rendered a sentence about an
+    // outcome that never happened.
+    expect(profileNoticeText({ saved: 'yes' })).toBeNull();
+    expect(profileNoticeText({ error: 'lol' })).toBeNull();
+    expect(profileNoticeText({ saved: '0' })).toBeNull();
+    expect(profileNoticeText({ error: '' })).toBeNull();
+    expect(profileNoticeText({})).toBeNull();
+  });
+
+  it('says nothing for a repeated param, which Next hands over as an array', () => {
+    // `?saved=1&saved=1` arrives as `['1', '1']`: a list is not the value it spells, and reading
+    // it as one would be the same open-vocabulary bug in a different shape.
+    expect(profileNoticeText({ saved: ['1', '1'] })).toBeNull();
+    expect(profileNoticeText({ error: ['invalid'] })).toBeNull();
   });
 });
 

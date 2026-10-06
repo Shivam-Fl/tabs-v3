@@ -427,7 +427,30 @@
         "file": "app/groups/[id]/page.tsx"
       }
     ],
-    "pr": "43"
+    "pr": "43",
+    "qa": [
+      {
+        "actual": "After any refused save, every split member's include switch reads included again, including members the user had deliberately left out. The refusal text, description, amount and per-member split values all persist; only the included choices are discarded. Reproduced 3/3 across two accounts and two refusal triggers (empty-split refusal and non-numeric-amount refusal).",
+        "evidence": [
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/probe-6-reset.png",
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/probe.har"
+        ],
+        "expected": "A refused expense save keeps every input exactly as the user set it, including which members are left out of the split, so correcting the flagged field and retrying submits the intended split.",
+        "id": "BUG-1",
+        "introduced_by_pr": false,
+        "repro": [
+          "Sign up as A, create a group, invite and join as B.",
+          "Open /groups/:id/expenses/new, fill amount 500 and any description.",
+          "Turn B's Include switch off (B reads excluded, A stays included).",
+          "Fill amount with not-a-number (or otherwise trigger a refused save) and press Add expense.",
+          "Observe the refusal; observe B's switch is silently back to included."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "suspected_cause": "The editor's state writers (changeParticipant and the field setters in _pr/components/expense-editor.tsx) preserve values across the useActionState refusal resync, but nothing re-applies the included flags after the action state resets them; the controlled checked={participant.included} binding plus the identical action wiring exist unchanged on the base commit, so this reads as a pre-existing state-resync defect, not a regression from this PR's IncludeSwitch restyle. A direct behavioral check on the base commit was attempted but the base preview wedges under Playwright traffic (health timeouts, aborted requests), so the call rests on the identical code architecture, not on a green base run.",
+        "title": "Any refused expense save silently resets all split include switches to included"
+      }
+    ]
   },
   "qa": {
     "verdict": "pass",

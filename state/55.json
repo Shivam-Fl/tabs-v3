@@ -1,21 +1,17 @@
 {
   "issue": 55,
   "pr": 56,
-  "state": "needs-human",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
   "attempts": {
-    "plan": 4,
-    "ci": 2,
-    "review": 2,
-    "qa": 3
+    "plan": 0,
+    "ci": 0,
+    "review": 0,
+    "qa": 0
   },
-  "attempt_run": {
-    "counter": "plan",
-    "n": 4,
-    "run": "37456291181"
-  },
+  "attempt_run": null,
   "halted": null,
   "pending": {
     "stage": "root-cause",
@@ -225,7 +221,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-06T08:14:01.860Z",
-  "updated_at": "2026-10-06T11:26:57.047Z",
+  "updated_at": "2026-10-06T11:39:50.616Z",
   "history": [
     {
       "at": "2026-10-06T08:14:24.516Z",
@@ -416,6 +412,21 @@
       "at": "2026-10-06T11:26:57.047Z",
       "agent": "self-heal",
       "action": "-> needs-human"
+    },
+    {
+      "at": "2026-10-06T11:39:50.616Z",
+      "agent": "human",
+      "action": "lock released"
+    },
+    {
+      "at": "2026-10-06T11:39:50.616Z",
+      "agent": "human",
+      "action": "budget reset (was {\"plan\":4,\"ci\":2,\"review\":2,\"qa\":3})"
+    },
+    {
+      "at": "2026-10-06T11:39:50.616Z",
+      "agent": "human",
+      "action": "-> planning"
     }
   ],
   "issue_snapshot": {

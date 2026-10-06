@@ -208,7 +208,19 @@
     "version": 1,
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/groups-panels.tsx",
+    "components/members-screen.tsx",
+    "app/groups/[id]/members/page.tsx",
+    "app/profile/page.tsx",
+    "components/profile-form.tsx",
+    "lib/auth/validation.ts",
+    "lib/auth/actions.ts",
+    "app/groups/[id]/members/archived-readonly.test.ts",
+    "app/profile/notice.test.ts",
+    "lib/auth/validation.test.ts",
+    "lib/auth/actions.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "debug",

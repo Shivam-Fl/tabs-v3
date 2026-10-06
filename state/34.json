@@ -525,7 +525,8 @@
         ],
         "suspected_cause": "LeftGroupNotice (components/home-panels.tsx) renders the sentence in a plain <p> with no word-breaking; the pre-PR notice had the same unbroken markup, so the defect predates this diff — but this PR owns the component now and a break-words class fixes it."
       }
-    ]
+    ],
+    "filed": 49
   },
   "qa": {
     "verdict": "pass",

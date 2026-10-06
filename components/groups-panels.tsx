@@ -311,6 +311,7 @@ export function InvitePanel({
   invitePath,
   inviteEnabled,
   inviteNotice = null,
+  archived = false,
 }: {
   groupId: string;
   groupName: string;
@@ -319,6 +320,14 @@ export function InvitePanel({
   /** The sentence a successful rotate or disable came back with, built from the page's query
    * (AC-13). One slot, because both outcomes share it and the later one replaces the earlier. */
   inviteNotice?: string | null;
+  /**
+   * Whether the group is archived (AC-2). Every control this panel owns is dead on an archived
+   * group — joining filters archived groups out of the invite lookup, and rotate and disable both
+   * answer with the archived refusal — so the panel says so in one read-only sentence and offers
+   * nothing at all: no link to copy, no captions about joining, no rotate or disable, and no
+   * notice slot, because a success notice about a link nobody can use is noise.
+   */
+  archived?: boolean;
 }) {
   const [rotateState, rotateAction, rotatePending] = useActionState(rotateInvite, IDLE_GROUP_STATE);
   const [disableState, disableAction, disablePending] = useActionState(
@@ -335,100 +344,108 @@ export function InvitePanel({
         Invite link
       </h2>
 
-      {/* Section level, once, holding whichever invite outcome just happened: the two successes
-          ride one query value, so this is the only place either can render and neither can sit
-          beside the other (AC-13). */}
-      {inviteNotice ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent"
-        >
-          {inviteNotice}
-        </p>
-      ) : null}
-
-      {invitePath === null ? (
+      {archived ? (
         <p className="text-secondary text-ink-muted">
-          This group has no link yet. Create one to invite people.
+          This group is archived, so nobody new can join.
         </p>
       ) : (
         <>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="sr-only" htmlFor="invite-url">
-              Invite link
-            </label>
-            <input
-              id="invite-url"
-              type="text"
-              readOnly
-              value={absolute ?? invitePath}
-              onFocus={(event) => event.target.select()}
-              className={FIELD_CLASSES}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={async () => {
-                if (absolute === null) return;
-                setCopyNote(await copyInviteLink(absolute));
-              }}
+          {/* Section level, once, holding whichever invite outcome just happened: the two successes
+              ride one query value, so this is the only place either can render and neither can sit
+              beside the other (AC-13). */}
+          {inviteNotice ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent"
             >
-              Copy
-            </Button>
-          </div>
-          <p aria-live="polite" className="text-secondary text-ink-muted">
-            {copyNote ?? 'Anyone signed in who opens this link can join.'}
-          </p>
-          <p className={inviteEnabled ? 'text-secondary text-lent' : 'text-secondary text-danger'}>
-            {inviteEnabled ? 'The link is active.' : 'The link is disabled — nobody can join with it.'}
-          </p>
+              {inviteNotice}
+            </p>
+          ) : null}
+
+          {invitePath === null ? (
+            <p className="text-secondary text-ink-muted">
+              This group has no link yet. Create one to invite people.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="sr-only" htmlFor="invite-url">
+                  Invite link
+                </label>
+                <input
+                  id="invite-url"
+                  type="text"
+                  readOnly
+                  value={absolute ?? invitePath}
+                  onFocus={(event) => event.target.select()}
+                  className={FIELD_CLASSES}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    if (absolute === null) return;
+                    setCopyNote(await copyInviteLink(absolute));
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p aria-live="polite" className="text-secondary text-ink-muted">
+                {copyNote ?? 'Anyone signed in who opens this link can join.'}
+              </p>
+              <p className={inviteEnabled ? 'text-secondary text-lent' : 'text-secondary text-danger'}>
+                {inviteEnabled ? 'The link is active.' : 'The link is disabled — nobody can join with it.'}
+              </p>
+            </>
+          )}
+
+          {/* Refusals only: a success redirects to the notice slot above, so the state never comes
+              back here with one to show. */}
+          <StateMessage state={rotateState} />
+          <StateMessage state={disableState} />
+
+          {confirming === 'rotate' ? (
+            <form action={rotateAction}>
+              <input type="hidden" name="groupId" value={groupId} />
+              <ConfirmStep
+                question={`Replace the invite link for “${groupName}”? The current link stops working immediately.`}
+                confirmLabel="Replace link"
+                pendingLabel="Replacing…"
+                isPending={rotatePending}
+                onCancel={() => setConfirming(null)}
+              />
+            </form>
+          ) : null}
+
+          {confirming === 'disable' ? (
+            <form action={disableAction}>
+              <input type="hidden" name="groupId" value={groupId} />
+              <ConfirmStep
+                question={`Disable the invite link for “${groupName}”? Nobody will be able to join until you create a new one.`}
+                confirmLabel="Disable link"
+                pendingLabel="Disabling…"
+                isPending={disablePending}
+                onCancel={() => setConfirming(null)}
+              />
+            </form>
+          ) : null}
+
+          {confirming === null ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => setConfirming('rotate')}>
+                {invitePath === null ? 'Create link' : 'Rotate link'}
+              </Button>
+              {invitePath !== null && inviteEnabled ? (
+                <Button type="button" variant="destructive" onClick={() => setConfirming('disable')}>
+                  Disable link
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </>
       )}
-
-      {/* Refusals only: a success redirects to the notice slot above, so the state never comes
-          back here with one to show. */}
-      <StateMessage state={rotateState} />
-      <StateMessage state={disableState} />
-
-      {confirming === 'rotate' ? (
-        <form action={rotateAction}>
-          <input type="hidden" name="groupId" value={groupId} />
-          <ConfirmStep
-            question={`Replace the invite link for “${groupName}”? The current link stops working immediately.`}
-            confirmLabel="Replace link"
-            pendingLabel="Replacing…"
-            isPending={rotatePending}
-            onCancel={() => setConfirming(null)}
-          />
-        </form>
-      ) : null}
-
-      {confirming === 'disable' ? (
-        <form action={disableAction}>
-          <input type="hidden" name="groupId" value={groupId} />
-          <ConfirmStep
-            question={`Disable the invite link for “${groupName}”? Nobody will be able to join until you create a new one.`}
-            confirmLabel="Disable link"
-            pendingLabel="Disabling…"
-            isPending={disablePending}
-            onCancel={() => setConfirming(null)}
-          />
-        </form>
-      ) : null}
-
-      {confirming === null ? (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={() => setConfirming('rotate')}>
-            {invitePath === null ? 'Create link' : 'Rotate link'}
-          </Button>
-          {invitePath !== null && inviteEnabled ? (
-            <Button type="button" variant="destructive" onClick={() => setConfirming('disable')}>
-              Disable link
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -464,7 +481,10 @@ function RemoveMemberForm({
 
   // The guard's own sentence, recognised rather than re-derived: only the member who still
   // carries a balance can be pointed at settle-up, and the panel would otherwise have to know
-  // the guard's arithmetic to decide (AC-2).
+  // the guard's arithmetic to decide (AC-2). The leave section below recognises the same sentence
+  // for the same reason — `leaveGroup` throws the identical `NonZeroBalanceError` — with one
+  // exception: an archived group refuses settling too, so there the note says so instead of
+  // offering a link that cannot work (AC-1).
   const balanceBlocked = isBalanceBlockedRefusal(state.message);
 
   return (
@@ -670,6 +690,20 @@ export function MembersPanel({
   const [leaveState, leaveAction, leavePending] = useActionState(leaveGroup, IDLE_GROUP_STATE);
   const [confirming, setConfirming] = useState(false);
 
+  // A refusal stays in `leaveState` after the person dismisses it — React keeps the action's last
+  // answer — so the removal note this panel also owns needs a flag of its own to say the refusal
+  // has been dismissed. Without it, cancelling the confirm would leave the note hidden for good.
+  const [leaveRefusalDismissed, setLeaveRefusalDismissed] = useState(false);
+
+  // The same guard sentence the remove form recognises (AC-1). `leaveGroup` throws the identical
+  // `NonZeroBalanceError`, and leaving is the write an archived group still accepts, which is why
+  // this path keeps its balance guard where the others refuse archived groups outright.
+  const leaveBlocked = isBalanceBlockedRefusal(leaveState.message);
+
+  // The removal note is true until a leave refusal takes the slot: two sentences about two
+  // different outcomes must not stand in the same panel at once (AC-4).
+  const leaveFailed = leaveState.status === 'error' && !leaveRefusalDismissed;
+
   return (
     <section className="flex flex-col gap-4" aria-labelledby="members-heading">
       <h2 id="members-heading" className="text-section font-semibold text-ink">
@@ -679,7 +713,7 @@ export function MembersPanel({
       {/* Panel level, like the join page's lost-seat notice and for the same reason: the row
           whose form carried the message is the row the remove deleted, so the note has to live
           somewhere the removal cannot unmount. */}
-      {removedNotice ? (
+      {removedNotice && !leaveFailed ? (
         <p
           role="status"
           aria-live="polite"
@@ -706,6 +740,25 @@ export function MembersPanel({
 
       <StateMessage state={leaveState} />
 
+      {/* A leaver who still carries a balance used to be told to settle up and given nothing to
+          settle up with, while the remove form three lines up linked onward (AC-1). Same
+          refusal, same link — except in an archived group, where settling is refused as well, so
+          the link would be a dead end and the note says what is actually true instead. */}
+      {leaveBlocked ? (
+        archived ? (
+          <p className="text-secondary text-ink-muted">
+            This group is archived, so this balance cannot be settled here.
+          </p>
+        ) : (
+          <Link
+            className="text-secondary text-accent underline underline-offset-4"
+            href={`/groups/${groupId}#debts-heading`}
+          >
+            Settle up
+          </Link>
+        )
+      ) : null}
+
       {confirming ? (
         <form action={leaveAction}>
           <input type="hidden" name="groupId" value={groupId} />
@@ -714,12 +767,26 @@ export function MembersPanel({
             confirmLabel="Leave group"
             pendingLabel="Leaving…"
             isPending={leavePending}
-            onCancel={() => setConfirming(false)}
+            onCancel={() => {
+              setConfirming(false);
+              // Dismissing the refusal hands the note slot back to the removal note it was
+              // covering (AC-4) — the refusal itself stays on the panel, where it still is true.
+              setLeaveRefusalDismissed(true);
+            }}
           />
         </form>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={() => setConfirming(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setConfirming(true);
+              // A fresh attempt at leaving: whatever the last one was refused with is this
+              // panel's business again, and while it stands it takes the note slot.
+              setLeaveRefusalDismissed(false);
+            }}
+          >
             Leave group
           </Button>
         </div>

@@ -603,8 +603,8 @@
     ]
   },
   "qa": {
-    "verdict": "pass",
-    "introduced_bugs": 0,
+    "verdict": "fail",
+    "introduced_bugs": 2,
     "ac_ids": [
       "AC-1",
       "AC-2",
@@ -621,10 +621,19 @@
       "AC-13",
       "AC-14"
     ],
-    "sha": "eb24d611eafcc8a61494d38063810cafd6dc0853",
-    "run_id": "37400950827",
+    "sha": "4369bc636a4b3b5da254a941b957e63e2d9f0f93",
+    "run_id": "37405799124",
     "work_order_version": 1,
-    "at": "2026-10-06T02:46:34.690Z"
+    "at": "2026-10-06T03:27:34.969Z"
   },
-  "qa_open_bugs": []
+  "qa_open_bugs": [
+    {
+      "id": "BUG-2",
+      "title": "No-JS group page stuck on the loading skeleton; ledger never paints"
+    },
+    {
+      "id": "BUG-1",
+      "title": "Remove/leave balance refusals link to a deleted #debts-heading anchor"
+    }
+  ]
 }

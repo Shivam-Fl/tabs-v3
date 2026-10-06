@@ -362,6 +362,35 @@ describe('updateProfile', () => {
     expect(state.fieldErrors?.currency).toBeUndefined();
   });
 
+  it('echoes the submitted values on a refusal, so the island can restore the chosen currency', async () => {
+    // The regression PR #44 BUG-1 pinned: the island renders from the *saved* props, so a
+    // refusal that does not carry the submission back has nothing to repaint the select from
+    // and reverts it to the stored currency.
+    const state = await updateProfile(IDLE_PROFILE_STATE, form({ displayName: '', currency: 'EUR' }));
+
+    expect(state).toMatchObject({
+      status: 'error',
+      message: PROFILE_REFUSAL_MESSAGE,
+      fieldErrors: { displayName: expect.any(String) },
+      values: { displayName: '', currency: 'EUR' },
+    });
+    expect(state.fieldErrors?.currency).toBeUndefined();
+
+    const [row] = await withDb((handle) => handle.db.select().from(users));
+    expect(row).toMatchObject({ displayName: 'Ada', currency: 'INR' });
+  });
+
+  it('echoes what was submitted verbatim, not the normalized form of it', async () => {
+    // A refusal restores literally what the person chose; a normalized echo would put a
+    // different string back under the cursor than the one the field held.
+    const state = await updateProfile(
+      IDLE_PROFILE_STATE,
+      form({ displayName: '  Ada  ', currency: 'bTc' }),
+    );
+
+    expect(state.values).toEqual({ displayName: '  Ada  ', currency: 'bTc' });
+  });
+
   it('sends a caller with no session to sign in rather than updating anything', async () => {
     const userId = (await withDb((handle) => handle.db.select().from(users)))[0].id;
     jar.entries.clear();

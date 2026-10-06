@@ -160,11 +160,13 @@ export async function signOut(): Promise<void> {
  * Profile edit. The session user comes from the request's own cookie, never from the form, so
  * a form cannot address a row it does not own.
  *
- * A refusal is returned as state, not as a redirect (ADR-0008, conventions): the profile form
- * is a controlled island, and a redirect would remount it and throw away exactly the typed
- * values a refused save has to keep (AC-5, ui.md "failed saves never clear what the person
- * typed"). Success still changes the page, so success still redirects with its notice —
- * `?saved=1` is untouched, and `?error=invalid` stays readable by the page for a direct hit.
+ * A refusal is returned as state, not as a redirect (ADR-0008, conventions): a redirect would
+ * remount the form and throw away exactly the submitted values a refused save has to keep
+ * (AC-5, ui.md "failed saves never clear what the person typed"). Returning them inline is only
+ * half of that — the state carries the submitted values back in `values`, because the island
+ * renders from the *saved* props and would otherwise have nothing to restore the choice from.
+ * Success still changes the page, so success still redirects with its notice — `?saved=1` is
+ * untouched, and `?error=invalid` stays readable by the page for a direct hit.
  *
  * The `(previous, formData)` signature is what `useActionState` calls this with; nothing else
  * in the app calls it.
@@ -183,6 +185,14 @@ export async function updateProfile(
       status: 'error',
       message: PROFILE_REFUSAL_MESSAGE,
       fieldErrors: fieldErrorsFrom(parsed.error),
+      // The raw submitted strings, not the parsed ones — a refused save restores literally what
+      // was chosen, and the parsed values are exactly what a refusal could not produce (they are
+      // trimmed and upper-cased, and there are none at all for the field that failed). This is
+      // the island's only source for them (AC-8, PR #44 BUG-1).
+      values: {
+        displayName: field(formData, 'displayName'),
+        currency: field(formData, 'currency'),
+      },
     };
   }
 

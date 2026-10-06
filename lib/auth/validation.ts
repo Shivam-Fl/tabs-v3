@@ -126,6 +126,20 @@ export const IDLE_AUTH_STATE: AuthFormState = { status: 'idle', message: '' };
 export const PROFILE_REFUSAL_MESSAGE = 'Check the highlighted fields and try again.';
 
 /**
+ * The two values the profile form displays, and the shape both the island and the page pass
+ * around.
+ *
+ * `currency` is a plain string rather than `Currency` on purpose: a refusal holds the raw
+ * submitted text, and only `profileFormDefaults` decides whether that is a code the select can
+ * actually render. Typing it `Currency` here would assert a guarantee the raw value does not
+ * carry, and the compiler would be right to reject it.
+ */
+export interface ProfileFormValues {
+  displayName: string;
+  currency: string;
+}
+
+/**
  * What `updateProfile` hands back to its island.
  *
  * Declared here rather than in the `'use server'` module beside it, for the same reason
@@ -136,6 +150,41 @@ export interface ProfileFormState {
   status: 'idle' | 'error' | 'success';
   message: string;
   fieldErrors?: FieldErrors;
+  /**
+   * What was literally submitted, present only on a refusal (AC-8). The island has no other
+   * source for it: the props it renders from are the values the database already holds, so a
+   * form that repaints from those reverts the select to the saved currency and silently
+   * discards the choice the person made.
+   */
+  values?: ProfileFormValues;
 }
 
 export const IDLE_PROFILE_STATE: ProfileFormState = { status: 'idle', message: '' };
+
+/**
+ * Which values the profile fields display, given the last action state and the saved props
+ * (AC-8, PR #44 BUG-1).
+ *
+ * A refused save keeps exactly what was submitted — the empty display name *and* the currency
+ * that was chosen — so the echoed values win over the saved props the render arrived with.
+ * Display names are taken literally, empty ones included: an empty name is the refusal this
+ * exists for, not a value to substitute.
+ *
+ * The one case the props win is a currency no select can offer. It is reachable only by a forged
+ * POST (the dropdown offers exactly `SUPPORTED_CURRENCIES`), and painting it would leave the
+ * styled select holding a value with no matching option, so the saved currency stands in and the
+ * field error still names the valid choices.
+ */
+export function profileFormDefaults(
+  state: ProfileFormState,
+  saved: ProfileFormValues,
+): ProfileFormValues {
+  const submitted = state.status === 'error' ? state.values : undefined;
+  if (submitted === undefined) return saved;
+
+  const renderable = (SUPPORTED_CURRENCIES as readonly string[]).includes(submitted.currency);
+  return {
+    displayName: submitted.displayName,
+    currency: renderable ? submitted.currency : saved.currency,
+  };
+}

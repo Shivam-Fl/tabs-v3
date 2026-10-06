@@ -290,7 +290,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-06T12:23:24.782Z"
   },
-  "resume_at": null,
+  "resume_at": "implement",
   "flow_plan": {
     "kind": "feature",
     "confidence": 0,
@@ -299,7 +299,7 @@
     "councils": {},
     "decided_at": "2026-10-06T12:24:36.330Z"
   },
-  "stopped_at": null,
+  "stopped_at": "implement",
   "dispatched_stage": "implement",
   "validated_from": "plan",
   "validated_at": "2026-10-06T12:40:01.264Z",

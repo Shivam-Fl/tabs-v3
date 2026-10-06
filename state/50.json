@@ -207,5 +207,135 @@
   },
   "validated_from": "plan",
   "validated_at": "2026-10-06T05:05:41.584Z",
-  "validated_ac_changes": []
+  "validated_ac_changes": [],
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "Group page expense row for an expense dated today reads the relative word together with the absolute day-month (for example 'Today · 6 Oct'), and the machine-readable date stays in the time element's datetime attribute.",
+        "how_to_verify": "Create an expense dated today, open the group page, read the row's date text.",
+        "id": "AC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Each per-member Include switch in the expense editor has a hit area at least 44px tall while the visible track stays 24px tall and centred, the switch still toggles with mouse, touch and keyboard, and the focus ring still renders on the track.",
+        "how_to_verify": "Open /groups/:id/expenses/new, measure the Include label's bounding box height in devtools, toggle one switch off and tab to another to see the ring.",
+        "id": "AC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Refusing a payment (for example an invalid amount, or two departed endpoints) keeps the settle sheet open with every typed value intact, shows the refusal inline, and changes no balance on the group page, home, or activity feed.",
+        "how_to_verify": "Open a suggested-transfer settle sheet, submit a refused payment, observe the sheet stays open with input preserved and balances unchanged.",
+        "id": "AC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "An expense with a 140-character description renders on the group page at a 375px viewport with no horizontal scroll (document scrollWidth equals clientWidth); the activity excerpt wraps the long name instead of widening the page.",
+        "how_to_verify": "Add a 140-character expense, set viewport to 375px, compare document.documentElement.scrollWidth to clientWidth on the group page.",
+        "id": "AC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "The expense editor's date hint reads the viewer's local day with the absolute date beside it (for example 'Today · 6 Oct') rather than a bare relative word from the UTC clock.",
+        "how_to_verify": "Open /groups/:id/expenses/new and read the hint beside the Date field.",
+        "id": "AC-5",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Move the expense-row relative labels into client islands that read the viewer's clock (the review's second option).",
+        "rejected_because": "A larger diff touching server/client boundaries for every row to fix what the absolute-date suffix already makes never-wrong; the rows stay server-rendered and deterministic."
+      },
+      {
+        "approach": "Truncate the activity action sentence with ellipsis and a title attribute like expense ListRows do.",
+        "rejected_because": "Feed sentences are audit text whose actor and action must stay readable; wrapping keeps the full sentence while still eliminating the horizontal scroll, whereas ellipsis would hide exactly the description QA needs to see."
+      },
+      {
+        "approach": "Plan a code fix for the refused-save include-switch reset anyway (re-applying flags from the submitted form after a refusal).",
+        "rejected_because": "There is no writer of all-included state in the current code to counteract: re-applying from DOM or action state would be a no-op over state that already holds the flags, so a blind fix changes behaviour without a mechanism and risks the editor for nothing."
+      }
+    ],
+    "approach": "Fix the four claims that reproduce in current code with the smallest change that removes each root cause, and drop the one claim that has no mechanism. Make humanDateLabel append the absolute day-month to the relative word so server rows are never wrong (one function, both call sites fixed), and compute the editor's today from the viewer's local calendar date instead of toISOString. Give the IncludeSwitch label a 44px hit area with no visual change. Gate both revalidateBalances calls in lib/settle/actions.ts on outcome.groupId and make the parameter required so a future success path cannot silently skip invalidation. Wrap activity-feed text lines with break-words/min-w-0 instead of truncating them. Drop the refused-save include-reset claim with written reasoning and a QA re-verification step, since every editor field lives in one useState array whose values QA confirms persist.",
+    "assumptions": [
+      "QA can run the browser checks in a non-UTC timezone (or emulate one) to observe the viewer-clock behavior; the unit tests pin the label format independent of zone.",
+      "No existing e2e or snapshot asserts the exact strings 'Today', 'Yesterday' or 'Tomorrow' outside lib/money/human-date.test.ts (grep shows only that file references the function besides its two render call sites)."
+    ],
+    "confidence": 82,
+    "confidence_rationale": "Four of five findings confirmed line-by-line in current main with minimal, well-understood fixes; the fifth is dropped with an explicit impossibility argument rather than a guess. The main uncertainty is the editor-local-date change interacting with existing date-hint expectations, covered by unit tests plus a browser AC.",
+    "debate_summary": "The choice that mattered was the relative-date fix shape: a client island per row would give viewer-exact relative words but costs server/client complexity on every row, while appending the absolute date makes the row never wrong for a few characters. The review offered both and the lighter one wins here. Likewise wrapping versus ellipsis in the feed: the sentence is evidence, so it wraps.",
+    "evidence": [
+      "app/groups/[id]/page.tsx:236 today comes from new Date().toISOString().slice(0, 10) (UTC) and feeds humanDateLabel at :555, which returns a bare relative word.",
+      "components/expense-editor.tsx:190-192 the editor's today also uses toISOString (UTC), not the viewer's local date; IncludeSwitch label at :131 has no min-height around an h-6 track.",
+      "lib/settle/actions.ts:123-130 revalidateBalances takes optional groupId and always revalidates '/' and '/activity'; calls at :215 and :279 run unconditionally, including for refusals that return no groupId.",
+      "components/activity-feed.tsx:246-255 the action sentence renders as an untruncated link with no break handling; parent chain (li flex, div min-w-0 flex-1) does not constrain the paragraph, matching the 1088px-wide link QA measured.",
+      "components/expense-editor.tsx:179 participants (values and included flags) live in one useState array with no resync effect and no key/remount path; a replacement would reset the text values too, which QA confirms persist."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "humanDateLabel appends the absolute day-month (plus year when it differs from today's year, same rule as the absolute branch) to the three relative words, joined with ' · ': 'Today · 5 Oct', 'Yesterday · 4 Oct', 'Tomorrow · 1 Jan 2027'. Non-relative and unreadable inputs return exactly as today. Update the doc comment to state the row is never wrong, only less chatty, for viewers away from UTC.",
+        "path": "lib/money/human-date.ts",
+        "why": "One function serves both the server rows and the editor hint, so both surfaces are fixed together and stay identical."
+      },
+      {
+        "action": "edit",
+        "change": "Compute today in the post-mount effect from the viewer's local calendar date (getFullYear/getMonth/getDate, zero-padded) instead of toISOString, keeping the effect-after-mount shape so there is no hydration mismatch. Add min-h-11 min-w-11 justify-center to the IncludeSwitch label so the hit area is 44px while the h-6 w-11 track stays visually identical and the focus ring, role=switch and submitted payload are untouched.",
+        "path": "components/expense-editor.tsx",
+        "why": "The editor is the client-side reader of today so it should read the viewer's day, and the switch is the flagged 24px touch target."
+      },
+      {
+        "action": "edit",
+        "change": "Make revalidateBalances(groupId: string) take a required groupId (drop the internal if, since every remaining call passes one) and gate both call sites: only call it when outcome.groupId is set. Refusals, which return no groupId, then revalidate nothing, restoring the previous refusal behavior; both success paths still revalidate '/', '/activity' and the group pages.",
+        "path": "lib/settle/actions.ts",
+        "why": "This is the exact cache churn the review flagged, fixed at the two unconditional call sites with the type system preventing a future success path from skipping invalidation silently."
+      },
+      {
+        "action": "edit",
+        "change": "Add min-w-0 break-words to the action-sentence paragraph, the timestamp/group paragraph, the payment-detail paragraph and the EditDetail dd in ActivityRowItem, so long expense names, group names and snapshot text wrap inside the row instead of widening the page at 375px. No truncation: feed sentences stay fully readable.",
+        "path": "components/activity-feed.tsx",
+        "why": "The reported overflow is unbroken long text with no wrap handling anywhere in the row; wrapping fixes the scroll while keeping the audit sentence intact."
+      }
+    ],
+    "issue": 50,
+    "kind": "bug",
+    "mode": "committed",
+    "out_of_scope": [
+      "Refused-save include-switch reset (QA finding 4): dropped, not planned. All editor fields including the included flags live in one useState array with no resync effect, no key and no redirect on refusal, so no code path replaces the flags; a remount would reset the text values too, which QA confirms persist. QA re-verifies the exact repro on the merged build via qa_script step 3 and files separately only if it reproduces.",
+      "Expense/group action revalidation (lib/expenses/actions.ts revalidateGroup, lib/groups/actions.ts): same optional-guard shape as the settle defect, but not named by this issue; changing them here widens scope. Own ticket if wanted.",
+      "Eval/UTC timestamps and any dark-mode or redesign work: untouched.",
+      "No new client islands for relative dates: the absolute-date suffix was chosen instead (see alternatives_considered)."
+    ],
+    "qa_script": [
+      "Sign up, create a group with a second member, add an expense dated today: the group row reads 'Today · <day month>' and the editor date hint beside a new expense reads the same in your local zone.",
+      "Toggle B's Include switch off, set amount to not-a-number, submit: confirm the refusal shows AND B's switch stays excluded (re-verification of the dropped claim on the merged build); correcting the amount and retrying submits the intended split.",
+      "Add an expense with a 140-character description, open the group page at 375px: confirm no horizontal scroll and that the activity excerpt wraps the name.",
+      "From Balances, open a settle sheet and submit a refused payment: the sheet stays open with input preserved, the refusal renders once, and balances on the group, home and activity pages are unchanged.",
+      "Measure an Include switch label box (min 44px tall), toggle via keyboard, and confirm the visible track and focus ring are unchanged."
+    ],
+    "residual_risks": [
+      "If QA's dropped-claim re-verification reproduces the include reset on the merged build, the mechanism is outside what static reading can see (e.g. environment-specific) and needs a live-debug ticket, not this plan.",
+      "The required groupId param turns any future outcome that forgets groupId on a success path into a type error rather than silent staleness; that is intended but will block compilation until fixed."
+    ],
+    "risks": [
+      "Changing humanDateLabel strings touches the editor hint too (shared function); any e2e asserting a bare 'Today' would fail — grep shows only the unit test pins these strings, and it is updated in tests[].",
+      "Activity wrapping lengthens feed rows for very long names; that is the intended trade (readable sentence, no scroll) but changes row heights QA snapshots may pin.",
+      "The revalidation gate is not unit-testable (Server Actions need DB plus next/cache, and the repo has no action tests by convention); it is covered by AC-3 browser behavior plus the type-level required param."
+    ],
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "named days now carry the absolute date: Today · 5 Oct, Yesterday · 4 Oct, Tomorrow · 6 Oct",
+          "year-boundary relative keeps the year on the absolute half: Tomorrow · 1 Jan 2027 and Yesterday · 31 Dec 2025 style cases",
+          "non-relative readings unchanged: 3 Oct, 13 Jan, 13 Jan 2025",
+          "unreadable inputs still returned untouched, including unreadable today"
+        ],
+        "path": "lib/money/human-date.test.ts"
+      }
+    ],
+    "understanding": "Issue #50 collects five follow-ups from PR #43's review and QA: (1) expense-row relative dates computed from the UTC clock can be off by one away from UTC; (2) the restyled Include switch has a 24px touch target below the 44px minimum; (3) refused payment submissions revalidate home/activity caches although nothing changed; (4) any refused expense save allegedly resets split include switches to included; (5) long expense names in the activity excerpt cause horizontal scroll at 375px. Four reproduce in current main by direct code reading; claim 4 has no mechanism in the current state architecture and is dropped with reasoning. No decisions were recorded in plan/brief.md and no prior plan was rejected.",
+    "unknowns": [],
+    "version": 1
+  },
+  "approved_too_high": false
 }

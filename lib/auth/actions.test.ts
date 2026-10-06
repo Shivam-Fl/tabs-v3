@@ -58,9 +58,11 @@ const {
   IDLE_PROFILE_STATE,
   NEUTRAL_CREDENTIALS_MESSAGE,
   PROFILE_REFUSAL_MESSAGE,
+  PROFILE_SAVED_MESSAGE,
   SIGNUP_SUCCESS_MESSAGE,
   THROTTLE_MESSAGE,
 } = await import('./validation');
+const { revalidatePath } = await import('next/cache');
 const { SESSION_COOKIE, hashToken, mintSession } = await import('./session');
 const { EMAIL_FAILURE_LIMIT, IP_FAILURE_LIMIT, recordFailure } = await import('./rate-limit');
 const { hashPassword } = await import('./password');
@@ -329,12 +331,28 @@ describe('updateProfile', () => {
   });
 
   it('writes the display name and currency for the signed-in user only', async () => {
-    await expect(
-      updateProfile(IDLE_PROFILE_STATE, form({ displayName: 'Ada Lovelace', currency: 'usd' })),
-    ).rejects.toMatchObject({ url: '/profile?saved=1' });
+    // Answered to the form, not redirected (AC-3): this form does not unmount on success, so
+    // ADR-0008's reason for the redirect does not reach it, and a redirect throws — which would
+    // leave `useActionState` holding whatever a previous refusal put there. Awaited directly, so
+    // a success that redirected would throw instead of returning and fail this case.
+    const state = await updateProfile(
+      IDLE_PROFILE_STATE,
+      form({ displayName: 'Ada Lovelace', currency: 'usd' }),
+    );
+
+    expect(state).toEqual({ status: 'success', message: PROFILE_SAVED_MESSAGE });
 
     const [row] = await withDb((handle) => handle.db.select().from(users));
     expect(row).toMatchObject({ email, displayName: 'Ada Lovelace', currency: 'USD' });
+  });
+
+  it('has revalidated the page it answered, so the new values are what a later render reads', async () => {
+    vi.mocked(revalidatePath).mockClear();
+
+    await updateProfile(IDLE_PROFILE_STATE, form({ displayName: 'Ada Lovelace', currency: 'USD' }));
+
+    // Dropping the redirect must not drop the refresh: the island re-renders from the database.
+    expect(revalidatePath).toHaveBeenCalledWith('/profile');
   });
 
   it('answers a currency it cannot render with field errors instead of a redirect', async () => {

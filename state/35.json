@@ -1008,6 +1008,34 @@
         "severity": "minor",
         "category": "design",
         "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "Summary-card transfer lines render a departed seat's name with no 'No longer in the group' label, while the Balances card on the same page labels it.",
+        "detail": "Summary-card transfer lines render a departed seat's name with no 'No longer in the group' label, while the Balances card on the same page labels it.\n\n`app/groups/[id]/page.tsx:547`\n\nEvidence: app/groups/[id]/page.tsx:547 renders {transferWords(transfer, membership.id)} with no departed check; the Balances card at :782 renders <Badge>No longer in the group</Badge> for seats outside currentIds. A transfer naming a departed seat (non-zero departed balances flow through simplifyDebts into transfers) prints e.g. 'Bo owes you' unlabeled one tab above the labeled row.\n\nFix: Resolve departed status for transfer.fromMembershipId/toMembershipId against currentIds in the summary lines (as the Balances card does at :782) and render the same Badge or words beside the name.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "app/activity keeps the exact route-level-boundary-above-guard shape this PR removes elsewhere: anonymous raw-HTTP GET /activity gets 200 plus skeleton instead of 3xx to /signin.",
+        "detail": "app/activity keeps the exact route-level-boundary-above-guard shape this PR removes elsewhere: anonymous raw-HTTP GET /activity gets 200 plus skeleton instead of 3xx to /signin.\n\n`app/activity/page.tsx:58`\n\nEvidence: app/activity/loading.tsx exists (streams ActivityFeedSkeleton) while app/activity/page.tsx:56-58 awaits getSessionUser and redirect()s beneath that boundary. Same mechanism QA proved for the group segments (boundary-less /join 404s correctly); pre-existing on main, untouched by this PR, and outside AC-17's probe list (group page plus both editor URLs) and the work order's out_of_scope (which names only members/loading.tsx). Browsers self-correct from the Flight payload, so only raw-HTTP clients observe it.\n\nFix: Same Suspense-below-guard treatment in a follow-up: move the ActivityFeedSkeleton into an in-page <Suspense> fallback below the getSessionUser redirect, deleting app/activity/loading.tsx.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/activity/page.tsx"
+      },
+      {
+        "title": "GroupPage docstring promises scriptless readers get all four panels, contradicting the AC-16 contract the same PR implements.",
+        "detail": "GroupPage docstring promises scriptless readers get all four panels, contradicting the AC-16 contract the same PR implements.\n\n`app/groups/[id]/page.tsx:105`\n\nEvidence: Page docstring says panels 'are server-rendered, and a reader without JavaScript gets all four'; components/group-skeletons.tsx documents the opposite (the resolved ledger waits in the streamed Flight payload for a client-JS swap that never runs without JavaScript, hence the <noscript> JS-required notice), and AC-16 promises only skeleton plus notice with JS disabled.\n\nFix: Reword the docstring to the AC-16 contract: tab state is linkable/server-rendered for readers with JavaScript; scriptless readers get the skeleton plus the JS-required notice.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "The old UTC-labelled Timestamp system is orphaned: zero production callers remain after the feed migration, leaving two time systems for the next author to choose between.",
+        "detail": "The old UTC-labelled Timestamp system is orphaned: zero production callers remain after the feed migration, leaving two time systems for the next author to choose between.\n\n`components/ui-interactive.tsx:232`\n\nEvidence: git grep Timestamp over app+components on the branch shows production imports only of ./timestamp (activity-feed.tsx:19,285); ui-interactive.tsx still exports Timestamp (:232) plus utcTimestampText (:142), relativeTimestamp (:153), humanTimestamp (:180), timestampLabel (:206), pinned only by the pre-existing app/ui-set.test.ts. The surviving one renders a 'UTC' label on first paint — exactly what IAC-7 removed.\n\nFix: In a follow-up (ui-interactive.tsx and ui-set.test.ts are outside this work order), delete the old Timestamp and its helpers, or leave one comment saying why the UTC path stays.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/ui-interactive.tsx"
       }
     ],
     "pr": "46",

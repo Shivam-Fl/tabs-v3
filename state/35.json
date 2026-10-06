@@ -214,22 +214,7 @@
   },
   "touch_paths": [
     "app/groups/[id]/page.tsx",
-    "components/group-skeletons.tsx",
-    "components/group-page.tsx",
-    "components/timestamp.tsx",
-    "components/activity-feed.tsx",
-    "app/activity/page.tsx",
-    "lib/activity/queries.ts",
-    "lib/groups/validation.ts",
-    "lib/dates.ts",
-    "components/groups-panels.tsx",
-    "app/groups/[id]/expenses/new/page.tsx",
-    "app/groups/[id]/expenses/[expenseId]/edit/page.tsx",
-    "lib/dates.test.ts",
-    "components/group-skeletons.test.tsx",
-    "app/groups/[id]/guards-wire-status.test.ts",
-    "lib/groups/validation.test.ts",
-    "components/groups-panels.test.ts"
+    "app/groups/[id]/amounts-tabular.test.ts"
   ],
   "acceptance": [],
   "planned_route": [

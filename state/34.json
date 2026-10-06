@@ -471,7 +471,15 @@
   "work_order_comment": "6008427986",
   "implemented_version": 2,
   "follow_ups": {
-    "review": [],
+    "review": [
+      {
+        "title": "Sibling notices that interpolate group/member names share BUG-1's exact shape: removedNoticeText(memberName, groupName) built at components/members-screen.tsx:131 renders in the plain <p> at components/groups-panels.tsx:716-722 (class rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent, no break-words), and archivedNoticeText(group.name) at app/groups/[id]/page.tsx:273 renders in the plain <p> at lines 269-274 (no break-words). An 80-character unbroken group name (GROUP_NAME_MAX, lib/groups/validation.ts:21) in either would set the document width past the 375px viewport the same way the ?left= notice did.",
+        "detail": "Sibling notices that interpolate group/member names share BUG-1's exact shape: removedNoticeText(memberName, groupName) built at components/members-screen.tsx:131 renders in the plain <p> at components/groups-panels.tsx:716-722 (class rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent, no break-words), and archivedNoticeText(group.name) at app/groups/[id]/page.tsx:273 renders in the plain <p> at lines 269-274 (no break-words). An 80-character unbroken group name (GROUP_NAME_MAX, lib/groups/validation.ts:21) in either would set the document width past the 375px viewport the same way the ?left= notice did.\n\n`components/groups-panels.tsx:718`\n\nEvidence: git show origin/sdlc/issue-34:components/groups-panels.tsx sed 716,724 and app/groups/[id]/page.tsx sed 267,274: both <p role=status> carry no break-words/overflow-wrap class while interpolating group names; invite/expense notices are closed-set fixed strings (inviteNoticeText/expenseNoticeText) and are safe. Unproven live -- no 375px scrollWidth measurement exists for these two pages, and the work order carries them as a residual risk.\n\nFix: Apply the same one-class break-words treatment to those two <p> elements with a matching unit case each; keep it a follow-up, not this ticket, per the work order's out-of-scope clause.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "components/groups-panels.tsx"
+      }
+    ],
     "pr": "45",
     "qa": [
       {

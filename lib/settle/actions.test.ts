@@ -569,6 +569,25 @@ describe('createPayment', () => {
     expect(await paymentRows(fixture.groupId)).toHaveLength(0);
   });
 
+  it('refreshes nothing when it refuses, because nothing moved', async () => {
+    const refused = await createPayment(
+      IDLE_PAYMENT_STATE,
+      paymentForm({
+        groupId: fixture.groupId,
+        fromMembershipId: fixture.bo,
+        toMembershipId: fixture.ada,
+        amount: 'ten',
+      }),
+    );
+
+    // A rejected amount wrote no ledger row, so there is no balance to drop out of any cache. Home
+    // and the cross-group feed are left alone rather than refetched for a reader who is still
+    // looking at the sheet they typed in — the only outcomes that refresh are the ones with a
+    // group to name, and this one has none.
+    expect(refused).toMatchObject({ status: 'error', message: PAYMENT_AMOUNT_INVALID_MESSAGE });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it('refuses to change an archived group', async () => {
     const archived = await seedGroup({ archived: true });
     await signInAs(adaId);
@@ -767,6 +786,9 @@ describe('deletePayment', () => {
   it('refuses a member the payment does not involve, exactly as it refuses a payment that is not there', async () => {
     const paymentId = await recordPayment();
     await signInAs(cyId);
+    // Recording it above was a write and did refresh; what is under test here is only what the
+    // refusals below do, so the setup's own revalidations are dropped from the count.
+    vi.mocked(revalidatePath).mockClear();
 
     const notInvolved = await deletePayment(
       IDLE_PAYMENT_STATE,
@@ -787,6 +809,11 @@ describe('deletePayment', () => {
     expect(unknown).toEqual(notInvolved);
     expect(malformed).toEqual(notInvolved);
     expect(await paymentRows(fixture.groupId)).toHaveLength(1);
+
+    // Three refusals, and not one of them touched the ledger — so not one of them refreshes a
+    // balance cache either. This is the settle path's half of the same rule the recorded delete
+    // above depends on: the refresh follows the write, never the attempt.
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('refuses a signed-out caller and a stranger without deleting anything', async () => {

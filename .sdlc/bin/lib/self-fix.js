@@ -62,6 +62,8 @@ export const RULES = [
   '.sdlc/bin/lib/pr-demo.js', '.sdlc/bin/pr-demo-post.mjs', '.sdlc/bin/pr-demo-record.sh',
   // what the implementer's sandbox kept read-only, put in place after it
   '.sdlc/bin/apply-protected.mjs',
+  // where an implementer's stop goes
+  '.sdlc/bin/implementer-stopped.mjs',
   // the state machine, its budgets, and what may start a stage
   '.sdlc/bin/lib/ledger.js', '.sdlc/bin/lib/state-io.js', '.sdlc/bin/lib/advance.js',
   '.sdlc/bin/lib/route-io.js', '.sdlc/bin/lib/deps.js', '.sdlc/bin/lib/failure.js',

@@ -113,6 +113,15 @@ function valueLabel(splitType: SplitType, name: string): string {
  * nothing, which is exactly the payload the boundary reads — so the styling is a pair of spans
  * beside a visually hidden input rather than a custom widget that would have to reproduce that.
  * `role="switch"` is what it is: one binary setting per member, on or off.
+ *
+ * The label is the hit area, because it wraps the input: `min-h-11 min-w-11` makes that box the
+ * 44px ui.md asks of a touch target, and the control the input renders is unchanged. The track is
+ * `h-6`, which this project's token set resolves to **32px** (`--spacing-6`), not the 24px a
+ * default Tailwind scale would give it — that is what it has always been on every screen here, and
+ * nothing in this file moves it. The label grows around the track, `items-center` keeps the track
+ * and its knob centred in the taller box rather than stretching them, and the focus ring stays on
+ * the track. Verified by measuring both boxes with and without the added utilities: the track and
+ * knob come back at the same size and the same coordinates, only the label's box changes.
  */
 function IncludeSwitch({
   id,
@@ -128,7 +137,7 @@ function IncludeSwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="relative inline-flex shrink-0 cursor-pointer items-center">
+    <label className="relative inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
       <input
         id={id}
         type="checkbox"
@@ -188,7 +197,14 @@ export function ExpenseEditor({
   const [today, setToday] = useState<string | null>(null);
 
   useEffect(() => {
-    setToday(new Date().toISOString().slice(0, 10));
+    // The viewer's own calendar day, not the UTC one `toISOString` would slice off: this label
+    // sits beside a date picker the person reads on their own clock, and "Today" is the one thing
+    // the hint is for. Still in an effect, after mount, so the server render and the hydrated
+    // render cannot disagree about it.
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    setToday(`${now.getFullYear()}-${month}-${day}`);
   }, []);
 
   const errors = state.fieldErrors ?? {};

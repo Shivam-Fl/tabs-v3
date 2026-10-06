@@ -632,10 +632,9 @@ jobs:
         run: |
           { echo "## The implementer stopped"; echo;
             sed 's/^/> /' _out/implementer-note.md; echo;
-            echo '`/sdlc approve` runs the implementer again once the work order is right; `/sdlc replan "<why>"` revises it.'
           } | node .sdlc/bin/post-comment.mjs issue "$ISSUE"
-          node .sdlc/bin/sdlc-ctl.mjs advance --issue "$ISSUE" --to needs-human --agent implementer
-          node --input-type=module -e 'import { markResume } from "./.sdlc/bin/lib/route-io.js"; await markResume(process.env.GITHUB_REPOSITORY, process.env.ISSUE, "implement", "retry")'
+          # A person's, or under gates.on_doubt: agents the first time, the planner's again.
+          node .sdlc/bin/implementer-stopped.mjs _out/implementer-note.md
           echo "yes=true" >> "$GITHUB_OUTPUT"
 
       # Mechanical, so a script does it. The agent pushing a correct branch and silently not

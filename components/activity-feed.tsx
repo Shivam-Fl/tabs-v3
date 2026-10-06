@@ -265,8 +265,12 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
           same person keeps the same colour across the excerpt and the cross-group feed (ui.md). */}
       <Avatar name={row.actorName} />
 
+      {/* `min-w-0` lets this column be the width the row gives it, and `break-words` on the lines
+          inside it lets a long description or group name break rather than push the row — and the
+          page, at 375px — wider than the viewport. The full sentence stays readable: these are
+          audit lines, not list rows, so nothing here truncates. */}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-body text-ink">
+        <p className="min-w-0 text-body break-words text-ink">
           <span className="font-medium">{row.actorName}</span>{' '}
           {href ? (
             <Link className="text-accent underline underline-offset-4" href={href}>
@@ -277,7 +281,7 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
           )}
         </p>
 
-        <p className="text-secondary text-ink-muted">
+        <p className="min-w-0 text-secondary break-words text-ink-muted">
           <Timestamp instant={row.createdAt.toISOString()} />
           {showGroup ? (
             <>
@@ -297,7 +301,7 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
           // Who paid whom, in words, with the amount in the neutral ink rather than a direction
           // colour: a recorded payment is a fact about the past, not a balance anybody still
           // carries — and the words are what say which way it went (AC-3, ui.md's money rule).
-          <p className="flex flex-wrap items-baseline gap-1 text-secondary text-ink-muted">
+          <p className="flex min-w-0 flex-wrap items-baseline gap-1 text-secondary break-words text-ink-muted">
             <span className="font-medium text-ink">{payment.fromDisplayName}</span>
             <span>paid</span>
             <span className="font-medium text-ink">{payment.toDisplayName}</span>
@@ -339,7 +343,9 @@ function EditDetail({ payload, currency }: { payload: ExpenseEditPayload; curren
       {changed.map((field) => (
         <div key={field} className="flex flex-wrap gap-1">
           <dt className="text-muted">{FIELD_LABELS[field]}</dt>
-          <dd>
+          {/* The before/after carries descriptions, names and snapshot text verbatim, so it can be
+              as long as the longest of them: it breaks inside the row like the lines above it. */}
+          <dd className="min-w-0 break-words">
             <span className="text-muted">
               {snapshotValue(field, payload.before, currency)}
             </span>

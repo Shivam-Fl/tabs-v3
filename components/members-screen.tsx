@@ -68,11 +68,16 @@ export function MembersScreen({
           href={`/groups/${group.id}`}
         >
           <ArrowLeft aria-hidden="true" className="size-4" />
-          {`Back to ${group.name}`}
+          {/* The label is its own box rather than a bare text node: this link is a flex container,
+              and a flex item's automatic minimum size is its min-content width — an 80-character
+              unbroken name would hold that at the full string and widen the page. `min-w-0` lets
+              the box take the width the phone gives it and `break-words` (inherited) wraps the
+              name inside it, so the destination is still named in full (AC-1, AC-2). */}
+          <span className="min-w-0 break-words">{`Back to ${group.name}`}</span>
         </Link>
 
         <header className="flex flex-col gap-2">
-          <h1 className="text-page font-semibold text-ink">{group.name}</h1>
+          <h1 className="text-page font-semibold text-ink break-words">{group.name}</h1>
           <p className="text-body text-ink-muted">Members and invite link</p>
         </header>
 
@@ -157,7 +162,9 @@ export function MembersScreen({
           )}
         </div>
 
-        <p className="text-body text-ink-muted">
+        {/* The same wrapping treatment as the top link, one class deep: `overflow-wrap` inherits,
+            so the `<p>` carries it and the inline `<a>` inside it wraps with it (AC-1, AC-2). */}
+        <p className="text-body text-ink-muted break-words">
           <Link
             className="text-accent underline underline-offset-4"
             href={`/groups/${group.id}`}

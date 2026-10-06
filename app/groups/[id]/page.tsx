@@ -239,7 +239,9 @@ export default async function GroupPage({
               <p
                 role="status"
                 aria-live="polite"
-                className="rounded-token border border-border bg-surface p-3 text-secondary text-lent"
+                // The sentence re-prints the group's name, so it wraps a maximum-length unbroken
+                // one inside the viewport rather than letting it set the document width (AC-1).
+                className="rounded-token border border-border bg-surface p-3 text-secondary text-lent break-words"
               >
                 {archivedNoticeText(group.name)}
               </p>

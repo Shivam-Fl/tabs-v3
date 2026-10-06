@@ -657,8 +657,11 @@ function MemberRow({
 
         <MemberBalance member={member} viewerIsSubject={isViewer} currency={currency} />
 
+        {/* The row's name above truncates; this line prints the same name in full, so it is the
+            one that has to wrap — an 80-character unbroken name would otherwise widen the row
+            past the viewport (AC-7). */}
         {member.userId === null ? (
-          <p className="text-secondary text-ink-muted">
+          <p className="text-secondary text-ink-muted break-words">
             Claim this seat from the invite link — whoever opens it and picks{' '}
             {member.displayName} takes over everything recorded for them.
           </p>
@@ -735,7 +738,7 @@ export function MembersPanel({
         <p
           role="status"
           aria-live="polite"
-          className="rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent"
+          className="rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent break-words"
         >
           {removedNotice}
         </p>

@@ -426,7 +426,7 @@
     "pr": "45"
   },
   "qa": {
-    "verdict": "pass",
+    "verdict": "fail",
     "introduced_bugs": 0,
     "ac_ids": [
       "AC-1",
@@ -440,10 +440,10 @@
       "AC-9",
       "AC-10"
     ],
-    "sha": "0329cfaa723b99bd73f6e60b519637a6d857a2a9",
-    "run_id": "37400917674",
+    "sha": "4e38a5cfb74f5dc20204d144a348b37c3e9aa4ca",
+    "run_id": "37402822093",
     "work_order_version": 1,
-    "at": "2026-10-06T02:09:58.522Z"
+    "at": "2026-10-06T02:51:06.623Z"
   },
   "qa_open_bugs": []
 }

@@ -489,19 +489,20 @@
     "issue": 55,
     "pr": 56,
     "head": "b8fc92ab6ac4e3619883fbe75632711563344934",
-    "stage": "qa",
-    "attempt": 3,
-    "occurrences": 2,
+    "stage": "root-cause",
+    "attempt": 4,
+    "occurrences": 3,
     "error_type": "unknown",
     "error_signature": "996ea31548488a85",
     "raw_excerpt": "check \"undefined\" reported FAILURE and has no Actions log to read",
-    "digest": "The qa stage failed and no known error pattern matched. The raw output is below.",
-    "decision": "root-cause",
-    "decision_reason": "the same failure 2 times in a row — the approach is wrong, not the typing, so the diagnosis goes on trial before anything else is written",
+    "digest": "The root-cause stage failed and no known error pattern matched. The raw output is below.",
+    "decision": "escalate",
+    "decision_reason": "the same failure 3 times, including after the diagnosis was already revised",
     "context": {
       "work_order_version": 2,
-      "run_url": "https://github.com/Shivam-Fl/tabs-v3/actions/runs/37455848805",
+      "run_url": "https://github.com/Shivam-Fl/tabs-v3/actions/runs/37456291181",
       "prior_signatures": [
+        "qa:unknown:996ea31548488a85",
         "qa:unknown:996ea31548488a85"
       ]
     }

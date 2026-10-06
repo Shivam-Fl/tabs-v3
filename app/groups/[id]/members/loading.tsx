@@ -1,4 +1,5 @@
 import { AppShell } from '../../../../components/app-shell';
+import { Skeleton } from '../../../../components/ui';
 
 /**
  * What a cold navigation to the members screen paints (AC-12, TR-11).
@@ -15,8 +16,10 @@ import { AppShell } from '../../../../components/app-shell';
  * than appearing under the reader's eyes; its place is a placeholder here because the group's
  * name is one of the things this boundary is waiting for.
  *
- * Motion comes from the ui.md rule like every other animation: `motion-safe` means the pulse
- * only runs for a viewer who has not asked for less, which is the same trade globals.css makes.
+ * Every block is the shared `Skeleton`, which is where the `bg-muted/20` fill and the
+ * `motion-safe` pulse live — the pulse only runs for a viewer who has not asked for less, the
+ * same trade globals.css makes. The names are the ones the loaded screen is measured by, so a
+ * reader (and a test) can find the same landmarks before and after the data lands.
  */
 export default function MembersLoading() {
   return (
@@ -30,60 +33,56 @@ export default function MembersLoading() {
         </p>
 
         <header className="flex flex-col gap-2">
-          <div
-            data-skeleton="title"
-            className="h-8 w-52 rounded-token bg-muted/20 motion-safe:animate-pulse"
-          />
-          <div
-            data-skeleton="subtitle"
-            className="h-6 w-64 rounded-token bg-muted/20 motion-safe:animate-pulse"
-          />
+          <div data-skeleton="title">
+            <Skeleton className="h-8 w-52" />
+          </div>
+          <div data-skeleton="subtitle">
+            <Skeleton className="h-6 w-64" />
+          </div>
         </header>
 
         {/* Same split as the screen itself, invite panel first on narrow: the fallback has to
             have the loaded layout or the arrival of the data is a jump. */}
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-          <div className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-4 lg:order-2 lg:w-[22rem]">
-            <div
-              data-skeleton="invite-heading"
-              className="h-7 w-32 rounded-token bg-muted/20 motion-safe:animate-pulse"
-            />
+          <section className="flex flex-col gap-4 rounded-token border border-border bg-surface p-4 shadow-sm lg:order-2 lg:w-[22rem]">
+            <div data-skeleton="invite-heading">
+              <Skeleton className="h-7 w-32" />
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <div
-                data-skeleton="invite-field"
-                className="h-11 flex-1 rounded-token bg-muted/20 motion-safe:animate-pulse"
-              />
+              <div data-skeleton="invite-field" className="flex-1">
+                <Skeleton className="h-11 w-full" />
+              </div>
               {/* The invite panel's loading button state: a button-shaped block, disabled in
                   effect because there is nothing yet for it to act on. */}
-              <div
-                data-skeleton="invite-button"
-                className="h-11 w-24 rounded-token bg-muted/20 motion-safe:animate-pulse"
-              />
+              <div data-skeleton="invite-button">
+                <Skeleton className="h-11 w-24" />
+              </div>
             </div>
-            <div
-              data-skeleton="invite-note"
-              className="h-5 w-full rounded-token bg-muted/20 motion-safe:animate-pulse"
-            />
-          </div>
+            <div data-skeleton="invite-note">
+              <Skeleton className="h-5 w-full" />
+            </div>
+          </section>
 
-          <div className="flex flex-1 flex-col gap-5 rounded-token border border-muted/20 bg-surface p-4">
-            <div
-              data-skeleton="members-heading"
-              className="h-7 w-24 rounded-token bg-muted/20 motion-safe:animate-pulse"
-            />
+          <section className="flex flex-1 flex-col gap-5 rounded-token border border-border bg-surface p-4 shadow-sm">
+            <div data-skeleton="members-heading">
+              <Skeleton className="h-7 w-24" />
+            </div>
             <ul className="flex flex-col gap-2">
               {[0, 1, 2].map((row) => (
                 <li
                   key={row}
                   data-skeleton="member-row"
-                  className="flex flex-col gap-2 rounded-token border border-muted/20 bg-surface p-3"
+                  className="flex items-start gap-3 rounded-token border border-border bg-surface p-3"
                 >
-                  <div className="h-6 w-40 rounded-token bg-muted/20 motion-safe:animate-pulse" />
-                  <div className="h-5 w-24 rounded-token bg-muted/20 motion-safe:animate-pulse" />
+                  <Skeleton className="size-8 shrink-0 rounded-full" />
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Skeleton className="h-6 w-40" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         </div>
       </main>
     </AppShell>

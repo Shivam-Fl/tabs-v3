@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { PASSWORD_MAX_BYTES } from './password';
 import {
+  IDLE_PROFILE_STATE,
   NEUTRAL_CREDENTIALS_MESSAGE,
+  PROFILE_REFUSAL_MESSAGE,
   SIGNUP_SUCCESS_MESSAGE,
   SUPPORTED_CURRENCIES,
   fieldErrorsFrom,
   normalizeCurrency,
   normalizeEmail,
+  profileFormDefaults,
   profileSchema,
   signinSchema,
   signupSchema,
@@ -105,6 +108,50 @@ describe('profileSchema', () => {
 
   it('requires a display name', () => {
     expect(profileSchema.safeParse({ displayName: '', currency: 'INR' }).success).toBe(false);
+  });
+});
+
+describe('profileFormDefaults', () => {
+  // The saved props are what the page passes down; a refusal has to beat them or the select
+  // reverts to the stored currency and the person's choice disappears (AC-8, PR #44 BUG-1).
+  const saved = { displayName: 'Ada', currency: 'USD' };
+
+  it('returns the saved values when the state is idle', () => {
+    expect(profileFormDefaults(IDLE_PROFILE_STATE, saved)).toEqual(saved);
+  });
+
+  it('returns the submitted values on a refusal that carries them, so a chosen EUR survives an empty-name refusal', () => {
+    const state = {
+      status: 'error' as const,
+      message: PROFILE_REFUSAL_MESSAGE,
+      fieldErrors: { displayName: 'Enter a display name' },
+      values: { displayName: '', currency: 'EUR' },
+    };
+
+    // The empty name comes back empty on purpose: it is the thing that was refused, so
+    // substituting the saved one would hide the field the error is about.
+    expect(profileFormDefaults(state, saved)).toEqual({ displayName: '', currency: 'EUR' });
+  });
+
+  it('falls back to the saved currency when the echoed value is not a supported code', () => {
+    const state = {
+      status: 'error' as const,
+      message: PROFILE_REFUSAL_MESSAGE,
+      fieldErrors: { currency: 'Choose one of INR, USD, EUR, GBP' },
+      values: { displayName: 'Ada', currency: 'BTC' },
+    };
+
+    expect(profileFormDefaults(state, saved)).toEqual({ displayName: 'Ada', currency: 'USD' });
+  });
+
+  it('falls back to the saved values on a refusal without values', () => {
+    const state = {
+      status: 'error' as const,
+      message: PROFILE_REFUSAL_MESSAGE,
+      fieldErrors: { currency: 'Choose one of INR, USD, EUR, GBP' },
+    };
+
+    expect(profileFormDefaults(state, saved)).toEqual(saved);
   });
 });
 

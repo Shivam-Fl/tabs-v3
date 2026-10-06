@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AppShell } from '../../../components/app-shell';
 import { JoinPanel } from '../../../components/groups-panels';
+import { Card } from '../../../components/ui';
 import { getSessionUser } from '../../../lib/auth/session';
 import { withDb } from '../../../lib/db/client';
 import { memberships } from '../../../lib/db/schema';
@@ -80,14 +81,17 @@ export default async function JoinPage({
     <AppShell place={group.name} viewer={{ displayName: userName }}>
       <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center gap-5 px-4 py-5">
         <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold">Join {group.name}</h1>
-          <p className="text-muted">
+          <h1 className="text-page font-semibold text-ink">Join {group.name}</h1>
+          <p className="text-body text-ink-muted">
             {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} · invited
             by link
           </p>
         </div>
 
-        <div className="rounded-token border border-muted/20 bg-surface p-4">
+        {/* The same Card the rest of the app's panels sit on, and the same tokens as the
+            JoinPanel inside it — the invitation should look like the app it is inviting you
+            into, not like a form that arrived from somewhere else (AC-9). */}
+        <Card>
           <JoinPanel
             token={token}
             groupName={group.name}
@@ -98,10 +102,10 @@ export default async function JoinPage({
               matchesYou: seat.displayName.trim().toLowerCase() === userName.trim().toLowerCase(),
             }))}
           />
-        </div>
+        </Card>
 
-        <p className="text-muted">
-          <Link className="text-accent underline" href="/">
+        <p className="text-body text-ink-muted">
+          <Link className="text-accent underline underline-offset-4" href="/">
             Not now — back to your groups
           </Link>
         </p>

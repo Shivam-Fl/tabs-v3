@@ -274,5 +274,8 @@
       "diagnosis": "the triage agent itself did not finish",
       "run": "37457150086"
     }
-  ]
+  ],
+  "retry_after": "2026-10-06T12:56:09.282Z",
+  "retry_stage": "plan",
+  "parked_at": "2026-10-06T11:36:09.509Z"
 }

@@ -785,6 +785,27 @@
         "severity": "minor",
         "category": "other",
         "file": "lib/activity/queries.ts"
+      },
+      {
+        "title": "Summary-card transfer lines name departed members without the 'No longer in the group' label AC-12 requires wherever a departed seat renders.",
+        "detail": "Summary-card transfer lines name departed members without the 'No longer in the group' label AC-12 requires wherever a departed seat renders.\n\n`app/groups/[id]/page.tsx:401`\n\nEvidence: app/groups/[id]/page.tsx:401-409 renders transfers.slice(0, TRANSFER_LINES) via transferWords with no departed check, while transfers = simplifyDebts(ledger.balances) where balances still contains departed seats with non-zero nets (cf. the `shown` filter at :259-262 which exists precisely because balances includes them). The Balances tab rows do label them (:642-644). So a transfer involving a departed seat prints e.g. 'Bo owes you' in the summary with no badge, one screen above rows that carry it.\n\nFix: Apply the same currentIds check in the summary transfer lines (badge or parenthetical) or look up transfer endpoints against members the way the balance list does.",
+        "severity": "minor",
+        "category": "functional",
+        "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "GroupPage doc comment promises scriptless readers 'get all four' panels, contradicting the AC-16 contract this same PR establishes (skeleton plus JS-required notice, no ledger).",
+        "detail": "GroupPage doc comment promises scriptless readers 'get all four' panels, contradicting the AC-16 contract this same PR establishes (skeleton plus JS-required notice, no ledger).\n\n`app/groups/[id]/page.tsx:75`\n\nEvidence: app/groups/[id]/page.tsx:75: 'the panels are server-rendered, and a reader without JavaScript gets all four.' Under App Router streaming with the route-level loading.tsx boundary, the resolved ledger waits in the hidden Flight payload for the client-JS swap, so a scriptless reader keeps the skeleton plus the <noscript> notice (loading.tsx) — not the four panels. This is the exact scriptless-ledger expectation BUG-2 just removed from the work order.\n\nFix: Reword to match AC-16: sections are linkable server-rendered navigations for JS-enabled readers; scriptless readers get the skeleton plus the JavaScript-required notice.",
+        "severity": "minor",
+        "category": "other",
+        "file": "app/groups/[id]/page.tsx"
+      },
+      {
+        "title": "The old UTC-label timestamp implementation in ui-interactive.tsx is stranded: this PR migrates its only product consumer (activity-feed) to components/timestamp.tsx, leaving two time-rendering systems and a `Timestamp` export that reintroduces the banned UTC label if a later ticket reaches for it.",
+        "detail": "The old UTC-label timestamp implementation in ui-interactive.tsx is stranded: this PR migrates its only product consumer (activity-feed) to components/timestamp.tsx, leaving two time-rendering systems and a `Timestamp` export that reintroduces the banned UTC label if a later ticket reaches for it.\n\n`components/ui-interactive.tsx:232`\n\nEvidence: On main, components/activity-feed.tsx:20 was the only product importer of Timestamp from ./ui-interactive. On origin/sdlc/issue-35 no file under components/, app/ or lib/ imports Timestamp, timestampLabel, utcTimestampText, relativeTimestamp or humanTimestamp from ui-interactive (only app/ui-set.test.ts references them); the feed now renders <Timestamp instant> from ./timestamp. The stranded cluster (ui-interactive.tsx:142-244) is product-dead.\n\nFix: Delete the stranded cluster (Timestamp, timestampLabel, utcTimestampText, relativeTimestamp, humanTimestamp and the then-unused viewerTimeZone/dayKeyIn/UTC_LABEL) from components/ui-interactive.tsx and drop their cases from app/ui-set.test.ts; leave Dialog/Toast/SegmentedControl untouched.",
+        "severity": "minor",
+        "category": "design",
+        "file": "components/ui-interactive.tsx"
       }
     ],
     "pr": "46",

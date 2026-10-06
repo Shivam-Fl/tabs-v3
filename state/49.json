@@ -396,7 +396,53 @@
         "file": "components/ui.tsx"
       }
     ],
-    "pr": "54"
+    "pr": "54",
+    "qa": [
+      {
+        "actual": "At a 375px viewport document.documentElement.scrollWidth is 1136px: the whole editor page scrolls sideways. The three name-bearing elements (breadcrumb link, h1, bottom Back-to link) render the 80-character name with no overflow-wrap class.",
+        "area": "expenses/new+edit screen",
+        "evidence": [
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/long-names-T-6-expense-edi-11a5e-ame-fits-the-375px-viewport-chromium/test-failed-1.png",
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/long-names-T-6-expense-edi-11a5e-ame-fits-the-375px-viewport-chromium/trace.zip",
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/long-names-T-6-expense-edi-11a5e-ame-fits-the-375px-viewport-chromium/video.webm"
+        ],
+        "expected": "The expense editor for an 80-character-named group fits the 375px viewport (scrollWidth <= clientWidth) while still naming the group in full, the same treatment this PR gave the group and members pages.",
+        "id": "BUG-1",
+        "introduced_by_pr": false,
+        "repro": [
+          "Sign up a fresh account.",
+          "Create a group named 'x' * 80.",
+          "Open /groups/<id>/expenses/new at a 375px viewport.",
+          "Read document.documentElement.scrollWidth and clientWidth: 1136 vs 375."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "suspected_cause": "components/expense-screen.tsx renders {groupName} bare in three places the PR did not touch: the breadcrumb Link (~line 56), the h1 title (~line 69), and the bottom Back-to <a> (~line 85). Verified the base commit (framework root at main) carries zero break-words in this file, so the shape predates the PR — it is the residual risk the work order left 'for a follow-up if QA reproduces it'.",
+        "title": "Expense editor with an 80-character group name scrolls horizontally at 375px (scrollWidth 1136)"
+      },
+      {
+        "actual": "The success line 'Added <80-char name>. Share the invite link so they can claim the seat.' renders in a plain <p class=\"text-sm text-lent\"> with no wrapping; document scrollWidth is 676px at a 375px viewport until the form state clears (reload/navigate).",
+        "area": "members page add-seat form",
+        "evidence": [
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/long-names-T-9-add-seat-su-fbcac-seat-name-fits-the-viewport-chromium/test-failed-1.png",
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/long-names-T-9-add-seat-su-fbcac-seat-name-fits-the-viewport-chromium/trace.zip",
+          "/home/runner/work/tabs-v3/tabs-v3/qa-evidence/test-results/long-names-T-9-add-seat-su-fbcac-seat-name-fits-the-viewport-chromium/video.webm"
+        ],
+        "expected": "Adding a maximum-length placeholder seat leaves the members page fitting the 375px viewport; the success line wraps the same way the removed-member and archived notices now do.",
+        "id": "BUG-2",
+        "introduced_by_pr": false,
+        "repro": [
+          "Sign up a fresh account and create any group.",
+          "Open /groups/<id>/members at a 375px viewport.",
+          "Fill 'Add someone by name' with 'z' * 80 and submit 'Add seat'.",
+          "Read scrollWidth vs clientWidth while the 'Added ...' line is showing: 676 vs 375."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "suspected_cause": "The shared StateMessage (components/ui.tsx:54-64) renders success text in <p class=\"text-sm text-lent\"> with no overflow-wrap; lib/groups/actions.ts:316 interpolates the seat displayName ('Added ...') and :233 the group name ('Renamed to ...'). Base commit verified without break-words, so pre-existing — the PR fixed the two notice <p>s but missed this third sibling with the identical shape.",
+        "title": "Add-seat (and rename) success line re-prints 80-character names with no wrapping (scrollWidth 676)"
+      }
+    ]
   },
   "qa": {
     "verdict": "pass",

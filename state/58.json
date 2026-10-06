@@ -110,5 +110,229 @@
     "decided_at": "2026-10-06T10:22:49.641Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "Opening /groups/<id>?section=expenses&section=balances renders the expenses panel instead of throwing to the error boundary",
+        "how_to_verify": "Create a group with an expense, open /groups/<id>?section=expenses&section=balances and confirm the expense list renders with no error card",
+        "id": "AC-1"
+      },
+      {
+        "check": "Repeated ?activity= on /activity and ?q= / ?member= / ?category= on the group page take the first value instead of crashing",
+        "how_to_verify": "Open /activity?activity=expenses&activity=members (feed renders) and /groups/<id>?section=expenses&q=a&q=b (expenses panel renders filtered by the first value)",
+        "id": "AC-2"
+      },
+      {
+        "check": "On the scoped feed /activity?group=<id>, every filter-chip form carries a hidden group input and the Retry link keeps ?group=",
+        "how_to_verify": "View source of /activity?group=<id>: each chip form contains input name=\"group\" with the group id, and the failed-load Retry href preserves it",
+        "id": "AC-3"
+      },
+      {
+        "check": "The group page members excerpt renders a Placeholder badge for unclaimed seats, matching the members page wording",
+        "how_to_verify": "Add a placeholder member, open /groups/<id>?section=members and confirm the badge reads Placeholder, same as /groups/<id>/members",
+        "id": "AC-4"
+      },
+      {
+        "check": "A summary-card transfer line naming a departed seat carries the same No longer in the group badge as the Balances rows",
+        "how_to_verify": "Remove a settled member, then delete an old expense they shared so their net shifts off zero; the summary transfer line shows the badge beside their name",
+        "id": "AC-5"
+      },
+      {
+        "check": "Feed timestamps never render a UTC label; activity rows show the relative-then-human reading",
+        "how_to_verify": "Open /activity and the group Activity section: rows read e.g. 2 hours ago with no UTC text anywhere in the feed",
+        "id": "AC-6",
+        "verify": "browser"
+      },
+      {
+        "check": "Opening the expense-filter disclosure rotates only the chevron; the sliders icon stays upright",
+        "how_to_verify": "At 375px width open /groups/<id>?section=expenses, expand Search and filters, confirm the sliders glyph is upright and only the chevron flipped",
+        "id": "AC-7"
+      },
+      {
+        "check": "On desktop widths the hidden filter disclosure checkbox is not in the keyboard tab order",
+        "how_to_verify": "At 1280px width on /groups/<id>?section=expenses, Tab from the breadcrumb: focus never lands on an invisible control and the member select is reached directly",
+        "id": "AC-8"
+      },
+      {
+        "check": "Anonymous raw-HTTP GET /activity returns a redirect to sign-in, not 200 with a skeleton",
+        "how_to_verify": "curl -sI http://localhost:3000/activity with no session cookie returns 3xx to /signin",
+        "id": "AC-9",
+        "verify": "api"
+      },
+      {
+        "check": "With JavaScript disabled, the members and activity screens explain that JavaScript is required instead of pulsing silently",
+        "how_to_verify": "Disable JavaScript, open /groups/<id>/members and /activity: each shows the skeleton plus the JavaScript-required notice",
+        "id": "AC-10"
+      },
+      {
+        "check": "The expense editor date preview keeps its Today/Yesterday/Tomorrow plus absolute-day wording",
+        "how_to_verify": "Open /groups/<id>/expenses/new with today's date: the preview reads Today plus the day and month, e.g. Today · 6 Oct",
+        "id": "AC-11"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Converge formatExpenseDate and humanDateLabel into a single ladder",
+        "rejected_because": "The shapes serve different readers on purpose: the editor preview pairs the relative word with the absolute day and names Tomorrow because the chooser's today is the viewer's local day, while ledger rows use the weekday ladder against server UTC; merging them would change shipped copy, so the plan shares the parser and documents the difference instead"
+      },
+      {
+        "approach": "Restructure the members page guard below its loading boundary in the same change",
+        "rejected_because": "No finding asks for it and it changes first-paint auth behavior on a second route; the members page keeps its route-level loading file and only gains the noscript notice"
+      }
+    ],
+    "approach": "Fix each live finding at its root and drop the two that need no edit. Coerce repeated query keys once in a shared firstQueryValue helper used by all three filter parsers; preserve the ?group= scope in both branches of /activity and fall back to the raw param for the retry; rebuild /activity with the guard above an in-page Suspense and delete its loading.tsx; delete the orphaned UTC Timestamp cluster and its pinning tests; label departed transfer endpoints with the existing Badge; unify the placeholder badge on Placeholder; scope the disclosure rotation to the chevron and remove its checkbox from the desktop tab order; share one calendar-day validator between lib/dates.ts and lib/money/human-date.ts with documented ladders; reword the GroupPage doc comment to the AC-16 contract; and add the group's noscript JavaScript-required notice to the members and activity skeletons.",
+    "assumptions": [
+      "Next.js delivers repeated query keys as string[], which is what makes the .trim() calls throw",
+      "A departed seat can hold a non-zero balance after its membership row is gone (e.g. a later expense delete shifts its net), so the summary badge has a reachable state"
+    ],
+    "confidence": 85,
+    "confidence_rationale": "Every finding was re-read against current main: exact vulnerable lines, both badge wordings, both disclosure defects, the orphaned exports and their only test importer, and the array-safety of the notice parsers were all confirmed directly.",
+    "evidence": [
+      "lib/groups/validation.ts:194-195 groupSectionFrom does (raw ?? '').trim() on string|undefined; GroupPage passes query[section] which Next.js can deliver as string[]",
+      "lib/activity/queries.ts:93-94 activityFilterFrom shares the pattern; lib/expenses/validation.ts:598-600 expenseFiltersFrom does the same on member/category/q",
+      "app/activity/page.tsx:127 failed-branch FilterChips has no preserved prop while :154 passes it; retry at :140 uses scoped?.id which is null when listActivityGroups throws",
+      "app/groups/[id]/page.tsx:1074 renders Hasn't joined yet while components/groups-panels.tsx:654 renders Placeholder",
+      "app/groups/[id]/page.tsx:541-558 summary transfers render transferWords with no departed check; :782-786 Balances rows render the Badge",
+      "app/groups/[id]/page.tsx:99-105 promises scriptless readers get all four panels; components/group-skeletons.tsx:48-56 documents skeleton plus noscript notice",
+      "components/ui-interactive.tsx:130-243 Timestamp cluster has zero production importers; only app/ui-set.test.ts:226-336 renders it and pins the UTC label",
+      "app/groups/[id]/page.tsx:972 peer-checked:[&>svg]:rotate-180 covers both label svgs; :969 checkbox lacks sm:hidden while its label carries sm:hidden",
+      "app/activity/loading.tsx exists above the getSessionUser redirect at app/activity/page.tsx:56-58",
+      "lib/dates.ts:67 calendarDay and lib/money/human-date.ts:47 parseCalendarDate both round-trip Date.UTC parts; expense editor previews via humanDateLabel (:362) while ledger rows use formatExpenseDate",
+      "expenseNoticeText, paymentNoticeText compare with ===, parseNoticeName guards typeof, and paymentNoticePair uses zod safeParse, so all are already array-safe"
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add exported firstQueryValue(raw: string | string[] | undefined): string coercing to the first value (Array.isArray(raw) ? raw[0] ?? '' : raw ?? ''); use it in groupSectionFrom whose signature widens to string | string[] | undefined",
+        "path": "lib/groups/validation.ts"
+      },
+      {
+        "action": "edit",
+        "change": "Extend the existing ../groups/validation import with firstQueryValue; activityFilterFrom signature widens to string | string[] | undefined and coerces via firstQueryValue before trim/lower-case",
+        "path": "lib/activity/queries.ts"
+      },
+      {
+        "action": "edit",
+        "change": "Import firstQueryValue from ../groups/validation (no cycle: that module imports only ../auth/validation); expenseFiltersFrom query fields widen to string | string[] and member/category/search coerce via firstQueryValue before trim/lower-case/slice",
+        "path": "lib/expenses/validation.ts"
+      },
+      {
+        "action": "edit",
+        "change": "Widen GroupSearchParams section/member/category/q to string | string[]; reword the page docblock so scriptless readers get the skeleton plus the JavaScript-required notice (AC-16); in the summary transfer lines compute fromGone/toGone against currentIds and render <Badge>No longer in the group</Badge> beside transferWords when either endpoint departed; change memberBadges placeholder label to Placeholder; scope disclosure rotation with peer-checked:[&_.chevron]:rotate-180 plus chevron class on ChevronDown; change disclosure checkbox to peer sr-only sm:hidden and adjust its comment",
+        "path": "app/groups/[id]/page.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "Widen searchParams type to { activity?: string | string[]; group?: string | string[] }; import firstQueryValue and compute fallbackGroup = scoped?.id ?? first of raw group param (null when blank), used for both the failed- and success-branch preserved map and the retry href; keep getSessionUser redirect at top, move groups/rows reads plus scoped/shown/empty/failed UI into async ActivityContent below an in-page <Suspense fallback={<ActivityFeedSkeleton/>}>, leaving the h1 header above the boundary",
+        "path": "app/activity/page.tsx"
+      },
+      {
+        "action": "delete",
+        "change": "Delete the route-level boundary now that the skeleton streams from the in-page Suspense below the guard",
+        "path": "app/activity/loading.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "Delete the orphaned time cluster only (UTC_LABEL, utcTimestampText, relativeTimestamp, dayKeyIn, humanTimestamp, timestampLabel, viewerTimeZone, Timestamp, MINUTE_MS/HOUR_MS/DAY_MS/RELATIVE_LIMIT_MS and the section comment); leave SegmentedControl, stepSegment, Menu/MenuPanel, Dialog, Toast untouched",
+        "path": "components/ui-interactive.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "Add the same <noscript> JavaScript-required notice the group skeleton carries, naming this group's activity, at the top of ActivityFeedSkeleton",
+        "path": "components/activity-feed.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "Add a <noscript> JavaScript-required notice naming the members list, matching the group skeleton sentence",
+        "path": "app/groups/[id]/members/loading.tsx"
+      },
+      {
+        "action": "edit",
+        "change": "Add exported isRealCalendarDay(year, month, day): boolean holding the Date.UTC round-trip check; calendarDay uses it; export interface CalendarDay",
+        "path": "lib/dates.ts"
+      },
+      {
+        "action": "edit",
+        "change": "parseCalendarDate keeps its exact YYYY-MM-DD anchor but validates the triple via isRealCalendarDay from ../../lib/dates; add header comments on both ladders stating why they differ (editor preview pairs the relative word with the absolute day and names Tomorrow because its today is the viewer's local day; ledger rows use the Today/Yesterday/weekday ladder)",
+        "path": "lib/money/human-date.ts"
+      }
+    ],
+    "issue": 58,
+    "kind": "bug",
+    "out_of_scope": [
+      "ACTIVITY_GROUP_PARAM const placement (review findings 2 and 5): the const already lives beside ACTIVITY_FILTER_PARAM in lib/activity/queries.ts where the writer and reader share it; no behavior change, so no edit",
+      "Converging the two date ladders into one output shape: kept distinct deliberately and documented instead",
+      "Members-page guard-above-boundary restructure: not asked for; only the noscript notice is added there",
+      "Other notice parsers (parseNoticeName, inviteNoticeText, expenseNoticeText, paymentNoticeText, paymentNoticePair): verified array-safe by ===/typeof/zod-safeParse, no change"
+    ],
+    "reproduced": false,
+    "risks": [
+      "Activity scoped header (Showing X only) moves below the Suspense boundary so it paints after the header instead of with it",
+      "Deleting app/activity/loading.tsx changes cold-navigation first paint: the shell and h1 now render from the guard immediately, skeleton only for the feed",
+      "expenseFiltersFrom signature widening: existing string callers are unaffected, but every future caller must pass raw query values, not pre-trimmed strings",
+      "No code except getDb() may branch on database backend; none of these changes touch the database layer"
+    ],
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "repeated ?section= takes the first value (expenses&balances renders expenses)",
+          "array of unknown values defaults to expenses",
+          "single string values behave exactly as before",
+          "firstQueryValue returns '' for undefined and empty arrays"
+        ],
+        "path": "lib/groups/validation.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "activityFilterFrom coerces string[] to its first value",
+          "array of unknowns falls back to all",
+          "single values unchanged"
+        ],
+        "path": "lib/activity/queries.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "expenseFiltersFrom takes the first of repeated member/category/q values",
+          "repeated garbage still yields nulls, never throws"
+        ],
+        "path": "lib/expenses/validation.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "remove the whole timestamps describe block pinning the UTC first paint",
+          "keep avatar/button/money/segmented coverage green with no ui-interactive time imports"
+        ],
+        "path": "app/ui-set.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "isRealCalendarDay rejects 2026-02-30 and 2026-13-01, accepts leap 2024-02-29",
+          "formatExpenseDate ladder outputs unchanged (Today vs weekday vs date)"
+        ],
+        "path": "lib/dates.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "pin the deliberate ladder split: same inputs render Today · 5 Oct here versus Today in formatExpenseDate",
+          "existing humanDateLabel cases unchanged, including Tomorrow rung and year suffix"
+        ],
+        "path": "lib/money/human-date.test.ts"
+      }
+    ],
+    "understanding": "Issue #58 collects 18 follow-ups from PR #46 (issue #35): a repeated ?section=/?activity=/?q= query key crashes filter parsers that call .trim() on string|string[]; failed-state /activity filter chips and retry drop the ?group= scope; the members-excerpt placeholder badge says Hasn't joined yet while the members page says Placeholder; summary transfer lines omit the No longer in the group badge the Balances rows show; the GroupPage docblock promises scriptless readers all four panels contrary to the skeleton-plus-notice contract; the UTC-labelled Timestamp cluster in ui-interactive.tsx is production-dead with its output pinned only by ui-set.test.ts; the expense-filter disclosure rotates both icons and leaves its checkbox in the desktop tab order; /activity keeps the guard-below-boundary shape; calendar-day parsing and date ladders exist twice; and no-JS readers get a silent skeleton on members/activity. The ACTIVITY_GROUP_PARAM const placement findings need no edit (already correctly placed). No decisions were recorded in plan/brief.md and no prior plan was rejected.",
+    "unknowns": [
+      "Whether the seed fixtures include a departed seat with a non-zero balance for the AC-5 browser walk; if not, QA builds it via remove-then-delete-expense"
+    ],
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-06T10:41:32.899Z",
+  "validated_ac_changes": []
 }

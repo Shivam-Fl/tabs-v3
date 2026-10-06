@@ -70,92 +70,71 @@
         "id": "AC-6",
         "source": "TR-11",
         "verify": "browser"
+      },
+      {
+        "check": "With the remove-member confirm expanded on the members page — with short names, where no wrapping is involved — the page still fits the 375px viewport: the confirm floats as an overlay panel over the rows below instead of widening the row, and the question still names its member and group in full.",
+        "how_to_verify": "QA follows qa_script step 10 (the BUG-1 regression control): with short names expand the seat-row remove confirm at 375px and read scrollWidth vs clientWidth with the confirm open, then re-drive step 3 for the 80-char case; CI pins the overlay markup in app/overflow-wrap.test.ts.",
+        "id": "AC-7",
+        "source": "TR-11",
+        "verify": "browser"
       }
     ],
     "alternatives_considered": [
       {
-        "approach": "Truncate-with-ellipsis plus title on the headings, buttons, confirms, and notices instead of wrapping.",
-        "rejected_because": "ui.md reserves truncate for list rows; a heading, a Join button, or a confirm question truncated to an ellipsis stops saying which group or seat it acts on. PR #54 set the precedent the other way: rows truncate, headings and sentences that name a group or person wrap."
+        "approach": "Keep adding wrapping classes (a third attempt at the break-words treatment on the confirm or its row).",
+        "rejected_because": "QA T-3 proves the question already wraps over several lines while the page still overflows at 390 vs 375; no overflow-wrap value shrinks an in-flow 256px box, so this is the same approach described more carefully, not a different one."
       },
       {
-        "approach": "Add break-words at each ConfirmStep and StateMessage call site instead of in the shared components.",
-        "rejected_because": "The call sites are byte-identical symptoms of one shared <p> each; per-site classes are N chances for the next caller to miss one. The one-place fix in components/ui.tsx covers the settle-up and expense delete confirms and notices too, which interpolate names with the same shape."
+        "approach": "Narrow the in-flow panel (e.g. w-64 down to w-48) so the row arithmetic fits at 375px.",
+        "rejected_because": "It keeps the panel width coupled to the row width: it fits today by slack and re-breaks with the next wide caller, and it squeezes the confirm buttons. The overlay decouples the two widths entirely."
       },
       {
-        "approach": "Clip with max-width/overflow-hidden on the buttons and notices so nothing can widen the page.",
-        "rejected_because": "Clipping hides the name it is supposed to confirm (which seat am I claiming, what was added), trading a layout defect for a trust defect in a money app. Wrapping keeps the full name legible."
+        "approach": "Put the overlay positioning in the shared ConfirmStep instead of in MemberRow.",
+        "rejected_because": "ConfirmStep's other instances (archive, rotate, disable, leave, settle-up, expense delete) render in normal flow and all pass QA in-flow (T-4, T-13); absoluting the shared box would break those layouts. The defect belongs with the row, as QA's suspected cause says."
       },
       {
-        "approach": "Leave the expense-editor Remove-per-payer button and the /activity empty-state link out of this ticket as further follow-ups.",
-        "rejected_because": "Both are the identical unbroken-name root cause on routes this work already touches (editor) or reaches in three steps (activity); each fix is one class in the same idiom, and deferring them would leave AC-3's page-level clause false and the out_of_scope QA-pass claim covering a route QA never visits."
+        "approach": "Convert the disclosure to the shared Menu/MenuPanel control.",
+        "rejected_because": "A larger change (focus management, arrow-key handling) for a disclosure whose keyboard path QA already verified (T-10 passes); the minimal overlay keeps the proven details/summary behaviour and matches MenuPanel's visual idiom without adopting its state machine."
+      },
+      {
+        "approach": "Leave BUG-1 alone as a pre-existing defect outside this ticket.",
+        "rejected_because": "AC-2 explicitly demands every expanded ConfirmStep on the members page fit the viewport, and QA fails the ticket on it; shipping around it fails the ticket's own criterion."
       }
     ],
-    "approach": "Apply the PR #54 overflow-wrap idiom to the five reported spots plus the two further instances of the same defect: block-level headings and sentences get break-words; anything that is a row-axis flex item gets a min-w-0 box of its own plus break-words, because a flex item's automatic minimum size is its min-content width and overflow-wrap alone cannot reduce it. Specifically: the join h1 gains break-words (block in a flex-col div, the group-page h1 precedent); the Join and claim button labels move into min-w-0 break-words spans with min-w-0 appended (not replacing ml-auto) on the buttons, the spans inside children so the pending-label path is untouched; the shared ConfirmStep question <p> gains break-words (it is always the only child of ConfirmStep's own flex-col box, so min-w-0 there would be inert) while StateMessage <p> gains min-w-0 break-words (min-w-0 is load-bearing where the message renders as an item of a flex-wrap row), one place covering all confirms and notices; ExpenseScreen gains break-words on h1/subtitle/bottom Back-to paragraph and min-w-0 break-words on the group-crumb <li> with an in-file comment recording the breadcrumb decision (this crumb is a link naming the group so it follows the members back-link wrapping precedent, while the current-page crumb beside it keeps truncate as a location); the expense-editor multi-payer Remove button gets the same label-span plus min-w-0 treatment; the /activity empty-state Open-group Link gains min-w-0 max-w-full break-words, where max-w-full is load-bearing in the items-start column. QA drives two accounts throughout because the join page redirects members and signed-out visitors, plus a third fresh account for the activity empty state. No copy, markup (beyond the three button-label spans), or behaviour change; rows and the shell keep truncate.",
+    "approach": "Change row geometry instead of text wrapping: float the MemberRow remove-confirm panel as an overlay. The div.mt-2.w-64 inside details.relative.shrink-0 gains absolute right-0 z-40 plus a surface card (rounded-token border border-border bg-surface p-3 shadow-md) — the repo's own MenuPanel idiom (components/ui-interactive.tsx:316-318) — while keeping w-64 max-w-[calc(100vw-3rem)] and leaving the details/summary disclosure, the RemoveMemberForm logic, and the shared ConfirmStep untouched, so the keyboard path QA verified in T-10 is unchanged and the question keeps wrapping inside the 256px panel via the previous attempt's break-words. Applies on top of PR #56 HEAD (b465304), which keeps all of version 1's wrapping fixes that QA passed (T-1, T-2, T-4 through T-13); the only file this attempt changes beyond tests is the row. No copy, markup (beyond the panel div's classes plus a short comment), or behaviour change.",
     "assumptions": [
-      "Each of the five findings still reproduces on main: verified by reading the current code (no break-words/min-w-0 at any cited site) plus a headless-Chromium fixture pass replicating each site's exact markup and load-bearing ancestor CSS; the exact in-app scrollWidth numbers remain QA-measured per AC, so reproduced is true with the method disclosed here.",
-      "Tailwind break-words (overflow-wrap:break-word) plus min-w-0 behaves here as it did in PR #54, which QA verified at 375px in Chromium.",
-      "AppShell place={groupName} needs no change: it already renders truncate with the full value in title (components/app-shell.tsx:88-95).",
-      "GROUP_NAME_MAX and PLACEHOLDER_NAME_MAX are both 80, DESCRIPTION_MAX is 200 (lib/groups/validation.ts:21-22, lib/expenses/validation.ts:77), and user display names are capped at 80 (lib/auth/validation.ts:55-59); the 200-char unbroken description is the widest string the edit h1 can hold, and the expense subtitles naming the viewer display name are covered by the same paragraph-level break-words.",
-      "plan/brief.md records no decisions for this issue, so no critique finding contradicts a binding decision.",
-      "The members-screen subtitle and expense subtitles are covered by the same paragraph-level break-words treatment whatever length arrives, up to the 80-char display-name cap."
+      "PR #56 HEAD (b465304) already contains version 1's wrapping fixes and stays as the base: QA passed T-1, T-2 and T-4 through T-13 on it, so none of that is re-done here.",
+      "No ancestor clips an overlay: Card (components/ui.tsx:324-327), the members section, and main carry no overflow-hidden — proved by the current in-flow panel rendering fully (it widens the page instead of clipping).",
+      "z-40 matches the existing menu layer (MenuPanel) above the sticky app header (z-30); the account menu already floats at the same level, so no new stacking contract is invented.",
+      "MembersPanel renders under renderToStaticMarkup the same way JoinPanel already does in app/overflow-wrap.test.ts (client island with action state, asserted statically and green in CI for version 1)."
     ],
-    "confidence": 82,
-    "confidence_rationale": "Root cause is verified in code at every cited site (spot-checked bare h1, bare buttons, bare shared paragraphs, truncate-only breadcrumb), and a real browser measured each of the nine shapes overflowing before the fix and fitting after it — including the discovery that the activity link needs max-w-full, which code-reading alone got wrong. The blocking test-path defect is fixed by moving the file under app/. What keeps this out of the 90s: the browser numbers are of faithful fixtures of the markup, not full authenticated app flows, so QA's per-AC in-app scrollWidth reads remain the final proof, and the claim-button row's line-breaking can only be judged on the built app.",
-    "debate_summary": "The critique's blocking finding was right and is adopted: components/overflow-wrap.test.ts would never run because vitest.config.ts collects only lib/**, app/** and scripts/** (verified; all 38 existing test files sit under those trees), so the file moves to app/overflow-wrap.test.ts with AC-5, files[], tests[] and qa_script updated — without this, AC-5's only test criterion would have been false as written. The major finding is half-adopted: fixtures are weaker than full app flows and ancestor context proved load-bearing (the activity 791px discovery), but the plan already discloses the fixture method in assumptions and evidence names each ancestor chain, and demanding seeded two-account flows at plan time is QA's job per the ACs — so reproduced stays true with the method disclosed, not re-measured. Of the four minors, three are adopted outright (ConfirmStep keeps break-words only with min-w-0 retained solely on StateMessage where flex-wrap rows make it load-bearing; step 8 runs on its own third account since account A writes an activity row in step 2; the dialog exclusion now names the w-full max-w-[420px] panel cap instead of position:fixed, and the settle two-name confirm is named as covered by the shared fix), and the fourth closes unknowns[1] by citing the 80-char display-name cap. Of the edge cases, the claim-row squeeze becomes a button-width read in AC-1/step 2, the single-payer truncate chain becomes a pinning test case, and the pending-state worry is dismissed: pending labels are short generic strings (Joining, Claiming, Recording, Saving) with no interpolated names, verified at components/ui.tsx:197-199. Nothing was silently ignored.",
+    "confidence": 85,
+    "confidence_rationale": "The mechanism is reproduced in headless Chromium against a faithful fixture of the exact MemberRow markup and CSS (in-flow: row 324 vs 267, page 398 vs 375; overlay: 267 vs 267, 375 vs 375), the numbers match QA's name-length-independent 390 vs 375 signature, and the fix reuses the repo's own proven MenuPanel overlay idiom while touching nothing QA passed. What keeps this out of the 90s: the final scrollWidth numbers can only be read in the authenticated app, so QA's T-3/T-14 re-drive remains the proof.",
     "evidence": [
-      "app/join/[token]/page.tsx:84 renders Join {group.name} in a bare h1 with no wrapping class (verified by grep); :74 redirects signed-out visitors to /signin and :76 redirects members to the group page, so QA must use two accounts.",
-      "components/groups-panels.tsx:870-874 (Join ${groupName}) and :827-835 (claim ${seat.displayName}) render bare text inside Button, whose classes are inline-flex with no min-w-0 (components/ui.tsx:171, verified); the claim row at :819-836 is flex flex-wrap holding Avatar, a min-w-0 truncate seat-name span, an optional Badge, and the ml-auto button. ClaimSeatForm at :801 has no export keyword; JoinPanel at :842 is exported.",
-      "components/ui.tsx:97-99 ConfirmStep question <p> (verified: sole child of a flex flex-col box, so break-words is load-bearing and min-w-0 inert) and :54-64 StateMessage <p> carry no overflow-wrap (verified); ConfirmStep instances interpolating 80-char names at groups-panels.tsx:495, :538, :412, :425, :768 plus settle-panels.tsx:151 (two-name payment confirm) and the two dialog deletes; StateMessage success strings at lib/groups/actions.ts:233 and :316.",
-      "components/expense-screen.tsx carries zero break-words/min-w-0 today (verified by grep; only truncate at :62 on the current-page crumb), so the breadcrumb Link, h1, subtitle and bottom Back-to link are all bare.",
-      "components/expense-editor.tsx:484 li is flex flex-wrap items-center gap-2 with the bare Remove button text at :543-551 (payers.length > 1 only); the default single-payer line at :576-579 is safe only via truncate on a flex-row span (verified), which the new test pins.",
-      "app/activity/page.tsx:173-175 renders Open ${groups[0].name} through FEED_LINK (:134, no overflow-wrap, verified) as the EmptyState action inside a flex-col items-start box; only the Open-group Link is touched, FEED_LINK and the two short-string instances stay as-is.",
-      "Fixture browser pass on main at 375px: all nine shapes measured OVERFLOW before (join-h1 1254, join-button 454, claim-button 598, confirm 714, expense-screen 1254, edit-h1-200char 3452, editor-remove 585, state-message 608, activity-empty 791) and 375/375 after; activity fits only with min-w-0 max-w-full break-words. Freshness: PR #54 did not touch these files and every site was re-read on main — none is dropped."
+      "QA verdict fail on PR #56 (commit b465304): 12/14 pass; T-3 fail 'no sideways scroll (390 vs 375)' and T-14 fail 'short-name remove confirm fits (390 vs 375)' — byte-identical numbers proving name-length independence (BUG-1, introduced_by_pr false).",
+      "T-3 actual: 'Confirm question wraps over several lines and names the member and group in full, but the members page scrollWidth reads 390' — the version-1 wrapping worked and the page still overflows.",
+      "components/groups-panels.tsx:654-667: details.relative.shrink-0 contains div.mt-2.w-64.max-w-[calc(100vw-3rem)] in normal flow; the `relative` anchors nothing because the panel was never given the `absolute` half of the pairing.",
+      "Width arithmetic at 375px: main px-4 (members-screen.tsx:63) leaves 343; Card p-4 (ui.tsx:324-327, via members-screen.tsx:120) leaves ~309 (QA's figure); li p-3 leaves 283 for content; fixed row content is 32 (avatar) + 12 + 12 (gaps) + 256 (in-flow panel) = 312 > 283 — overflow with any name length.",
+      "Fixture reproduction in headless Chromium (exact MemberRow markup/CSS, short names 'Sam'/'Short group'): in-flow panel measures row scrollWidth 324 vs clientWidth 267 and page 398 vs 375; the same fixture with absolute right-0 on the panel measures 267 vs 267 and 375 vs 375.",
+      "components/ui-interactive.tsx:316-318 MenuPanel: the repo's existing overlay idiom is absolute z-40 mt-2 w-56 right-0 with border bg-surface shadow-md — the MemberRow panel is the same shape minus the positioning.",
+      "Single site: grep finds no other in-flow w-64 dropdown in components/; expense/payment rows already use the overlay Menu, and T-4/T-13 prove the other ConfirmStep instances pass in-flow."
     ],
     "files": [
       {
         "action": "edit",
-        "change": "Add break-words to the h1 so Join plus an 80-character unbroken group name wraps inside a 375px viewport while still naming the group in full (same one-class treatment as the group-page h1 in PR #54; fixture-measured 1254px -> 375px).",
-        "path": "app/join/[token]/page.tsx",
-        "why": "Finding 1: the only h1 with the same root-cause shape the PR fixed, on a route the PR did not touch."
-      },
-      {
-        "action": "edit",
-        "change": "Wrap the Join ${groupName} label and the This is me — claim ${seat.displayName} label each in their own <span className=\"min-w-0 break-words\"> inside the Button children (pending-label path untouched), and append min-w-0 to the two Buttons without removing the claim button's ml-auto, so the labels wrap inside the button instead of their min-content floor widening the page (fixture-measured 454px/598px -> 375px).",
+        "change": "Float the MemberRow remove-confirm panel as an overlay instead of an in-flow block: on the div.mt-2.w-64.max-w-[calc(100vw-3rem)] inside details.relative.shrink-0, add absolute right-0 z-40 plus a surface card (rounded-token border border-border bg-surface p-3 shadow-md, the MenuPanel idiom), keeping w-64 max-w-[calc(100vw-3rem)] and the details/summary disclosure untouched, with a short comment recording that the panel overlays because its in-flow width otherwise exceeds the Card content width at 375px with any name length (T-3/T-14). No copy, markup beyond the panel div, or behaviour change; the ConfirmStep break-words from the previous attempt stay so the question still wraps inside the 256px panel.",
         "path": "components/groups-panels.tsx",
-        "why": "Finding 2: bare unbounded names inside inline-flex Buttons, the same shrink-to-fit shape as the members back-link that measured 703px naive."
+        "why": "BUG-1: the in-flow 256px panel inside a shrink-0 disclosure forces every member row ~15px past the 375px viewport with the confirm open, short names included; floating it removes the panel width from the row arithmetic entirely."
       },
       {
         "action": "edit",
-        "change": "Add break-words to the ConfirmStep question <p> (one place covering the remove/archive/rotate/disable/leave confirms plus the settle-up two-name payment confirm and the expense delete confirm, which share the shape; min-w-0 is deliberately not added here because the question is always the child of a flex-col box where it is inert) and min-w-0 break-words to the StateMessage <p> (covering the Added/Renamed-to successes and every other notice; min-w-0 is load-bearing where the message renders as an item of a flex-wrap row). Fixture-measured 714px/608px -> 375px.",
-        "path": "components/ui.tsx",
-        "why": "Findings 3 and 5: two shared paragraphs whose every name-interpolating instance overflows; fixing the shared component fixes all callers at once."
-      },
-      {
-        "action": "edit",
-        "change": "Add min-w-0 break-words to the group-crumb <li> (flex-wrap row context; the inline Link inherits), break-words to the h1 title and the subtitle paragraph (block in flex-col; the edit title can hold a 200-char unbroken description), and break-words to the bottom Back-to paragraph (inherited by the inline anchor), plus a short comment on the breadcrumb item recording that this crumb wraps because it is a link naming the group (members back-link precedent) while the current-page crumb beside it keeps truncate as a location. Full names everywhere, wrapping instead of scrolling (fixture-measured 1254px/3452px -> 375px).",
-        "path": "components/expense-screen.tsx",
-        "why": "Finding 4: the name-bearing elements QA measured at scrollWidth 1136, plus the subtitle which names the group/user; records the explicit breadcrumb decision the critique asked for."
-      },
-      {
-        "action": "edit",
-        "change": "Wrap the multi-payer Remove ${payer.displayName} label in a <span className=\"min-w-0 break-words\"> inside the Button children and append min-w-0 to that Button, so an 80-character member name in the several-payers state wraps instead of its min-content floor widening the editor (same two-level treatment as the claim button in the same flex-wrap-row context; fixture-measured 585px -> 375px).",
-        "path": "components/expense-editor.tsx",
-        "why": "The reachable progressive-disclosure state AC-3 claims: identical shrink-to-fit shape inside a flex-wrap row, shown only when payers.length > 1."
-      },
-      {
-        "action": "edit",
-        "change": "Add min-w-0 max-w-full break-words to the empty-state Open-group Link only (FEED_LINK and the other two short-string instances untouched): max-w-full is load-bearing, measured in-browser — break-words alone and min-w-0 break-words both still overflow at 791px in the EmptyState items-start column because nothing caps the item's width to wrap into; the capped variant measures 375/375. Full group name kept, wrapping instead of overflowing the card.",
-        "path": "app/activity/page.tsx",
-        "why": "The same unbounded-name shape on a route the touched-routes QA pass would never visit; the browser pass corrected the one-class treatment, which would have failed QA."
-      },
-      {
-        "action": "create",
-        "change": "renderToStaticMarkup cases in the style of app/groups/[id]/members/long-name-wrap.test.ts: ExpenseScreen (new h1/breadcrumb/subtitle/bottom link with 80-char group name; edit h1 with 200-char description), ExpenseEditor multi-payer Remove-button label (min-w-0 break-words span, full name present), JoinPanel Join-button and claim-button labels rendered through JoinPanel with a seats prop including a matchesYou seat (min-w-0 break-words spans, full names present), StateMessage with the Added/Renamed-to sentences, ConfirmStep with 80-char group/member names, a case pinning the single-payer line's truncate chain unchanged, plus one case pinning short names render unchanged. The join-page h1 itself lives in a DB-bound server page and is covered by browser checks instead. Lives under app/ because vitest.config.ts collects lib/**, app/** and scripts/** only.",
+        "change": "Add MemberRow overlay pins rendered through MembersPanel (owner, unarchived, seat distinct from the viewer so the disclosure renders): the remove-confirm panel div carries absolute right-0 with bg-surface (and not a bare in-flow w-64), while the shared ConfirmStep itself carries no positioning class so the archive/leave/rotate/disable confirms stay in normal flow; both short-name and 80-char fixtures render the full question text. Follows the file's existing renderToStaticMarkup pattern used for JoinPanel.",
         "path": "app/overflow-wrap.test.ts",
-        "why": "Pin the treatment per element so the next screen cannot silently drop it; CI-runnable without jsdom or a server."
+        "why": "Pin the geometry fix in markup (no layout engine in CI) so a later edit cannot silently revert the panel to in-flow; the live-browser proof stays with QA's T-3/T-14 re-drive under AC-7."
       }
     ],
     "issue": 55,
+    "version": 2,
     "kind": "bug",
     "out_of_scope": [
       "The issue text carries no IAC-n acceptance lines, so acceptance is sourced to TR-11 (mobile-first responsive UI, proved by phone-viewport QA) with nothing to defer.",
@@ -171,40 +150,36 @@
       "Open /groups/<id>/expenses/<expId>/edit for an expense whose description is 200 unbroken characters at 375px: the h1 wraps and the page fits.",
       "On /groups/<id>/members at 375px, add a seat named z*80 and rename the group to x*80: while each success line shows (Added ..., Renamed to ...), scrollWidth <= clientWidth and the sentence is fully legible.",
       "As a third fresh account C (account A cannot be used: step 2's add-seat already writes an activity row) with one x*80 group and no activity yet, open /activity with the default all filter at 375px: the Open x*80 action wraps and scrollWidth <= clientWidth.",
-      "Reload each touched route and confirm zero console errors and short names render exactly as before."
+      "Reload each touched route and confirm zero console errors and short names render exactly as before.",
+      "Short-name control for the overlay fix (BUG-1 regression): fresh account, any short-named group, add any short-named seat, open its row overflow menu and press Remove at 375px: the confirm floats as a panel over the rows below without moving them, scrollWidth <= clientWidth with the confirm open, and Cancel (or the summary toggle) leaves the row exactly as before. Then re-drive step 3 for the 80-char remove case."
     ],
     "reproduced": true,
     "residual_risks": [
-      "If the claim button's flex-wrap row context needs more than the two-level min-w-0 treatment in the real app shell (e.g. the button shares a line with the truncated seat name instead of taking its own), QA step 2's button-width reads will show it; the fallback is max-w-full on that Button, not a redesign.",
-      "Native <select> controls populated with 80-char names (member filter, payer selects) scroll internally rather than widening the document; QA steps re-confirm this on the touched routes.",
-      "The /activity empty-state overflow was first read from code and then confirmed in fixtures, not yet in the authenticated app; if QA step 8 shows it never overflowed in-app, the capped addition is still a harmless no-op on normal text.",
-      "The two shared paragraphs serve callers QA never opens at 375px (16 StateMessage and 8 ConfirmStep sites); the only guard over the unvisited ones is the unit test, which now genuinely runs under test:ci from its app/ address."
+      "The open overlay covers the rows beneath it while expanded — expected menu behaviour shared with the repo's other overflow menus — and closes via the summary toggle or Cancel; QA step 10 confirms the row underneath is undisturbed.",
+      "The in-app post-fix scrollWidth numbers are QA-measured; the fixture predicts 375/375 and the width arithmetic leaves ~59px of slack (283 available vs 224 fixed once the panel is out of flow), so a small structural surprise still fits.",
+      "If a future caller puts wider content (e.g. a long refusal sentence) in the overlay, the w-64 plus max-w viewport guard still caps it; the unit test pins the classes, not the pixels."
     ],
     "risks": [
-      "StateMessage and ConfirmStep are shared by the settle-up and expense-editor flows too; the added classes only affect unbreakable strings (overflow-wrap is a no-op on normal text), and the unit test pins short names unchanged.",
-      "Button label spans change the buttons' DOM (text node becomes a span inside children, so the pending-label path is untouched and pending labels are short generic strings with no interpolated names); no selector or test targets the bare text node (selectors key on role/labels), and the accessible name is unchanged.",
-      "The expense breadcrumb becomes a multi-line stack at 375px with an 80-character group name; QA step 4 confirms it still reads as a breadcrumb against the ui.md back-context pattern."
+      "The dropdown gains a surface card (border, bg-surface, shadow-md) it did not have in-flow; inside the 256px panel the ConfirmStep keeps its own danger border, so the open state reads as a panel containing a confirm — the same nesting the dialog confirms already show.",
+      "z-40 floats above the sticky app header (z-30) while open, exactly like the existing account and expense-row menus at the same level; no new stacking contract.",
+      "The details/summary disclosure, form logic, and ConfirmStep are untouched, so the T-10 keyboard path and all passing confirm layouts (T-4, T-13) cannot shift; the unit test pins ConfirmStep carrying no positioning."
     ],
+    "root_cause": "The members-row remove-confirm overflow is not an unbroken-name wrapping defect at all: MemberRow renders the confirm panel as an in-flow w-64 (256px) block inside a shrink-0 details disclosure, so 32px of avatar plus 24px of gaps plus 256px of panel (312px of fixed row content) exceeds the 283px the li offers inside the Card at a 375px viewport — with short names too (QA T-14: 390 vs 375, byte-identical to T-3). Version 1 diagnosed every spot as missing overflow-wrap; that was right for the other six shapes and wrong here: break-words was applied, the question does wrap over several lines, and the page still overflows, because no wrapping class can shrink an in-flow 256px box. The `relative` on the details is the giveaway: it anchors nothing, because the panel was never given the `absolute` half of the overlay pairing the repo's own MenuPanel uses (components/ui-interactive.tsx:316-318).",
     "tests": [
       {
-        "action": "create",
+        "action": "edit",
         "cases": [
-          "expense new screen: h1/breadcrumb/subtitle/bottom link carry wrapping classes and the full 80-char group name is present",
-          "expense edit screen: h1 wraps a 200-char unbroken description and subtitle wraps the group name",
-          "ExpenseEditor multi-payer Remove button: label sits in a min-w-0 break-words span with the full 80-char name present",
-          "JoinPanel Join button and claim button rendered through JoinPanel with a seats prop (including a matchesYou seat): labels sit in min-w-0 break-words spans with full names present",
-          "StateMessage renders the Added/Renamed-to sentences wrapped; ConfirmStep question wraps 80-char group/member names",
-          "single-payer line keeps its truncate chain so a later edit cannot silently reopen the same bug",
-          "short names render unchanged (no truncation or treatment drift)"
+          "member-row remove dropdown renders as an absolute right-0 overlay with bg-surface (not in-flow), pinning the BUG-1 geometry fix against silent revert",
+          "shared ConfirmStep carries no positioning classes so the archive/leave/rotate/disable confirms stay in normal flow",
+          "remove question names the member and group in full with short and 80-char names alike"
         ],
         "path": "app/overflow-wrap.test.ts"
       }
     ],
-    "understanding": "Issue #55 collects five leftover instances of one root cause PR #54 proved on the group and members pages: an up-to-80-character unbroken group or seat name (up to 200 for expense descriptions, up to 80 for user display names) rendered with no overflow-wrap treatment becomes a single unbreakable line that sets the document width at a 375px viewport. The five spots are the join-page h1, the join/claim buttons, the shared ConfirmStep question paragraph, the name-bearing elements of the expense screen, and the shared StateMessage success line, plus two further instances of the same defect (the expense-editor multi-payer Remove button, the /activity empty-state Open-group link). The fix repeats the #54 idiom at each spot — wrap in place, never truncate, since headings, buttons, confirms, and notices must keep naming their object in full — with min-w-0 wherever a row-axis flex container holds the string, plus max-w-full on the activity empty-state link where the browser proved min-w-0 alone cannot constrain an items-start column item.",
+    "understanding": "Version 1's diagnosis was wrong for exactly one spot. It claimed all five findings (plus two) were the same root cause — an up-to-80-character unbroken name with no overflow-wrap setting the document width — and QA has now disproved that for the members-row remove confirm: T-3 shows the question wrapping correctly over several lines while the page still overflows (390 vs 375), and the T-14 short-name control overflows byte-identically with no long name anywhere, so wrapping was never the mechanism there. The real cause is row geometry: an in-flow 256px panel inside a shrink-0 disclosure (components/groups-panels.tsx:654-667) forces the row past the viewport however short the names are. Everything else in version 1 stands — 12 of 14 QA tests pass on it — so this order keeps that base (PR #56 HEAD b465304) and changes only the row geometry, plus a regression criterion (AC-7) and a markup pin so the confirmed defect cannot regress silently. BUG-1 predates this PR (introduced_by_pr false), which is why AC-7 is a regression guard for a pre-existing defect fixed in passing, not a criterion for a bug this PR introduced.",
     "unknowns": [
-      "The exact post-fix in-app scrollWidth numbers, which only the authenticated QA pass can produce (QA measures them in every AC); the fixture browser pass predicts 375/375 throughout."
+      "The exact post-fix in-app scrollWidth numbers, which only the authenticated QA pass can produce (QA re-drives T-3 and T-14 under AC-7); the fixture predicts 375/375 with ~59px of slack."
     ],
-    "version": 1,
     "mode": "committed"
   },
   "touch_paths": [
@@ -360,10 +335,10 @@
   "validated_at": "2026-10-06T09:05:08.680Z",
   "validated_ac_changes": [],
   "approved_too_high": false,
-  "work_order_version": 1,
-  "work_order_posted_at": "2026-10-06T09:08:28.476Z",
-  "work_order_from": "plan",
-  "work_order_comment": "6013044665",
+  "work_order_version": 2,
+  "work_order_posted_at": "2026-10-06T10:10:46.975Z",
+  "work_order_from": "root-cause",
+  "work_order_comment": "6014044946",
   "implemented_version": 1,
   "follow_ups": {
     "review": [],

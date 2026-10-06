@@ -1,12 +1,12 @@
 {
-  "source_sha": "e319a0fbcc2f544ca85c31a44ece99a3196fc6a5",
+  "source_sha": "93a320a3f06773d1d117e74ef886799433b961b7",
   "source_repo": "Shivam-Fl/automated-ai-sdlc",
   "files": {
     ".github/workflows/ci-verify.yml": "f31654d925f79b1b38402aa9d4115c15cf888ac4e17e87b488620000167399e9",
     ".github/workflows/sdlc-canary.yml": "a228969c2ed4c2ce5f2ef889fa69b5dd7d980318f881291c70576d041224f743",
     ".github/workflows/sdlc-cooldown.yml": "85dfbcbb6ac40524c9ea9689f98a2f7da404396c94d40adb1ac1c36c0773bf99",
     ".github/workflows/sdlc-gate.yml": "d142df3a2414cd71ef020b78ce4ba1b5714dab2bdc164148a08e6d4552eaa227",
-    ".github/workflows/sdlc-implement.yml": "d15ef13799c711c77339c8458dc4fc6fa9c4604f939a715121051ae6efe27dcf",
+    ".github/workflows/sdlc-implement.yml": "d19920ed503c60211d53d261b0174587899805f992c1a5d58193d0f4ab22f195",
     ".github/workflows/sdlc-intake.yml": "ec6ae07bbc5b6b8d7809cc98bf8a7fd144604b1d29a17ec235a3e339b560d52c",
     ".github/workflows/sdlc-librarian.yml": "4c3be1d4616f8855a57e27b72bdb4bcf0d7e177331a97ad070cdf1a4fca0d87c",
     ".github/workflows/sdlc-loop.yml": "47d2eb0145a119f24ffbba909c774047a74d09b9157373774dc222bac2e67ac5",
@@ -160,7 +160,7 @@
     ".sdlc/bin/post-review.mjs": "563938dfd860556dca5a7c1226796f0217875de83fa6797154e892b2acae80b8",
     ".sdlc/bin/post-stop.mjs": "e210a7920d129819e231228fb92873db5069d83c5b4cb265a052a8bd4395b11d",
     ".sdlc/bin/post-work-order.mjs": "a12fbda313921ad83c79962ec30ad5f49ef7f1566b01887c1e45056a41b56f24",
-    ".sdlc/bin/pr-demo-post.mjs": "74a40a06d2cf6aa30705550ae7099b5421fcf947d20607a6ca0fbf9e24c3f584",
+    ".sdlc/bin/pr-demo-post.mjs": "4b7f946685d5a51ed5715d227d8f2625df66fbc0cce1f87e07c299ce81681454",
     ".sdlc/bin/pr-demo-record.sh": "827aa612d5168ed81aa701cb718ac1ab9d67c81ccb25ae78e07de95fef798feb",
     ".sdlc/bin/preflight.mjs": "5269649d48982cfe45d931c2f4314a1b68631ac881beca4e02fdbdd95b17fe4d",
     ".sdlc/bin/provider-settings.mjs": "a7b1905d44a1302333f2b4489733f435bb14d699606eb9764ed9bd9a937ac294",

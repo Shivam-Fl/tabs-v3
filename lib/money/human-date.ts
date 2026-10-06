@@ -19,6 +19,8 @@
  * a worse failure than a row showing what it stored.
  */
 
+import { isRealCalendarDay, type CalendarDay } from '../dates';
+
 const MONTHS = [
   'Jan',
   'Feb',
@@ -37,14 +39,8 @@ const MONTHS = [
 const DAY_MS = 86_400_000;
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-interface CalendarDate {
-  year: number;
-  month: number;
-  day: number;
-}
-
 /** `YYYY-MM-DD` as a real day on the calendar, or null. */
-function parseCalendarDate(value: string): CalendarDate | null {
+function parseCalendarDate(value: string): CalendarDay | null {
   const match = CALENDAR_DATE.exec(value.trim());
   if (match === null) return null;
 
@@ -52,18 +48,11 @@ function parseCalendarDate(value: string): CalendarDate | null {
   const month = Number(match[2]);
   const day = Number(match[3]);
 
-  // Round-tripped through `Date.UTC`, which normalizes an impossible day into the next month: a
-  // value that does not come back as the three numbers that went in was never on the calendar.
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) {
-    return null;
-  }
-
-  return { year, month, day };
+  return isRealCalendarDay(year, month, day) ? { year, month, day } : null;
 }
 
 /** How many days into the epoch a calendar date is, as a whole number. */
-function dayNumber(date: CalendarDate): number {
+function dayNumber(date: CalendarDay): number {
   return Math.floor(Date.UTC(date.year, date.month - 1, date.day) / DAY_MS);
 }
 
@@ -84,6 +73,11 @@ function dayNumber(date: CalendarDate): number {
  * year boundary reads "Tomorrow · 1 Jan 2027".
  *
  * A date it cannot read, or a `today` it cannot read, comes back as the input unchanged.
+ *
+ * This is the editor preview's ladder, and it is deliberately not `formatExpenseDate`'s
+ * (`lib/dates.ts`): the preview is read while a date is being typed against the viewer's own
+ * local day, so it pairs the relative word with the absolute day and names Tomorrow. Ledger rows
+ * stand alone and read Today, Yesterday, a weekday or a date.
  */
 export function humanDateLabel(date: string, today: string): string {
   const target = parseCalendarDate(date);

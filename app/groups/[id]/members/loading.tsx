@@ -32,6 +32,14 @@ export default function MembersLoading() {
           Loading members…
         </p>
 
+        {/* A reader with scripting off is left holding this skeleton: say what is missing rather
+            than pulse forever (AC-16). */}
+        <noscript>
+          <p className="rounded-token border border-border bg-surface p-4 text-secondary text-ink shadow-sm">
+            Tabs needs JavaScript to load this group&rsquo;s members. Turn it on and reload the page.
+          </p>
+        </noscript>
+
         <header className="flex flex-col gap-2">
           <div data-skeleton="title">
             <Skeleton className="h-8 w-52" />

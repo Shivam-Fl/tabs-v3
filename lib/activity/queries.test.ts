@@ -7,8 +7,10 @@ import type { PaymentSnapshot } from '../settle/validation';
 import {
   ACTIVITY_FILTERS,
   activityFilterFrom,
+  activityHref,
   listGroupActivity,
   listUserActivity,
+  rawGroupScope,
   type ActivityFilter,
   type ActivityRow,
 } from './queries';
@@ -404,6 +406,39 @@ describe('the filter value a URL carries', () => {
   it('falls back to All for anything else, rather than refusing the reader', () => {
     for (const value of ['', '   ', 'everything', 'expense', '42', undefined]) {
       expect(activityFilterFrom(value)).toBe('all');
+    }
+  });
+
+  it('uses the first value of a repeated key instead of throwing', () => {
+    expect(activityFilterFrom(['expenses', 'members'])).toBe('expenses');
+    expect(activityFilterFrom(['bogus', 'members'])).toBe('all');
+    expect(activityFilterFrom([])).toBe('all');
+  });
+});
+
+const SCOPE_ID = '11111111-1111-4111-8111-111111111111';
+
+describe('the feed link', () => {
+  it('is bare for the unscoped, unfiltered feed', () => {
+    expect(activityHref('all', null)).toBe('/activity');
+  });
+
+  it('carries the scope alone, the filter alone, or both', () => {
+    expect(activityHref('all', SCOPE_ID)).toBe(`/activity?group=${SCOPE_ID}`);
+    expect(activityHref('expenses', null)).toBe('/activity?activity=expenses');
+    expect(activityHref('expenses', SCOPE_ID)).toBe(`/activity?group=${SCOPE_ID}&activity=expenses`);
+  });
+});
+
+describe('the raw group scope', () => {
+  it('is the first value when it is a uuid', () => {
+    expect(rawGroupScope(SCOPE_ID)).toBe(SCOPE_ID);
+    expect(rawGroupScope([SCOPE_ID, 'whatever'])).toBe(SCOPE_ID);
+  });
+
+  it('is null for anything that is not a uuid', () => {
+    for (const value of ['nope', '', '   ', [], ['nope', SCOPE_ID], undefined]) {
+      expect(rawGroupScope(value)).toBeNull();
     }
   });
 });

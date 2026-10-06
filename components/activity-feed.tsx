@@ -4,6 +4,8 @@ import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABELS,
   ACTIVITY_FILTER_PARAM,
+  ACTIVITY_GROUP_PARAM,
+  activityHref,
   type ActivityFilter,
   type ActivityRow,
 } from '../lib/activity/queries';
@@ -17,7 +19,7 @@ import {
 import { formatBasisPoints, formatMinorUnits } from '../lib/money/format';
 import type { PaymentSnapshot } from '../lib/settle/validation';
 import { Timestamp } from './timestamp';
-import { Avatar, Button, EmptyState } from './ui';
+import { Avatar, Button, Card, EmptyState } from './ui';
 
 /**
  * The one rendering of an activity feed (TR-10, AC-1, AC-2, AC-9).
@@ -428,6 +430,50 @@ function inputValueText(
 }
 
 /**
+ * The cross-group feed's failed-load card, with the chips above it.
+ *
+ * The chips stay because the filter is where the reader was when the read failed, and the group
+ * scope travels with them and with Retry: a failure must not widen "this group's activity" into
+ * every group's (AC-4). `groupId` is the confirmed scope when the groups read worked and the raw
+ * `?group=` value when it was that read that failed.
+ */
+export function ActivityFailed({
+  filter,
+  groupId,
+}: {
+  filter: ActivityFilter;
+  groupId: string | null;
+}) {
+  return (
+    <>
+      <FilterChips
+        filter={filter}
+        action="/activity"
+        preserved={groupId === null ? {} : { [ACTIVITY_GROUP_PARAM]: groupId }}
+      />
+      {/* A card, like every other surface on the page: the failure is one section of the screen
+          rather than the screen, and the shared Card is what says so (TR-11). */}
+      <Card>
+        <section className="flex flex-col gap-3" aria-labelledby="activity-error">
+          <h2 id="activity-error" className="text-section font-semibold text-ink">
+            We could not load your activity
+          </h2>
+          <p className="text-body text-ink-muted">
+            Nothing has been lost — the feed did not come back this time. Try again.
+          </p>
+          <Link
+            className="text-body text-accent underline underline-offset-4"
+            href={activityHref(filter, groupId)}
+          >
+            Retry
+          </Link>
+        </section>
+      </Card>
+    </>
+  );
+}
+
+/**
  * Rows of the same shape as the feed, for a route's loading state.
  *
  * Exported from here rather than written beside the page it serves so the skeleton and the feed
@@ -437,6 +483,15 @@ function inputValueText(
 export function ActivityFeedSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div className="flex flex-col gap-3">
+      {/* A reader with scripting off is left holding this fallback: the resolved feed waits in the
+          streamed payload for a client-side swap that never runs, so say what is missing instead
+          of pulsing forever (AC-16). */}
+      <noscript>
+        <p className="rounded-token border border-border bg-surface p-4 text-secondary text-ink shadow-sm">
+          Tabs needs JavaScript to load your activity. Turn it on and reload the page.
+        </p>
+      </noscript>
+
       <div className="flex flex-wrap gap-2">
         {ACTIVITY_FILTERS.map((value) => (
           <div

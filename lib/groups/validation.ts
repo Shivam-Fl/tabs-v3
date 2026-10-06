@@ -190,9 +190,18 @@ export const GROUP_SECTION_LABELS: Record<GroupSection, string> = {
   members: 'Members',
 };
 
+/**
+ * The first value of a query parameter. Next.js hands a repeated key (`?q=a&q=b`) over as an
+ * array, so every parser that reads a raw search param goes through here rather than trimming
+ * what may not be a string.
+ */
+export function firstQueryValue(raw: string | string[] | undefined): string {
+  return Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
+}
+
 /** The section a query asked for, or the default when it asked for nothing this app has. */
-export function groupSectionFrom(raw: string | undefined): GroupSection {
-  const value = (raw ?? '').trim().toLowerCase();
+export function groupSectionFrom(raw: string | string[] | undefined): GroupSection {
+  const value = firstQueryValue(raw).trim().toLowerCase();
   return (GROUP_SECTIONS as readonly string[]).includes(value)
     ? (value as GroupSection)
     : DEFAULT_GROUP_SECTION;

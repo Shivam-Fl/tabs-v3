@@ -1,15 +1,8 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import {
-  SegmentedControl,
-  Timestamp,
-  humanTimestamp,
-  relativeTimestamp,
-  stepSegment,
-  timestampLabel,
-  utcTimestampText,
-} from '../components/ui-interactive';
+import * as interactive from '../components/ui-interactive';
+import { SegmentedControl, stepSegment } from '../components/ui-interactive';
 import { Avatar, avatarInitials, avatarTint, Button, MoneyInput, Spinner } from '../components/ui';
 
 /**
@@ -214,123 +207,22 @@ describe('segmented control', () => {
 });
 
 /**
- * One instant as the reader sees it (AC-3, TR-11).
- *
- * The rule this pins is that the first paint must be the UTC label — the exact string the server
- * sent — so the island's hydration matches and a reader whose JavaScript never arrives still gets
- * an honest, labelled time rather than the server's clock wearing their name. The zone-aware
- * reading is asserted as arithmetic (`humanTimestamp`, `timestampLabel`) because the shift only
- * happens in an effect, which `renderToStaticMarkup` does not run; what the markup test can show
- * is the UTC label and the machine-readable `datetime` beside it.
+ * The UTC-labelled time cluster was orphaned when the feed moved to `components/timestamp.tsx`,
+ * and its only renderer printed the "UTC" text the product bans. It is gone; this pins that it
+ * does not drift back into the shared interactive module (TR-11).
  */
-describe('timestamps', () => {
-  const iso = (value: string) => new Date(value);
-  const at = (value: string) => iso(value);
+describe('the interactive module and time', () => {
+  it('exports none of the time helpers', () => {
+    const exported = Object.keys(interactive);
 
-  it('renders the UTC label on the server, with the instant in datetime', () => {
-    const value = at('2026-01-08T14:30:00Z');
-    const html = render(createElement(Timestamp, { value }));
-
-    // react-dom/server writes the prop's own casing through; a browser reads it as `datetime`
-    // either way, which is the form the spec names.
-    expect(new RegExp(`datetime="${value.toISOString()}"`, 'i').test(html)).toBe(true);
-    expect(html).toContain(utcTimestampText(value));
-    expect(html).toContain('UTC');
-  });
-
-  it('never prints a bare number, a raw ISO date or a server clock without its zone', () => {
-    const value = at('2026-01-08T14:30:00Z');
-    const html = render(createElement(Timestamp, { value }));
-
-    // ui.md forbids developer artefacts on a screen: the ISO string belongs in `datetime` (a
-    // machine reads it), never in the text a person reads.
-    expect(html).toContain(`>${utcTimestampText(value)}</time>`);
-    expect(html).not.toContain(`>${value.toISOString()}<`);
-  });
-
-  it('counts the age in the unit that helps, and stops counting at a week', () => {
-    const now = at('2026-01-08T12:00:00Z');
-
-    expect(relativeTimestamp(at('2026-01-08T12:00:00Z'), now)).toBe('just now');
-    expect(relativeTimestamp(at('2026-01-08T11:59:30Z'), now)).toBe('just now');
-    expect(relativeTimestamp(at('2026-01-08T11:59:00Z'), now)).toBe('1m ago');
-    expect(relativeTimestamp(at('2026-01-08T11:00:01Z'), now)).toBe('59m ago');
-    expect(relativeTimestamp(at('2026-01-08T11:00:00Z'), now)).toBe('1h ago');
-    expect(relativeTimestamp(at('2026-01-07T12:00:01Z'), now)).toBe('23h ago');
-    expect(relativeTimestamp(at('2026-01-07T12:00:00Z'), now)).toBe('1d ago');
-
-    // Past the week the count stops helping and the human half carries the whole label, so the
-    // relative half says nothing rather than "34d ago".
-    expect(relativeTimestamp(at('2026-01-02T12:00:00Z'), now)).toBe('6d ago');
-    expect(relativeTimestamp(at('2026-01-01T12:00:00Z'), now)).toBe('');
-    expect(relativeTimestamp(at('2025-12-09T12:00:00Z'), now)).toBe('');
-    expect(relativeTimestamp(at('2025-12-09T12:00:00Z'), now)).toBe('');
-  });
-
-  it('clamps a value from the future to "just now" rather than a negative age', () => {
-    const now = at('2026-01-08T12:00:00Z');
-
-    // A clock a few seconds ahead of the server is not a thing to tell anybody about, and
-    // "in 3 hours" on something that already happened reads as a bug.
-    expect(relativeTimestamp(at('2026-01-08T12:00:05Z'), now)).toBe('just now');
-    expect(relativeTimestamp(at('2026-01-08T15:00:00Z'), now)).toBe('just now');
-    expect(timestampLabel(at('2026-01-08T15:00:00Z'), now, 'UTC')).toMatch(/^just now · /);
-  });
-
-  it('reads today as the time alone, in the viewer zone', () => {
-    const now = at('2026-01-08T12:00:00Z');
-    const time = new Intl.DateTimeFormat(undefined, { timeStyle: 'short', timeZone: 'UTC' }).format(
-      at('2026-01-08T09:05:00Z'),
-    );
-
-    expect(humanTimestamp(at('2026-01-08T09:05:00Z'), now, 'UTC')).toBe(time);
-  });
-
-  it('reads the day before as Yesterday, and the week before by its weekday', () => {
-    const now = at('2026-01-08T12:00:00Z');
-
-    expect(humanTimestamp(at('2026-01-07T09:05:00Z'), now, 'UTC')).toMatch(/^Yesterday /);
-
-    const twoDaysAgo = at('2026-01-06T09:05:00Z');
-    const weekday = new Intl.DateTimeFormat(undefined, {
-      weekday: 'long',
-      timeZone: 'UTC',
-    }).format(twoDaysAgo);
-    expect(humanTimestamp(twoDaysAgo, now, 'UTC')).toMatch(new RegExp(`^${weekday} `));
-  });
-
-  it('reads anything older by its date', () => {
-    const now = at('2026-01-08T12:00:00Z');
-    const monthAgo = at('2025-12-09T09:05:00Z');
-    const date = new Intl.DateTimeFormat(undefined, {
-      day: 'numeric',
-      month: 'short',
-      timeZone: 'UTC',
-    }).format(monthAgo);
-
-    expect(humanTimestamp(monthAgo, now, 'UTC')).toMatch(new RegExp(`^${date} `));
-    expect(humanTimestamp(monthAgo, now, 'UTC')).not.toContain('Yesterday');
-  });
-
-  it('answers in the zone it is given — the same instant is two different days', () => {
-    // 23:00 UTC on the 7th is the morning of the 8th in Tokyo: the label is a fact about the
-    // reader, which is why the zone is a parameter rather than something read off the server.
-    const now = at('2026-01-08T05:00:00Z');
-    const value = at('2026-01-07T23:00:00Z');
-
-    expect(humanTimestamp(value, now, 'UTC')).toMatch(/^Yesterday /);
-    expect(humanTimestamp(value, now, 'Asia/Tokyo')).not.toContain('Yesterday');
-  });
-
-  it('joins the two halves with the middot the feed uses, and drops an empty relative half', () => {
-    const now = at('2026-01-08T12:00:00Z');
-    const recent = at('2026-01-08T10:00:00Z');
-    const old = at('2025-12-09T09:05:00Z');
-
-    expect(timestampLabel(recent, now, 'UTC')).toBe(
-      `2h ago · ${humanTimestamp(recent, now, 'UTC')}`,
-    );
-    expect(timestampLabel(old, now, 'UTC')).toBe(humanTimestamp(old, now, 'UTC'));
-    expect(timestampLabel(old, now, 'UTC')).not.toContain(' · ');
+    for (const name of [
+      'Timestamp',
+      'timestampLabel',
+      'utcTimestampText',
+      'relativeTimestamp',
+      'humanTimestamp',
+    ]) {
+      expect(exported).not.toContain(name);
+    }
   });
 });

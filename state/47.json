@@ -280,5 +280,195 @@
     "understanding": "Issue #47 collects four non-blocking review findings from PR #44 for #37, all confirmed on the current post-#44 checkout (afcdc32) by executing the exact faulty branches: (1) a leave blocked by a non-zero balance renders only <StateMessage> with no settle-up link while remove has one; (2)/(4) the archived solo-owner EmptyState still promises an invite link whose action returns null for archived groups — the same defect stated twice (same file, same render, same fix); (3) the ?saved=1 notice is server-rendered from a truthy searchParams read while profile refusals return inline with no navigation, so the stale success sits beside fresh field errors — and forged values also render notices against ADR-0008. The critique added verified gaps this plan absorbs: the settle link would be a dead end on archived groups, the InvitePanel's live controls are equally dead there, the test seam as specified breaks the Next build, the moved-notice gate breaks the refusal-then-fix-then-save path, and the ?removed= suppression needs a cancel restore. None was fixed by a later round.",
     "unknowns": [],
     "version": 2
-  }
+  },
+  "approved_work_order": {
+    "acceptance": [
+      {
+        "check": "In a live (unarchived) group, confirming Leave group with a non-zero balance shows the balance refusal with a Settle up link to /groups/<id>#debts-heading; in an archived group the same refusal shows the refusal plus one read-only note and no link; a zero-balance leave still succeeds in both cases.",
+        "how_to_verify": "Carry a balance in a live group, press Leave group and confirm: refusal plus Settle up link, follow it to the debts section. Archive the group and repeat: refusal plus read-only note, no link. Settle to zero and leave: success unchanged, including from an archived group.",
+        "id": "AC-1",
+        "source": "TR-7",
+        "verify": "browser"
+      },
+      {
+        "check": "An archived members screen shows no invite-sharing copy and no invite actions: no solo-owner EmptyState, no invite input, Copy, Rotate or Disable controls, and no invite notice slot; it shows one read-only sentence and the archived seats note. Unarchived solo-owner and multi-member screens are unchanged.",
+        "how_to_verify": "Archive a solo-owner group and open its members screen: no 'Share the invite link' copy, no invite actions or notices, only the read-only sentence and the archived seats note. Unarchived solo-owner still shows the EmptyState with its working action.",
+        "id": "AC-2",
+        "source": "TR-7",
+        "verify": "browser"
+      },
+      {
+        "check": "Saving the profile shows 'Profile saved.' inline with no URL param; submitting an empty display name afterwards shows only the inline field errors; fixing the name and saving again shows the saved sentence with the fresh values; a direct hit on /profile?saved=1 or /profile?error=invalid renders the matching legacy notice, and forged values (?saved=yes, ?error=lol) render nothing.",
+        "how_to_verify": "Save profile: saved sentence appears, URL stays /profile. Submit an empty display name: field error shows, saved notice gone. Fix the name and save: saved sentence returns with the new name. Load /profile?error=invalid directly: refusal sentence renders. Load /profile?saved=yes: nothing renders.",
+        "id": "AC-3",
+        "source": "TR-6",
+        "verify": "browser"
+      },
+      {
+        "check": "A remove success notice (?removed=) never sits beside a later inline leave refusal in the same members section, and cancelling the leave confirm restores the removal note.",
+        "how_to_verify": "Remove a member (lands on ?removed=Name), then press Leave group and confirm while carrying a balance: the balance refusal shows without the stale 'Removed …' sentence above it. Cancel the confirm: the removal note is visible again.",
+        "id": "AC-4",
+        "source": "TR-7",
+        "verify": "browser"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Leave refusal: redirect with a notice query param instead of an inline link.",
+        "rejected_because": "Refusals must stay inline because the form stays mounted (ADR-0008); a redirect would remount the panel and discard the confirm context."
+      },
+      {
+        "approach": "Archived solo-owner: write new archived-specific EmptyState copy instead of suppressing it.",
+        "rejected_because": "The read-only seats note directly below already says what an archived group needs; a second sentence restating it is copy to maintain for no new information."
+      },
+      {
+        "approach": "Profile staleness: clear the query param from the client (router.replace on refusal) and keep the notice on the page.",
+        "rejected_because": "The notice is painted before the island hydrates so both sentences flash together, and it adds navigation side effects to a refusal; an inline success removes the stale param at the source instead."
+      },
+      {
+        "approach": "Leave the InvitePanel's link, Copy, Rotate and Disable controls live on archived groups and scope AC-2 to the EmptyState only.",
+        "rejected_because": "Every one of those controls is dead on an archived group (join filters archived out, rotate/disable return ARCHIVED_STATE), so AC-2's read-only screen could not be verified."
+      },
+      {
+        "approach": "Export MembersScreen from members/page.tsx as the test seam.",
+        "rejected_because": "Next.js rejects any named export but metadata/default from a page file at build time, and all 11 page files in this repo export only those; the screen moves to components/ instead."
+      },
+      {
+        "approach": "Keep updateProfile's success redirect and gate the moved notice on island error state.",
+        "rejected_because": "The island's error state survives the same-URL redirect, so a refusal-then-fix-then-save would suppress the saved confirmation it just earned and repaint refused values over saved ones."
+      }
+    ],
+    "approach": "Seven edits plus a component move, each reusing the helper the sibling path already uses. (1) In MembersPanel, mirror the remove path beside leaveState (leaveBlocked = isBalanceBlockedRefusal(leaveState.message)) but gate the Settle up link on !archived, because leaving is the one write an archived group still accepts (lib/groups/actions.ts:393-395) while settling in one is refused (lib/settle/actions.ts:101,190); when blocked-and-archived render the refusal plus one read-only note naming that the balance cannot be settled here, never a link. Gate removedNotice on a local leaveFailed flag set from leaveState errors and cleared when the confirm is cancelled, so a cancelled refusal restores the true removal note. (2) Move MembersScreen and SoloOwnerAction unchanged into components/members-screen.tsx so the test seam is importable without adding a page export Next rejects; members/page.tsx stays a thin server wrapper. Gate the solo-owner EmptyState on soloOwner && !group.archived (fixes the issue's findings 2 and 4, the same render stated twice), pass archived through to InvitePanel, and pass no inviteNotice when archived. Give InvitePanel an archived prop that renders one read-only sentence in place of the notice slot, link input, Copy, captions, Rotate and Disable controls. (3) Profile: add PROFILE_SAVED_MESSAGE and a closed-vocabulary profileNoticeText beside inviteNoticeText (saved==='1', error==='invalid', error first, arrays and everything else null); updateProfile answers success inline with that message (revalidatePath kept, redirect dropped) because this form does not unmount on success so ADR-0008's redirect rationale does not apply — recorded deviation; the page reads params through the validator and passes the notice plus email into ProfileForm; the notice slot and Card move into the island together so idle markup position is preserved; the island renders the success sentence on success, the param notice when idle, and null whenever its action state holds a refusal. No server sentence changes outside the profile success transport, so the lib/groups/actions.test.ts:850 settle-up pin stays green; lib/auth/actions.test.ts:331-334 is updated to the inline success.",
+    "assumptions": [
+      "The #debts-heading anchor on the group page is the correct settle-up target for a leaver in a live group.",
+      "Suppressing the archived solo-owner EmptyState satisfies the read-only wording requirement because the seats note below already carries it, and an archived multi-member group already renders with just that note, so solo becomes consistent with it.",
+      "Reproduction is branch-level on the current post-#44 checkout (HEAD afcdc32, no later round touched these renders): each finding was confirmed by executing its exact faulty branch and observing the faulty output recorded in evidence, with code citations as the second leg. No browser-driven reproduction was performed in planning; the driven confirmation is the browser acceptance walk for each AC, which QA performs. The four defects are unambiguous in code, so a driven pass is verification, not diagnosis."
+    ],
+    "confidence": 78,
+    "confidence_rationale": "Every diagnosis was re-verified against the code cited, each fix reuses an existing helper or one-line condition at a site with exactly one caller, and the critique's two load-bearing objections (invalid page export, surviving island error state) are designed out rather than patched. What keeps this at 78 rather than 90 is that the leave-link and removed-notice conditions are unreachable from any static test seam so AC-1 and AC-4 rest on the browser walk, and the inline-success transport deviates from ADR-0008 and needs a reviewer's explicit nod.",
+    "debate_summary": "The critique was right on the blocking finding and both majors, and they reshaped the plan. Blocking (named export from page.tsx): verified — all 11 page files export only metadata plus default, so the seam moves to components/members-screen.tsx instead. Major (island error state survives the redirect): verified — the redirect throws so useActionState never leaves 'error', and the pre- and post-save URLs are the identical string, so no key or remount can reset it; the plan now answers profile success inline (the form never unmounts, so ADR-0008's rationale does not apply) with the refusal-then-fix-then-save walk added to AC-3 and qa_script, at the cost of updating the actions.test.ts redirect pin and recording the deviation. Major (archived leave is a dead end): verified — archiving has no zero-balance precondition while leave keeps its guard and settling refuses archived, so the plan keeps the gated link for live groups, writes honest archived copy that promises no way out, and records the stuck member plus the group-page banner's overpromise as an explicit residual product decision. Major (reproduced overstated): factually right — the evidence was branch execution, not a driven app — but a full browser drive is unsatisfiable in the planning step, so reproduced stays true with the standard stated plainly in assumptions and the driven confirmation assigned to acceptance. Of the minors: AC-2 now excludes the retained invite notice too (suppressed on archived screens) and the residual names ui.md:217/220/223; the group-page expense/rename and invite notice/refusal sibling pairs are scoped out in writing rather than silently ignored; the inviteNoticeText citation is corrected to actions.test.ts:129; the removedNotice gate is bound to a cancel-clearable flag instead of permanent state. The repeated-params type lie is absorbed by giving the new validator an unknown-accepting signature that returns null for arrays.",
+    "evidence": [
+      "HEAD afcdc32 is the post-#44 merge; no later round fixed these. F1: nonZeroBalanceMessage('Bo') ends with the balance-block suffix so isBalanceBlockedRefusal is true; RemoveMemberForm checks it (groups-panels.tsx:468) and renders the Settle up link (:488-495) while the leave section renders only <StateMessage state={leaveState}/> (:707) with no balance-block check anywhere near leaveState.",
+      "F2/F4: soloOwner is isOwner && members.length === 1 with no archived condition (members/page.tsx:109); the EmptyState at :187-193 renders the invite-sharing body unconditionally on it while SoloOwnerAction returns null for archived at :234 — archived solo-owner yields sharing copy with no action, directly above the archived seats note. Same render, same fix; the issue states it twice.",
+      "F3: the page-notice branch (profile/page.tsx:39-43) renders 'Profile saved.' for any truthy saved value including {saved:'yes'} and the refusal sentence for any truthy error including {error:'lol'} — open-vocabulary read against ADR-0008; updateProfile refusals return inline with no navigation (lib/auth/actions.ts:183-196) while the notice derives from searchParams at server render, so after ?saved=1 an inline refusal leaves both visible.",
+      "AC-4 sibling: removedNotice renders whenever non-null (groups-panels.tsx:682-690 fed by members/page.tsx:179-181) with no gate on leaveState — a ?removed= notice coexists with a later inline leave refusal in the same panel.",
+      "Second-leg citations: lib/groups/actions.ts:334 removeMember refuses archived before its balance check; :393-395 leaveGroup deliberately skips the archived guard so its balance guard at :400-409 fires for archived groups too; lib/settle/actions.ts:101,190 createPayment and deletePayment refuse archived; lib/groups/queries.ts:87-97 findGroupByInviteToken filters archived=false; lib/groups/actions.ts:474,510 rotateInvite/disableInvite return ARCHIVED_STATE; members/page.tsx:134-144 InvitePanel renders for every owner with no archived condition; lib/groups/validation.ts:95-97 isBalanceBlockedRefusal and :161-165 inviteNoticeText pattern; lib/auth/validation.ts:126 PROFILE_REFUSAL_MESSAGE; all 11 app/**/page.tsx files export only metadata plus default; lib/auth/actions.test.ts:331-334 pins the profile success redirect."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "In MembersPanel: compute leaveBlocked = isBalanceBlockedRefusal(leaveState.message) beside leaveState; when true and !archived render the same Settle up Link to /groups/${groupId}#debts-heading that RemoveMemberForm renders; when true and archived render the refusal plus the note 'This group is archived, so this balance cannot be settled here.' instead of any link. Track a local leaveFailed flag set when leaveState turns to error and cleared when the confirm step is cancelled; render removedNotice only while !leaveFailed. Give InvitePanel an archived prop: when true render the heading plus the single sentence 'This group is archived, so nobody new can join.' with no notice slot, link input, Copy, captions, Rotate or Disable controls; unarchived render unchanged. Extend the :465-467 balance-block comment to record why leave shares it and the archived exception.",
+        "path": "components/groups-panels.tsx",
+        "why": "The leave action returns the identical NonZeroBalanceError sentence as remove, but only the remove form recognises it and links onward — while the link must not be offered where settling is refused, and a cancelled refusal must not permanently hide a true removal note."
+      },
+      {
+        "action": "create",
+        "change": "New home for MembersScreen and SoloOwnerAction, moved unchanged from app/groups/[id]/members/page.tsx except: the solo-owner EmptyState renders only when soloOwner && !group.archived, and InvitePanel receives archived plus a null inviteNotice when archived. SoloOwnerAction keeps its archived early return as the backstop.",
+        "path": "components/members-screen.tsx",
+        "why": "The screen needs a test seam, and a named export from a page file fails the Next build; a component module is importable by both the page and the test."
+      },
+      {
+        "action": "edit",
+        "change": "Become a thin server wrapper that loads group, members and balances exactly as today and renders MembersScreen from components/members-screen; keep the removed/invite query reads and SoloOwnerAction's archived early return logic in the moved module; update the :184-186 EmptyState comment for the archived condition.",
+        "path": "app/groups/[id]/members/page.tsx",
+        "why": "Page files may export only metadata and default; the screen logic lives where tests can import it."
+      },
+      {
+        "action": "edit",
+        "change": "Read searchParams through the new profileNoticeText validator instead of truthiness; pass the resulting notice and the user email into ProfileForm; delete the page-level notice slot and Card wrapper; update the :14-29 comment that says the page keeps the ?saved=1 confirmation.",
+        "path": "app/profile/page.tsx",
+        "why": "The notice must be rendered where the action state is known, otherwise a stale param outlives the refusal — and any non-empty param value must not render a notice."
+      },
+      {
+        "action": "edit",
+        "change": "Accept notice and email props; render the notice slot (same role/classes/markup, above the Card) followed by the Card containing the email line and the form; render the success sentence when state.status === 'success', the passed notice when idle, and null whenever state.status === 'error' so a saved notice never sits beside fresh field errors. Idle renders, including the legacy ?error=invalid sentence, unchanged.",
+        "path": "components/profile-form.tsx",
+        "why": "The island owns both the refusal and now the success state, so it is the only place that can guarantee the saved notice never sits beside fresh field errors without moving the notice's position."
+      },
+      {
+        "action": "edit",
+        "change": "Add PROFILE_SAVED_MESSAGE ('Profile saved.') beside PROFILE_REFUSAL_MESSAGE and a closed-vocabulary profileNoticeText(raw: unknown) beside inviteNoticeText (saved==='1' -> saved message, error==='invalid' -> PROFILE_REFUSAL_MESSAGE, error first, arrays and everything else null) for the profile page to read its params through.",
+        "path": "lib/auth/validation.ts",
+        "why": "ADR-0008 requires notice params read through a validator (absent, blank or unknown -> null); the profile page currently renders a notice for any non-empty value, and the saved sentence needs one definition shared by action and page."
+      },
+      {
+        "action": "edit",
+        "change": "On success, revalidatePath('/profile') and return { status: 'success', message: PROFILE_SAVED_MESSAGE } instead of redirecting to /profile?saved=1; refusals unchanged. Update the action comment: the profile form does not unmount on success, so inline success paints and no stale param is left behind — the recorded ADR-0008 deviation, defensible because that ADR's rationale (success unmounts the form it answered) does not hold for this island.",
+        "path": "lib/auth/actions.ts",
+        "why": "A redirect throws, so the island's error state survives a refusal-then-fix-then-save and would suppress the earned confirmation; answering inline makes every submit carry its own outcome."
+      }
+    ],
+    "issue": 47,
+    "kind": "bug",
+    "out_of_scope": [
+      "Group page expenseNotice beside an inline RenameGroupForm refusal (app/groups/[id]/page.tsx:139, :288-296 vs groups-panels.tsx RenameGroupForm): the same stale-param shape as AC-4 in a file this ticket does not otherwise touch — follow-up ticket.",
+      "InvitePanel ?invite= notice beside an inline rotate/disable refusal (components/groups-panels.tsx:341-349 vs :391): two directly contradictory sentences can coexist in the component already being edited, but the rotate/disable success transport that causes it belongs to a follow-up, not this refusal-link ticket."
+    ],
+    "qa_script": [
+      "Carry a balance in a live group, press Leave group and confirm: refusal names the blocker and offers Settle up; follow it to the debts section.",
+      "Archive the group and repeat the blocked leave: refusal plus read-only note and no Settle up link; settle to zero and leave from the archived group still succeeds.",
+      "Archive a solo-owner group and open its members screen at 375px and 1280px: no invite-sharing copy, no invite actions or notices, only the read-only sentence and the archived seats note.",
+      "Unarchived solo-owner group still shows the EmptyState with its working copy action; owner remove-with-balance path unchanged.",
+      "Save the profile: 'Profile saved.' appears inline with no URL param; submit an empty display name: inline field error shows, saved sentence gone; fix the name and save again: saved sentence returns with the new name and no stale errors.",
+      "Load /profile?error=invalid directly: refusal sentence renders in the same slot; load /profile?saved=yes: nothing renders.",
+      "Remove a member (lands on ?removed=Name), press Leave group and confirm while carrying a balance: refusal shows without the stale removal sentence; cancel the confirm: the removal note is visible again."
+    ],
+    "residual_risks": [
+      "An archived group whose member carries a non-zero balance is stuck by product design: leave keeps its balance guard, settling and seat-adding refuse archived, so the read-only note offers no way out — and the group-page banner 'you can still leave it' (app/groups/[id]/page.tsx:280-282) is false for exactly this member. Deliberately not fixed here: any remedy (settle writes in archived groups, forced leave) is a product decision that changes server sentences; filed for the maintainer, banner caveat included.",
+      "A balance blocked by a placeholder seat with no account has no remedy the Settle up link can offer; the link and the archived note do not cover that case.",
+      "The leave-link and removed-notice conditions are island-internal action state with no static seam, so AC-1 and AC-4 rest on the browser walk alone.",
+      "docs/ui.md:217 (invite-link panel region list), :220 (members empty state) and :223 (member-action failure pointing at settle-up) describe the pre-fix screens with no archived exception, and docs plus .sdlc/memory are paths no ticket may change — so the archived exceptions cannot be doc'd where they belong; the next review may re-file them as missing-state findings.",
+      "The inline profile success deviates from ADR-0008's redirect rule (rationale recorded in lib/auth/actions.ts): a reviewer enforcing the letter of the ADR will flag it; the counter is that this form never unmounts on success, which is the case the ADR's rationale does not cover.",
+      "A second tab (or back-then-forward) can still interleave a refusal in one tab with a save in another; the recorded walks cover one tab only."
+    ],
+    "risks": [
+      "Findings 2 and 4 of the issue are duplicates of one defect; the plan fixes it once and AC-2 names both.",
+      "No lib/groups server sentence changes, so lib/groups/actions.test.ts:850 (/settle up/i) stays green; the archived leave explanation is client-side copy only.",
+      "lib/auth/actions.test.ts:331-334 pins the profile success redirect and is updated to the inline success; the legacy ?saved=1/?error=invalid direct-hit reads keep the old URLs working.",
+      "Moving the Card into the profile island and MembersScreen into components/ changes server/client boundaries; idle markup is preserved but screenshot diffs of /profile?saved=1 and the members screen should be eyeballed at 375px and 1280px.",
+      "Hiding the archived invite actions removes the 22rem side card's interactive content; the read-only sentence keeps the column so the two-column balance at 1280px should be screenshotted."
+    ],
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "archived InvitePanel renders the read-only sentence with no invite input, Copy, Rotate or Disable controls and no notice slot",
+          "unarchived InvitePanel still renders the link, the join caption and the Rotate/Disable actions",
+          "archived solo-owner MembersScreen renders no 'Share the invite link' copy and keeps the archived seats note",
+          "unarchived solo-owner MembersScreen still renders the Nobody-else-here EmptyState with its action"
+        ],
+        "path": "app/groups/[id]/members/archived-readonly.test.ts"
+      },
+      {
+        "action": "create",
+        "cases": [
+          "idle ProfileForm with a saved notice renders the role=status slot before the Card, matching the current page markup",
+          "idle ProfileForm with the legacy error notice renders the refusal sentence in the same slot",
+          "idle ProfileForm with no notice renders no status slot (success and refusal-state suppression are browser-only)"
+        ],
+        "path": "app/profile/notice.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "profile notice validator accepts saved=1 and renders 'Profile saved.'",
+          "profile notice validator accepts error=invalid and renders the refusal sentence, error winning when both params present",
+          "profile notice validator returns null for forged, blank, unknown and repeated values (saved=yes, error=lol, absent, arrays)"
+        ],
+        "path": "lib/auth/validation.test.ts"
+      },
+      {
+        "action": "edit",
+        "cases": [
+          "updateProfile success writes the row and returns an inline success state instead of redirecting",
+          "updateProfile refusal still returns field errors inline with no navigation"
+        ],
+        "path": "lib/auth/actions.test.ts"
+      }
+    ],
+    "understanding": "Issue #47 collects four non-blocking review findings from PR #44 for #37, all confirmed on the current post-#44 checkout (afcdc32) by executing the exact faulty branches: (1) a leave blocked by a non-zero balance renders only <StateMessage> with no settle-up link while remove has one; (2)/(4) the archived solo-owner EmptyState still promises an invite link whose action returns null for archived groups — the same defect stated twice (same file, same render, same fix); (3) the ?saved=1 notice is server-rendered from a truthy searchParams read while profile refusals return inline with no navigation, so the stale success sits beside fresh field errors — and forged values also render notices against ADR-0008. The critique added verified gaps this plan absorbs: the settle link would be a dead end on archived groups, the InvitePanel's live controls are equally dead there, the test seam as specified breaks the Next build, the moved-notice gate breaks the refusal-then-fix-then-save path, and the ?removed= suppression needs a cancel restore. None was fixed by a later round.",
+    "unknowns": [],
+    "version": 2
+  },
+  "approved_too_high": false
 }

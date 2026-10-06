@@ -18,7 +18,119 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "acceptance": [
+      {
+        "check": "On /groups/:id/expenses/new with Bo's Include switch off and amount 'not-a-number', pressing Add expense shows the amount refusal and Bo's switch still reads excluded, while description, amount text, date, category and the payer switch are exactly as set.",
+        "how_to_verify": "Follow qa_script steps 1-4 in a desktop Chromium window; read each switch by its accessible name and each field by its value.",
+        "id": "AC-1",
+        "source": "TR-8",
+        "verify": "browser"
+      },
+      {
+        "check": "After the refusal, correcting only the amount to a valid number and pressing Add expense records the expense with Bo excluded from the split (Bo owes nothing) rather than the reset all-included split.",
+        "how_to_verify": "Continue from AC-1: fix the amount, submit, open the new expense and confirm Bo's share is zero and the other members split the total.",
+        "id": "AC-2",
+        "source": "TR-8",
+        "verify": "browser"
+      },
+      {
+        "check": "The category select keeps its chosen value across the same refused save (it reverted to the default alongside the switches before the fix); the date field keeps its value as it already did.",
+        "how_to_verify": "In the AC-1 run, set category to Travel and date to a non-today date before submitting; both read back unchanged beside the amount error.",
+        "id": "AC-3",
+        "source": "TR-8",
+        "verify": "browser"
+      },
+      {
+        "check": "The same refused save on the edit page (/groups/:id/expenses/:expenseId/edit) keeps an excluded member excluded instead of flipping the switch back to included.",
+        "how_to_verify": "Open an existing expense for edit, exclude a member, enter an invalid amount, submit; the member still reads excluded beside the amount error.",
+        "id": "AC-4",
+        "source": "TR-8",
+        "verify": "browser"
+      },
+      {
+        "check": "A valid new expense still saves on the first submit with the success notice, and a second identical submit attempt while saving is still ignored (the extra post-refusal render changes nothing on the success path).",
+        "how_to_verify": "Submit a valid expense with one member excluded; land on the expense notice and confirm the split lines match what was set.",
+        "id": "AC-5",
+        "source": "TR-8",
+        "verify": "browser"
+      },
+      {
+        "check": "A refused save with an excluded member and an unparseable amount returns an amount field error and creates no expense, payer, or split rows.",
+        "how_to_verify": "The new tests[] case in lib/expenses/actions.test.ts, run by CI.",
+        "id": "AC-6",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Set defaultChecked={checked} on the Include switch so the post-action form reset restores the current value.",
+        "rejected_because": "Verified dead in the live app during planning: React ignores defaultChecked updates after mount, so the reset still restores the mount-time default and Bo flips back to included."
+      },
+      {
+        "approach": "Echo the submitted values from the server action and remount the form with key={...} as the profile form does (PR #44 BUG-1).",
+        "rejected_because": "Heavier and unnecessary here: the profile form needed it because its saved values changed, but the expense editor's React state already holds exactly what the person set, so a remount would pay the focus-loss and double-source-of-truth costs for nothing. Same root cause, smaller fix."
+      },
+      {
+        "approach": "Sync each control's default (defaultValue/defaultChecked/defaultSelected) from state via refs after every change.",
+        "rejected_because": "Touches every control individually and silently reintroduces the bug for the next control added; the single repaint tick covers the checkbox, the select, and any future controlled control in one place."
+      }
+    ],
+    "approach": "Add one post-refusal repaint tick in the shared ExpenseEditor component (components/expense-editor.tsx), which serves both the new-expense and edit-expense pages. A useReducer counter plus a useEffect on the useActionState result — when the action state reports status 'error', bump the counter once to force a second commit. That commit repaints every controlled control (the Include switches, the category select, the payer switches) from the React state that still holds exactly what the person set, undoing the DOM-only reset the action left behind. No key remount (focus stays where it was, per the ux skill), no markup or styling change (nothing for the frontend-design skill to judge), no server or boundary change: parse, refusal shape and FormData contract stay exactly as they are. The tick fires only on error results, so the success path renders exactly as before. This is the fix direction verified end-to-end in headless Chrome during planning (repro script flipped from reproduced=true to reproduced=false, including the live retry FormData omitting split.1.included).",
+    "assumptions": [],
+    "confidence": 90,
+    "confidence_rationale": "The failure was reproduced twice in headless Chrome against the real app, the root cause was isolated with DOM probes (defaultValue tracks edits while defaultChecked stays at its initial value; plain form.reset() reproduces the signature), the rejected alternative (defaultChecked) was verified dead, and the chosen fix was verified end-to-end in the same browser harness including the retry payload. Remaining uncertainty is implementation detail only.",
+    "evidence": [
+      "Pre-submit Bo checked=false; post-refusal amount error 'Enter the amount as a number, like 12.50.' with Bo checked=true while description, amount text and payer inclusion persisted.",
+      "Live FormData after refusal contained split.1.included=1, proving a retry submits a different split than the user set.",
+      "Plain form.reset() on a fresh form reproduced the signature (Bo back to included, typed text intact); defaultValue tracked edited text while defaultChecked stayed at its initial value.",
+      "Trial defaultChecked={checked} on the switch did not fix it (reverted).",
+      "Trial repaint tick after refusal: boChecked=false, category select kept 'travel', retry FormData omitted split.1.included; RESULT reproduced=false.",
+      "Scope check: the category select also reverted across refusal (travel to other) while the date persisted — same defect class, covered by the same fix."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Inside the ExpenseEditor component, next to the existing useActionState result (named `state`): add `const [, repaintAfterRefusal] = useReducer((n: number) => n + 1, 0);` (extend the react import with useReducer; useEffect is already imported), then add this effect directly below it:\n\n// A refused save resets the form element to its defaults, which flips controlled checkboxes and selects whose defaults are stale, while React state still holds what the person set. One extra commit repaints them from that intact state. Deliberately not a key remount (that would drop focus) and not defaultChecked (React ignores it after mount).\nuseEffect(() => {\n  if (state.status === 'error') repaintAfterRefusal();\n}, [state]);\n\nNo other markup, prop, or styling change: the switches, select, and inputs keep their existing controlled bindings. This cannot loop: the dispatch does not change the action-state object the effect depends on, so it runs once per action result.",
+        "path": "components/expense-editor.tsx",
+        "why": "Single shared locus: both the new-expense page (app/groups/[id]/expenses/new/page.tsx) and the edit page render ExpenseEditor, so one tick fixes the reported path, the edit path, the payer switches, and the category select found in the scope check."
+      }
+    ],
+    "issue": 52,
+    "kind": "bug",
+    "mode": "committed",
+    "out_of_scope": [
+      "Other useActionState forms (signup, profile, group create, members) are not touched: the profile form already has its own echo-plus-key treatment from PR #44 and the rest were not verified to diverge; each would be its own ticket if QA finds it.",
+      "No change to the server actions, validation, or FormData contract: the boundary already reads an absent included field as false, which is exactly what the fixed client now sends.",
+      "No visual, copy, or layout change: the switches, errors, and notices already match docs/ui.md; this is a state-restoration fix only."
+    ],
+    "qa_script": [
+      "Sign up as A, create a group, add placeholder seat Bo via the members page.",
+      "Open /groups/:id/expenses/new, fill a description, set category to Travel and a non-today date, turn Bo's Include switch off (Bo reads excluded).",
+      "Fill the amount with not-a-number and press Add expense.",
+      "Expect: the amount refusal names the problem; Bo still reads excluded; description, amount text, date, category and payer inclusion are exactly as set.",
+      "Correct only the amount to a valid number and submit; expect the recorded expense splits the total among everyone but Bo.",
+      "Repeat the refusal on the edit page of that expense and expect the same preservation."
+    ],
+    "reproduced": true,
+    "risks": [
+      "The extra commit re-renders the whole editor on every refused save; the tree is small and local, so this is negligible, but it must not grow side effects that assume one render per action.",
+      "If a future React changes what a Server Action commit resets, the tick becomes a harmless no-op render — worst case it stops helping, it cannot corrupt state, because it only repaints from state that is already the source of truth.",
+      "The effect depends on the action-state object identity: each submit produces a new result object, so consecutive refusals each repaint. If useActionState ever returned an identical object for a repeat refusal, that repeat would not repaint; the browser criteria AC-1 through AC-4 would catch it."
+    ],
+    "root_cause": "After a refused Server Action, the form element is reset to its defaults while the component's React state still holds exactly what the person set. Text inputs repaint from state on the next commit, but the Include switches (controlled checkbox with no defaultChecked, so the default stays at the mount-time all-included value) and the category select (default state likewise stale) keep showing the reset DOM values, and no later commit repaints them — so excluded members read included again and a retry submits split.N.included=1 for them. Verified: plain form.reset() reproduces the signature, defaultValue tracks edits while defaultChecked does not, and one forced re-render after refusal restores every diverged control.",
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "createExpense with Bo excluded and amount 'not-a-number' returns status 'error' with an amount field error and creates no expense, payer, or split rows (place beside the 'keeps a member who was left out at zero' case, reusing the expenseForm helper with splits [{membershipId: ada, included: true}, {membershipId: bo}] and payers [{membershipId: ada, amount: '10.00'}]; assert state.status, state.fieldErrors.amount, and expenseRowsOf(groupId) empty). The client half — the switch still reading excluded — cannot be reached by a unit test and is covered by browser criteria AC-1 through AC-4 instead."
+        ],
+        "path": "lib/expenses/actions.test.ts"
+      }
+    ],
+    "understanding": "Issue #52 is a single QA follow-up from PR #51 (for #50): a refused expense save (e.g. amount 'not-a-number') silently flips every excluded member's Include switch back to included, while description, amount text and payer inclusion persist — so retrying submits a different split than the user set. Verified live in headless Chrome (always reproducible as filed, severity minor stands). A scope check during verification found the same defect class in the category select (Travel reverted to the default across refusal; the date persisted), so the fix covers the shared root cause in the one component rather than the one switch. No split criteria to answer (no ## Acceptance (from the split) section); TR-8 and docs/ui.md ('Failed save keeps all input') govern. plan/brief.md records no human decisions and no prior rejection.",
+    "version": 1
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -76,234 +188,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "debug",
-  "validated_work_order": {
-    "acceptance": [
-      {
-        "check": "On /groups/:id/expenses/new with Bo's Include switch off and amount 'not-a-number', pressing Add expense shows the amount refusal and Bo's switch still reads excluded, while description, amount text, date, category and the payer switch are exactly as set.",
-        "how_to_verify": "Follow qa_script steps 1-4 in a desktop Chromium window; read each switch by its accessible name and each field by its value.",
-        "id": "AC-1",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "After the refusal, correcting only the amount to a valid number and pressing Add expense records the expense with Bo excluded from the split (Bo owes nothing) rather than the reset all-included split.",
-        "how_to_verify": "Continue from AC-1: fix the amount, submit, open the new expense and confirm Bo's share is zero and the other members split the total.",
-        "id": "AC-2",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "The category select keeps its chosen value across the same refused save (it reverted to the default alongside the switches before the fix); the date field keeps its value as it already did.",
-        "how_to_verify": "In the AC-1 run, set category to Travel and date to a non-today date before submitting; both read back unchanged beside the amount error.",
-        "id": "AC-3",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "The same refused save on the edit page (/groups/:id/expenses/:expenseId/edit) keeps an excluded member excluded instead of flipping the switch back to included.",
-        "how_to_verify": "Open an existing expense for edit, exclude a member, enter an invalid amount, submit; the member still reads excluded beside the amount error.",
-        "id": "AC-4",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "A valid new expense still saves on the first submit with the success notice, and a second identical submit attempt while saving is still ignored (the extra post-refusal render changes nothing on the success path).",
-        "how_to_verify": "Submit a valid expense with one member excluded; land on the expense notice and confirm the split lines match what was set.",
-        "id": "AC-5",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "A refused save with an excluded member and an unparseable amount returns an amount field error and creates no expense, payer, or split rows.",
-        "how_to_verify": "The new tests[] case in lib/expenses/actions.test.ts, run by CI.",
-        "id": "AC-6",
-        "verify": "test"
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Set defaultChecked={checked} on the Include switch so the post-action form reset restores the current value.",
-        "rejected_because": "Verified dead in the live app during planning: React ignores defaultChecked updates after mount, so the reset still restores the mount-time default and Bo flips back to included."
-      },
-      {
-        "approach": "Echo the submitted values from the server action and remount the form with key={...} as the profile form does (PR #44 BUG-1).",
-        "rejected_because": "Heavier and unnecessary here: the profile form needed it because its saved values changed, but the expense editor's React state already holds exactly what the person set, so a remount would pay the focus-loss and double-source-of-truth costs for nothing. Same root cause, smaller fix."
-      },
-      {
-        "approach": "Sync each control's default (defaultValue/defaultChecked/defaultSelected) from state via refs after every change.",
-        "rejected_because": "Touches every control individually and silently reintroduces the bug for the next control added; the single repaint tick covers the checkbox, the select, and any future controlled control in one place."
-      }
-    ],
-    "approach": "Add one post-refusal repaint tick in the shared ExpenseEditor component (components/expense-editor.tsx), which serves both the new-expense and edit-expense pages. A useReducer counter plus a useEffect on the useActionState result — when the action state reports status 'error', bump the counter once to force a second commit. That commit repaints every controlled control (the Include switches, the category select, the payer switches) from the React state that still holds exactly what the person set, undoing the DOM-only reset the action left behind. No key remount (focus stays where it was, per the ux skill), no markup or styling change (nothing for the frontend-design skill to judge), no server or boundary change: parse, refusal shape and FormData contract stay exactly as they are. The tick fires only on error results, so the success path renders exactly as before. This is the fix direction verified end-to-end in headless Chrome during planning (repro script flipped from reproduced=true to reproduced=false, including the live retry FormData omitting split.1.included).",
-    "assumptions": [],
-    "confidence": 90,
-    "confidence_rationale": "The failure was reproduced twice in headless Chrome against the real app, the root cause was isolated with DOM probes (defaultValue tracks edits while defaultChecked stays at its initial value; plain form.reset() reproduces the signature), the rejected alternative (defaultChecked) was verified dead, and the chosen fix was verified end-to-end in the same browser harness including the retry payload. Remaining uncertainty is implementation detail only.",
-    "evidence": [
-      "Pre-submit Bo checked=false; post-refusal amount error 'Enter the amount as a number, like 12.50.' with Bo checked=true while description, amount text and payer inclusion persisted.",
-      "Live FormData after refusal contained split.1.included=1, proving a retry submits a different split than the user set.",
-      "Plain form.reset() on a fresh form reproduced the signature (Bo back to included, typed text intact); defaultValue tracked edited text while defaultChecked stayed at its initial value.",
-      "Trial defaultChecked={checked} on the switch did not fix it (reverted).",
-      "Trial repaint tick after refusal: boChecked=false, category select kept 'travel', retry FormData omitted split.1.included; RESULT reproduced=false.",
-      "Scope check: the category select also reverted across refusal (travel to other) while the date persisted — same defect class, covered by the same fix."
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "Inside the ExpenseEditor component, next to the existing useActionState result (named `state`): add `const [, repaintAfterRefusal] = useReducer((n: number) => n + 1, 0);` (extend the react import with useReducer; useEffect is already imported), then add this effect directly below it:\n\n// A refused save resets the form element to its defaults, which flips controlled checkboxes and selects whose defaults are stale, while React state still holds what the person set. One extra commit repaints them from that intact state. Deliberately not a key remount (that would drop focus) and not defaultChecked (React ignores it after mount).\nuseEffect(() => {\n  if (state.status === 'error') repaintAfterRefusal();\n}, [state]);\n\nNo other markup, prop, or styling change: the switches, select, and inputs keep their existing controlled bindings. This cannot loop: the dispatch does not change the action-state object the effect depends on, so it runs once per action result.",
-        "path": "components/expense-editor.tsx",
-        "why": "Single shared locus: both the new-expense page (app/groups/[id]/expenses/new/page.tsx) and the edit page render ExpenseEditor, so one tick fixes the reported path, the edit path, the payer switches, and the category select found in the scope check."
-      }
-    ],
-    "issue": 52,
-    "kind": "bug",
-    "mode": "committed",
-    "out_of_scope": [
-      "Other useActionState forms (signup, profile, group create, members) are not touched: the profile form already has its own echo-plus-key treatment from PR #44 and the rest were not verified to diverge; each would be its own ticket if QA finds it.",
-      "No change to the server actions, validation, or FormData contract: the boundary already reads an absent included field as false, which is exactly what the fixed client now sends.",
-      "No visual, copy, or layout change: the switches, errors, and notices already match docs/ui.md; this is a state-restoration fix only."
-    ],
-    "qa_script": [
-      "Sign up as A, create a group, add placeholder seat Bo via the members page.",
-      "Open /groups/:id/expenses/new, fill a description, set category to Travel and a non-today date, turn Bo's Include switch off (Bo reads excluded).",
-      "Fill the amount with not-a-number and press Add expense.",
-      "Expect: the amount refusal names the problem; Bo still reads excluded; description, amount text, date, category and payer inclusion are exactly as set.",
-      "Correct only the amount to a valid number and submit; expect the recorded expense splits the total among everyone but Bo.",
-      "Repeat the refusal on the edit page of that expense and expect the same preservation."
-    ],
-    "reproduced": true,
-    "risks": [
-      "The extra commit re-renders the whole editor on every refused save; the tree is small and local, so this is negligible, but it must not grow side effects that assume one render per action.",
-      "If a future React changes what a Server Action commit resets, the tick becomes a harmless no-op render — worst case it stops helping, it cannot corrupt state, because it only repaints from state that is already the source of truth.",
-      "The effect depends on the action-state object identity: each submit produces a new result object, so consecutive refusals each repaint. If useActionState ever returned an identical object for a repeat refusal, that repeat would not repaint; the browser criteria AC-1 through AC-4 would catch it."
-    ],
-    "root_cause": "After a refused Server Action, the form element is reset to its defaults while the component's React state still holds exactly what the person set. Text inputs repaint from state on the next commit, but the Include switches (controlled checkbox with no defaultChecked, so the default stays at the mount-time all-included value) and the category select (default state likewise stale) keep showing the reset DOM values, and no later commit repaints them — so excluded members read included again and a retry submits split.N.included=1 for them. Verified: plain form.reset() reproduces the signature, defaultValue tracks edits while defaultChecked does not, and one forced re-render after refusal restores every diverged control.",
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "createExpense with Bo excluded and amount 'not-a-number' returns status 'error' with an amount field error and creates no expense, payer, or split rows (place beside the 'keeps a member who was left out at zero' case, reusing the expenseForm helper with splits [{membershipId: ada, included: true}, {membershipId: bo}] and payers [{membershipId: ada, amount: '10.00'}]; assert state.status, state.fieldErrors.amount, and expenseRowsOf(groupId) empty). The client half — the switch still reading excluded — cannot be reached by a unit test and is covered by browser criteria AC-1 through AC-4 instead."
-        ],
-        "path": "lib/expenses/actions.test.ts"
-      }
-    ],
-    "understanding": "Issue #52 is a single QA follow-up from PR #51 (for #50): a refused expense save (e.g. amount 'not-a-number') silently flips every excluded member's Include switch back to included, while description, amount text and payer inclusion persist — so retrying submits a different split than the user set. Verified live in headless Chrome (always reproducible as filed, severity minor stands). A scope check during verification found the same defect class in the category select (Travel reverted to the default across refusal; the date persisted), so the fix covers the shared root cause in the one component rather than the one switch. No split criteria to answer (no ## Acceptance (from the split) section); TR-8 and docs/ui.md ('Failed save keeps all input') govern. plan/brief.md records no human decisions and no prior rejection.",
-    "version": 1
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-06T06:31:40.278Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "acceptance": [
-      {
-        "check": "On /groups/:id/expenses/new with Bo's Include switch off and amount 'not-a-number', pressing Add expense shows the amount refusal and Bo's switch still reads excluded, while description, amount text, date, category and the payer switch are exactly as set.",
-        "how_to_verify": "Follow qa_script steps 1-4 in a desktop Chromium window; read each switch by its accessible name and each field by its value.",
-        "id": "AC-1",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "After the refusal, correcting only the amount to a valid number and pressing Add expense records the expense with Bo excluded from the split (Bo owes nothing) rather than the reset all-included split.",
-        "how_to_verify": "Continue from AC-1: fix the amount, submit, open the new expense and confirm Bo's share is zero and the other members split the total.",
-        "id": "AC-2",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "The category select keeps its chosen value across the same refused save (it reverted to the default alongside the switches before the fix); the date field keeps its value as it already did.",
-        "how_to_verify": "In the AC-1 run, set category to Travel and date to a non-today date before submitting; both read back unchanged beside the amount error.",
-        "id": "AC-3",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "The same refused save on the edit page (/groups/:id/expenses/:expenseId/edit) keeps an excluded member excluded instead of flipping the switch back to included.",
-        "how_to_verify": "Open an existing expense for edit, exclude a member, enter an invalid amount, submit; the member still reads excluded beside the amount error.",
-        "id": "AC-4",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "A valid new expense still saves on the first submit with the success notice, and a second identical submit attempt while saving is still ignored (the extra post-refusal render changes nothing on the success path).",
-        "how_to_verify": "Submit a valid expense with one member excluded; land on the expense notice and confirm the split lines match what was set.",
-        "id": "AC-5",
-        "source": "TR-8",
-        "verify": "browser"
-      },
-      {
-        "check": "A refused save with an excluded member and an unparseable amount returns an amount field error and creates no expense, payer, or split rows.",
-        "how_to_verify": "The new tests[] case in lib/expenses/actions.test.ts, run by CI.",
-        "id": "AC-6",
-        "verify": "test"
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Set defaultChecked={checked} on the Include switch so the post-action form reset restores the current value.",
-        "rejected_because": "Verified dead in the live app during planning: React ignores defaultChecked updates after mount, so the reset still restores the mount-time default and Bo flips back to included."
-      },
-      {
-        "approach": "Echo the submitted values from the server action and remount the form with key={...} as the profile form does (PR #44 BUG-1).",
-        "rejected_because": "Heavier and unnecessary here: the profile form needed it because its saved values changed, but the expense editor's React state already holds exactly what the person set, so a remount would pay the focus-loss and double-source-of-truth costs for nothing. Same root cause, smaller fix."
-      },
-      {
-        "approach": "Sync each control's default (defaultValue/defaultChecked/defaultSelected) from state via refs after every change.",
-        "rejected_because": "Touches every control individually and silently reintroduces the bug for the next control added; the single repaint tick covers the checkbox, the select, and any future controlled control in one place."
-      }
-    ],
-    "approach": "Add one post-refusal repaint tick in the shared ExpenseEditor component (components/expense-editor.tsx), which serves both the new-expense and edit-expense pages. A useReducer counter plus a useEffect on the useActionState result — when the action state reports status 'error', bump the counter once to force a second commit. That commit repaints every controlled control (the Include switches, the category select, the payer switches) from the React state that still holds exactly what the person set, undoing the DOM-only reset the action left behind. No key remount (focus stays where it was, per the ux skill), no markup or styling change (nothing for the frontend-design skill to judge), no server or boundary change: parse, refusal shape and FormData contract stay exactly as they are. The tick fires only on error results, so the success path renders exactly as before. This is the fix direction verified end-to-end in headless Chrome during planning (repro script flipped from reproduced=true to reproduced=false, including the live retry FormData omitting split.1.included).",
-    "assumptions": [],
-    "confidence": 90,
-    "confidence_rationale": "The failure was reproduced twice in headless Chrome against the real app, the root cause was isolated with DOM probes (defaultValue tracks edits while defaultChecked stays at its initial value; plain form.reset() reproduces the signature), the rejected alternative (defaultChecked) was verified dead, and the chosen fix was verified end-to-end in the same browser harness including the retry payload. Remaining uncertainty is implementation detail only.",
-    "evidence": [
-      "Pre-submit Bo checked=false; post-refusal amount error 'Enter the amount as a number, like 12.50.' with Bo checked=true while description, amount text and payer inclusion persisted.",
-      "Live FormData after refusal contained split.1.included=1, proving a retry submits a different split than the user set.",
-      "Plain form.reset() on a fresh form reproduced the signature (Bo back to included, typed text intact); defaultValue tracked edited text while defaultChecked stayed at its initial value.",
-      "Trial defaultChecked={checked} on the switch did not fix it (reverted).",
-      "Trial repaint tick after refusal: boChecked=false, category select kept 'travel', retry FormData omitted split.1.included; RESULT reproduced=false.",
-      "Scope check: the category select also reverted across refusal (travel to other) while the date persisted — same defect class, covered by the same fix."
-    ],
-    "files": [
-      {
-        "action": "edit",
-        "change": "Inside the ExpenseEditor component, next to the existing useActionState result (named `state`): add `const [, repaintAfterRefusal] = useReducer((n: number) => n + 1, 0);` (extend the react import with useReducer; useEffect is already imported), then add this effect directly below it:\n\n// A refused save resets the form element to its defaults, which flips controlled checkboxes and selects whose defaults are stale, while React state still holds what the person set. One extra commit repaints them from that intact state. Deliberately not a key remount (that would drop focus) and not defaultChecked (React ignores it after mount).\nuseEffect(() => {\n  if (state.status === 'error') repaintAfterRefusal();\n}, [state]);\n\nNo other markup, prop, or styling change: the switches, select, and inputs keep their existing controlled bindings. This cannot loop: the dispatch does not change the action-state object the effect depends on, so it runs once per action result.",
-        "path": "components/expense-editor.tsx",
-        "why": "Single shared locus: both the new-expense page (app/groups/[id]/expenses/new/page.tsx) and the edit page render ExpenseEditor, so one tick fixes the reported path, the edit path, the payer switches, and the category select found in the scope check."
-      }
-    ],
-    "issue": 52,
-    "kind": "bug",
-    "mode": "committed",
-    "out_of_scope": [
-      "Other useActionState forms (signup, profile, group create, members) are not touched: the profile form already has its own echo-plus-key treatment from PR #44 and the rest were not verified to diverge; each would be its own ticket if QA finds it.",
-      "No change to the server actions, validation, or FormData contract: the boundary already reads an absent included field as false, which is exactly what the fixed client now sends.",
-      "No visual, copy, or layout change: the switches, errors, and notices already match docs/ui.md; this is a state-restoration fix only."
-    ],
-    "qa_script": [
-      "Sign up as A, create a group, add placeholder seat Bo via the members page.",
-      "Open /groups/:id/expenses/new, fill a description, set category to Travel and a non-today date, turn Bo's Include switch off (Bo reads excluded).",
-      "Fill the amount with not-a-number and press Add expense.",
-      "Expect: the amount refusal names the problem; Bo still reads excluded; description, amount text, date, category and payer inclusion are exactly as set.",
-      "Correct only the amount to a valid number and submit; expect the recorded expense splits the total among everyone but Bo.",
-      "Repeat the refusal on the edit page of that expense and expect the same preservation."
-    ],
-    "reproduced": true,
-    "risks": [
-      "The extra commit re-renders the whole editor on every refused save; the tree is small and local, so this is negligible, but it must not grow side effects that assume one render per action.",
-      "If a future React changes what a Server Action commit resets, the tick becomes a harmless no-op render — worst case it stops helping, it cannot corrupt state, because it only repaints from state that is already the source of truth.",
-      "The effect depends on the action-state object identity: each submit produces a new result object, so consecutive refusals each repaint. If useActionState ever returned an identical object for a repeat refusal, that repeat would not repaint; the browser criteria AC-1 through AC-4 would catch it."
-    ],
-    "root_cause": "After a refused Server Action, the form element is reset to its defaults while the component's React state still holds exactly what the person set. Text inputs repaint from state on the next commit, but the Include switches (controlled checkbox with no defaultChecked, so the default stays at the mount-time all-included value) and the category select (default state likewise stale) keep showing the reset DOM values, and no later commit repaints them — so excluded members read included again and a retry submits split.N.included=1 for them. Verified: plain form.reset() reproduces the signature, defaultValue tracks edits while defaultChecked does not, and one forced re-render after refusal restores every diverged control.",
-    "tests": [
-      {
-        "action": "edit",
-        "cases": [
-          "createExpense with Bo excluded and amount 'not-a-number' returns status 'error' with an amount field error and creates no expense, payer, or split rows (place beside the 'keeps a member who was left out at zero' case, reusing the expenseForm helper with splits [{membershipId: ada, included: true}, {membershipId: bo}] and payers [{membershipId: ada, amount: '10.00'}]; assert state.status, state.fieldErrors.amount, and expenseRowsOf(groupId) empty). The client half — the switch still reading excluded — cannot be reached by a unit test and is covered by browser criteria AC-1 through AC-4 instead."
-        ],
-        "path": "lib/expenses/actions.test.ts"
-      }
-    ],
-    "understanding": "Issue #52 is a single QA follow-up from PR #51 (for #50): a refused expense save (e.g. amount 'not-a-number') silently flips every excluded member's Include switch back to included, while description, amount text and payer inclusion persist — so retrying submits a different split than the user set. Verified live in headless Chrome (always reproducible as filed, severity minor stands). A scope check during verification found the same defect class in the category select (Travel reverted to the default across refusal; the date persisted), so the fix covers the shared root cause in the one component rather than the one switch. No split criteria to answer (no ## Acceptance (from the split) section); TR-8 and docs/ui.md ('Failed save keeps all input') govern. plan/brief.md records no human decisions and no prior rejection.",
-    "version": 1
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-06T06:34:20.273Z",
+  "work_order_from": "plan",
+  "work_order_comment": "6010786372"
 }

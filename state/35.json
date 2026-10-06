@@ -568,7 +568,29 @@
         "file": "lib/activity/queries.ts"
       }
     ],
-    "pr": "46"
+    "pr": "46",
+    "qa": [
+      {
+        "actual": "Without JS the visible copy of the group page is the loading.tsx skeleton only (\"Loading this group…\", no h1, no rows) and it never resolves: the streamed page content sits in a display:none container, so no-JS readers get zero content. Observed identically on the PR-untouched /members page (\"Loading members…\").",
+        "evidence": [
+          "qa-evidence/nojs-hidden-duplicate.json",
+          "qa-evidence/nojs-group-stream.html"
+        ],
+        "expected": "A reader without JavaScript sees the server-rendered group content, or at minimum not an eternal skeleton while the content ships hidden beside it.",
+        "id": "BUG-1",
+        "introduced_by_pr": false,
+        "repro": [
+          "Create any group with an expense as a signed-in user.",
+          "Open a fresh browser context with JavaScript disabled and the session cookies.",
+          "Goto /groups/<id>?section=expenses and read document.body: the visible root holds only the loading fallback while body > div[hidden] > div holds the full page.",
+          "Repeat on /groups/<id>/members (code untouched by this PR): identical skeleton-only result."
+        ],
+        "reproducible": "always",
+        "severity": "minor",
+        "suspected_cause": "Suspense/loading.tsx streaming: resolved content streams into a hidden container that only hydration-time scripts reveal, so it never reveals without JS. Pre-existing app-wide pattern (members page, same layout, untouched by this PR); the new group loading.tsx follows the same convention.",
+        "title": "No-JS group and member pages show only the loading skeleton while page content sits hidden"
+      }
+    ]
   },
   "qa": {
     "verdict": "pass",

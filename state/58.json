@@ -44,6 +44,14 @@
       "attempt": 1,
       "at": "2026-10-06T11:23:53.302Z",
       "digest": "The plan stage failed and no known error pattern matched. The raw output is below."
+    },
+    {
+      "stage": "plan",
+      "error_signature": "c2bce8ac14b4e891",
+      "error_type": "unknown",
+      "attempt": 1,
+      "at": "2026-10-06T11:34:32.290Z",
+      "digest": "The plan stage failed and no known error pattern matched. The raw output is below."
     }
   ],
   "review_history": [],

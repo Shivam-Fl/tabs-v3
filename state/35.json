@@ -25,7 +25,7 @@
     "from": null,
     "pr": null,
     "work_order_version": 1,
-    "at": "2026-10-05T23:11:22.922Z"
+    "at": "2026-10-06T00:24:15.584Z"
   },
   "work_order": {
     "acceptance": [
@@ -387,7 +387,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-05T22:45:24.878Z"
   },
-  "resume_at": "implement",
+  "resume_at": null,
   "flow_plan": {
     "kind": "feature",
     "confidence": 90,
@@ -396,7 +396,7 @@
     "councils": {},
     "decided_at": "2026-10-05T22:57:15.287Z"
   },
-  "stopped_at": "implement",
+  "stopped_at": null,
   "dispatched_stage": "implement",
   "validated_from": "plan",
   "validated_at": "2026-10-05T23:08:12.589Z",

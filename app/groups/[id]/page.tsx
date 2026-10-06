@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect, unstable_rethrow } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { ChevronDown, Plus, ReceiptText, SlidersHorizontal } from 'lucide-react';
 import { ActivityRows } from '../../../components/activity-feed';
 import { AppShell } from '../../../components/app-shell';
 import { ExpenseRowMenu } from '../../../components/expense-row-menu';
 import { GroupSettingsEntry } from '../../../components/group-page';
+import { GroupPageSkeleton } from '../../../components/group-skeletons';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
 import { ExpenseDate } from '../../../components/timestamp';
 import {
@@ -75,6 +76,26 @@ const MEMBERS_EXCERPT = 5;
 const FILTER_CONTROL_ID = 'expense-filters';
 
 /**
+ * What the group page's URL can carry. Spelled out rather than inlined because both halves of the
+ * file read it: the page takes the section and the filters off it, and the part that needs the
+ * ledger takes the payment notice's pair (ADR-0008).
+ */
+type GroupSearchParams = {
+  section?: string;
+  archived?: string;
+  expense?: string;
+  // A just-recorded or just-deleted payment lands here carrying the outcome and the pair it was
+  // about (ADR-0008); the section the reader was on is not part of that URL, which is why the
+  // notice's slot is on the summary card rather than inside the Balances panel.
+  payment?: string;
+  from?: string;
+  to?: string;
+  member?: string;
+  category?: string;
+  q?: string;
+};
+
+/**
  * The group detail screen, organised rather than stacked (IAC-1 .. IAC-7).
  *
  * It answers one question first — what does this group cost me — and then lets the reader move
@@ -101,28 +122,34 @@ const FILTER_CONTROL_ID = 'expense-filters';
  * form that would have shown the confirmation (AC-11). A create, an edit and a delete land here
  * the same way, for the same reason: the row that would have shown the message is the row the
  * change added, replaced or removed.
+ *
+ * The loading state is a `<Suspense>` fallback **below the guard**, not a `loading.tsx` above it
+ * (IAC-6, AC-17). The ordering is the whole design: the guard is awaited first and its refusals
+ * therefore own the wire status, while everything that needs the ledger sits inside the boundary
+ * and paints `GroupPageSkeleton` until it arrives. A route-level file could not offer both — it is
+ * wrapped around this page, so its fallback streamed, and 200 was committed, before `guardGroup`
+ * had answered. The page is split into the strip the guard alone can answer and `GroupLedger` for
+ * exactly that reason, and nothing about the screen's rendering changed with the split.
  */
 export default async function GroupPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
-    section?: string;
-    archived?: string;
-    expense?: string;
-    // A just-recorded or just-deleted payment lands here carrying the outcome and the pair it was
-    // about (ADR-0008); the section the reader was on is not part of that URL, which is why the
-    // notice's slot is on the summary card rather than inside the Balances panel.
-    payment?: string;
-    from?: string;
-    to?: string;
-    member?: string;
-    category?: string;
-    q?: string;
-  }>;
+  searchParams: Promise<GroupSearchParams>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
+
+  // The guard decides the wire status, and it decides it here: outside every Suspense boundary on
+  // this route, and before the first read. A signed-out request leaves as a redirect, and a
+  // stranger, a malformed id and a group that does not exist all leave as the same 404, because
+  // the guard cannot tell them apart any more than the reader can.
+  //
+  // The position of these four lines is the contract (AC-17). A route-level `loading.tsx` could
+  // not keep it: Next wraps this page in that file's boundary, so its fallback was flushed — and
+  // the response's status committed — before `guardGroup` had answered, and a raw-HTTP client saw
+  // 200 for every one of the refusals above. Nothing below this point can stream before the guard
+  // has thrown, which is what lets the skeleton be a fallback instead of a file.
   const access = await withDb((handle) => guardGroup(handle.db, id));
 
   if (access.status === 'unauthenticated') {
@@ -130,201 +157,22 @@ export default async function GroupPage({
   }
   if (access.status === 'not-found') notFound();
 
-  const groupId = access.group.id;
+  const { group, user } = access;
+  const isOwner = access.membership.role === 'owner';
   const section = groupSectionFrom(query[GROUP_SECTION_PARAM]);
   const filters = expenseFiltersFrom(query);
+  const groupId = group.id;
+  const newExpenseHref = `/groups/${groupId}/expenses/new`;
+  // An archive lands here carrying the notice flag, because archiving is what unmounts the settings
+  // form that would have shown the confirmation (AC-11); a create, an edit and a delete land here
+  // the same way, for the same reason. Neither needs the ledger — they are facts about the URL.
+  const justArchived = query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE;
+  const expenseNotice = expenseNoticeText(query[EXPENSE_NOTICE_PARAM]);
 
-  let ledger: {
-    expenses: ExpenseListRow[];
-    members: MemberRow[];
-    balances: MemberBalance[];
-    payments: PaymentRow[];
-  } | null = null;
-
-  try {
-    // One read at a time: the embedded backend serves a single connection, so two queries in
-    // flight together are a queue pretending to be a race.
-    ledger = {
-      expenses: await withDb((handle) => listExpenses(handle.db, groupId, filters)),
-      members: await withDb((handle) => listMembers(handle.db, groupId)),
-      balances: await withDb((handle) => computeNetBalances(handle.db, groupId)),
-      payments: await withDb((handle) => listPayments(handle.db, groupId)),
-    };
-  } catch (error) {
-    // Reading the session's cookie is what makes this route dynamic, and Next marks a route
-    // dynamic by throwing through it — that throw is control flow, not a failure to report.
-    unstable_rethrow(error);
-    console.error('[tabs] group: could not load the group', error);
-  }
-
-  // The feed is read on its own, and its failure is kept on its own too: the balances, the debts
-  // and the expense list on this page are still true, and taking the whole screen down for the
-  // one panel that did not come back is a worse answer than saying which one it was. The excerpt
-  // needs no filter — it is the newest five of everything — so the read signature is the one the
-  // full feed uses, with the default chip.
-  let activity: ActivityRow[] = [];
-  let activityFailed = false;
-  try {
-    activity = await withDb((handle) =>
-      listGroupActivity(handle.db, groupId, DEFAULT_ACTIVITY_FILTER),
-    );
-  } catch (error) {
-    console.error('[tabs] group activity: could not load the feed', error);
-    activityFailed = true;
-  }
-
-  if (ledger === null) {
-    return (
-      <GroupFailure
-        groupName={access.group.name}
-        retryHref={tabHref(groupId, section, filters)}
-      />
-    );
-  }
-
-  // The simplification is arithmetic on the numbers above, not another read: it is the same call
-  // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
-  // It is computed once here rather than at the call below because the payment notice needs it too.
-  const transfers = simplifyDebts(ledger.balances);
-
-  // What a just-recorded or just-deleted payment has to say (AC-6, ADR-0008). The flag rides the
-  // redirect's query, and so does the pair it was about — because the sentence names what is still
-  // owed *between those two*, and that is a fact about the balances, not about the form that
-  // submitted. Both ids have to be seats of this group, in the same read the balances came from:
-  // anything else renders nothing at all, exactly as a forged flag does, so a hand-written URL
-  // cannot put a sentence about two strangers on somebody's screen. The remainder is recomputed
-  // here through the same simplification the suggested payments use, so the notice and the row
-  // under it can never disagree about who owes whom.
-  const seatIds = new Set(ledger.balances.map((balance) => balance.membershipId));
-  const paymentPair = paymentNoticePair(
-    { from: query[PAYMENT_NOTICE_FROM_PARAM], to: query[PAYMENT_NOTICE_TO_PARAM] },
-    seatIds,
-  );
-  const paymentNotice =
-    paymentPair === null
-      ? null
-      : paymentNoticeText(
-          query[PAYMENT_NOTICE_PARAM],
-          directedRemainderMinor(
-            transfers,
-            paymentPair.fromMembershipId,
-            paymentPair.toMembershipId,
-          ),
-          access.group.currency,
-        );
-
-  return (
-    <GroupDetail
-      access={access}
-      expenses={ledger.expenses}
-      members={ledger.members}
-      balances={ledger.balances}
-      transfers={transfers}
-      payments={ledger.payments}
-      filters={filters}
-      section={section}
-      activity={activity}
-      activityFailed={activityFailed}
-      retryHref={tabHref(groupId, section, filters)}
-      justArchived={query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE}
-      expenseNotice={expenseNoticeText(query[EXPENSE_NOTICE_PARAM])}
-      paymentNotice={paymentNotice}
-    />
-  );
-}
-
-/**
- * What a reader sees when the ledger could not be read (IAC-6).
- *
- * Deliberately not the screen with empty lists in it: an empty group and an unreadable one look
- * identical if the page renders its zero states on failure, and the reader would be told they owe
- * nobody when the truth is that nobody answered. One sentence, one way out, and the retry lands
- * on the section and the filters they were already looking at.
- */
-function GroupFailure({ groupName, retryHref }: { groupName: string; retryHref: string }) {
-  return (
-    <AppShell place={groupName}>
-      <main className="mx-auto flex w-full max-w-[640px] flex-1 flex-col justify-center gap-5 px-4 py-5">
-        <section
-          aria-labelledby="group-error"
-          className="flex flex-col items-start gap-3 rounded-token border border-danger/40 bg-surface p-4 shadow-sm"
-        >
-          <h1 id="group-error" className="text-page font-semibold text-ink">
-            We could not load this group
-          </h1>
-          <p className="text-body text-ink-muted">
-            Nothing has been lost — the group did not come back this time. Try again.
-          </p>
-          <Link className={buttonClasses('primary', 'md')} href={retryHref}>
-            Retry
-          </Link>
-        </section>
-      </main>
-    </AppShell>
-  );
-}
-
-function GroupDetail({
-  access,
-  expenses,
-  members,
-  balances,
-  transfers,
-  payments,
-  filters,
-  section,
-  activity,
-  activityFailed,
-  retryHref,
-  justArchived,
-  expenseNotice,
-  paymentNotice,
-}: {
-  access: Extract<GroupAccess, { status: 'ok' }>;
-  expenses: ExpenseListRow[];
-  members: MemberRow[];
-  balances: MemberBalance[];
-  transfers: Transfer[];
-  payments: PaymentRow[];
-  filters: ReturnType<typeof expenseFiltersFrom>;
-  section: GroupSection;
-  activity: ActivityRow[];
-  activityFailed: boolean;
-  retryHref: string;
-  justArchived: boolean;
-  expenseNotice: string | null;
-  paymentNotice: string | null;
-}) {
-  const { group, membership, user } = access;
-  const isOwner = membership.role === 'owner';
-  const filtered = filters.memberId !== null || filters.category !== null || filters.search !== null;
-  const newExpenseHref = `/groups/${group.id}/expenses/new`;
-
-  // Every current member is on the balances card even at zero — a row that vanished would read as
-  // somebody missing — while a departed seat (ADR-0007) is only worth a row when it still holds a
-  // balance: at zero it is a name the group can do nothing about.
-  const currentIds = new Set(members.map((member) => member.id));
-  const shown = balances.filter(
-    (balance) => currentIds.has(balance.membershipId) || balance.balanceMinor !== 0,
-  );
-
-  const ownMinor =
-    balances.find((balance) => balance.membershipId === membership.id)?.balanceMinor ?? 0;
-  const settled = transfers.length === 0;
-  // The settled case says what the *number* means and leaves the group-wide sentence to the banner
-  // below it: "Everyone is settled up — nobody owes anybody" is the banner's line, and printing it
-  // here too stacked the same sentence twice under the hero.
-  const heroNote = settled
-    ? 'You are settled up here.'
-    : ownMinor > 0
-      ? 'You are owed in this group.'
-      : ownMinor < 0
-        ? 'You owe in this group.'
-        : 'You are settled up here — the others still owe each other.';
-
-  const excerpt = activity.slice(0, ACTIVITY_EXCERPT);
-  const balanceOf = new Map(balances.map((balance) => [balance.membershipId, balance.balanceMinor]));
-
+  // The strip above the boundary is everything the guard's own result can answer: where the reader
+  // is, what the group is called, whether it is archived, and what the redirect before this one
+  // had to say. It paints on the first flush, so the reader never waits on a skeleton for a name
+  // the server already has.
   return (
     <AppShell place={group.name} viewer={{ displayName: user.displayName }}>
       {/* The bottom padding is the phone's fixed Add-expense button: content scrolls under it
@@ -418,7 +266,233 @@ function GroupDetail({
           </p>
         ) : null}
 
-        <Card>
+        {/* Everything from here down needs the ledger, and paints the skeleton while it arrives
+            (IAC-6). The boundary sits *below* the guard rather than over the route, so the guard
+            keeps the wire status and this strip keeps its first paint — the two things the old
+            route-level file could not both have (AC-17). */}
+        <Suspense fallback={<GroupPageSkeleton />}>
+          <GroupLedger
+            access={access}
+            query={query}
+            filters={filters}
+            section={section}
+            retryHref={tabHref(groupId, section, filters)}
+          />
+        </Suspense>
+      </main>
+    </AppShell>
+  );
+}
+
+/**
+ * Everything the group screen shows that needs the ledger read first.
+ *
+ * It is a component of its own only because of where it sits: a Suspense boundary can only stand
+ * in for something that suspends, so the reads have to be inside the boundary for the fallback to
+ * be a fallback rather than decoration. Nothing about the reads themselves changed.
+ */
+async function GroupLedger({
+  access,
+  query,
+  filters,
+  section,
+  retryHref,
+}: {
+  access: Extract<GroupAccess, { status: 'ok' }>;
+  query: GroupSearchParams;
+  filters: ReturnType<typeof expenseFiltersFrom>;
+  section: GroupSection;
+  retryHref: string;
+}) {
+  const groupId = access.group.id;
+
+  let ledger: {
+    expenses: ExpenseListRow[];
+    members: MemberRow[];
+    balances: MemberBalance[];
+    payments: PaymentRow[];
+  } | null = null;
+
+  try {
+    // One read at a time: the embedded backend serves a single connection, so two queries in
+    // flight together are a queue pretending to be a race.
+    ledger = {
+      expenses: await withDb((handle) => listExpenses(handle.db, groupId, filters)),
+      members: await withDb((handle) => listMembers(handle.db, groupId)),
+      balances: await withDb((handle) => computeNetBalances(handle.db, groupId)),
+      payments: await withDb((handle) => listPayments(handle.db, groupId)),
+    };
+  } catch (error) {
+    // Reading the session's cookie is what makes this route dynamic, and Next marks a route
+    // dynamic by throwing through it — that throw is control flow, not a failure to report.
+    unstable_rethrow(error);
+    console.error('[tabs] group: could not load the group', error);
+  }
+
+  // The feed is read on its own, and its failure is kept on its own too: the balances, the debts
+  // and the expense list on this page are still true, and taking the whole screen down for the
+  // one panel that did not come back is a worse answer than saying which one it was. The excerpt
+  // needs no filter — it is the newest five of everything — so the read signature is the one the
+  // full feed uses, with the default chip.
+  let activity: ActivityRow[] = [];
+  let activityFailed = false;
+  try {
+    activity = await withDb((handle) =>
+      listGroupActivity(handle.db, groupId, DEFAULT_ACTIVITY_FILTER),
+    );
+  } catch (error) {
+    console.error('[tabs] group activity: could not load the feed', error);
+    activityFailed = true;
+  }
+
+  if (ledger === null) return <GroupFailure retryHref={retryHref} />;
+
+  // The simplification is arithmetic on the numbers above, not another read: it is the same call
+  // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
+  // It is computed once here rather than at the call below because the payment notice needs it too.
+  const transfers = simplifyDebts(ledger.balances);
+
+  // What a just-recorded or just-deleted payment has to say (AC-6, ADR-0008). The flag rides the
+  // redirect's query, and so does the pair it was about — because the sentence names what is still
+  // owed *between those two*, and that is a fact about the balances, not about the form that
+  // submitted. Both ids have to be seats of this group, in the same read the balances came from:
+  // anything else renders nothing at all, exactly as a forged flag does, so a hand-written URL
+  // cannot put a sentence about two strangers on somebody's screen. The remainder is recomputed
+  // here through the same simplification the suggested payments use, so the notice and the row
+  // under it can never disagree about who owes whom.
+  const seatIds = new Set(ledger.balances.map((balance) => balance.membershipId));
+  const paymentPair = paymentNoticePair(
+    { from: query[PAYMENT_NOTICE_FROM_PARAM], to: query[PAYMENT_NOTICE_TO_PARAM] },
+    seatIds,
+  );
+  const paymentNotice =
+    paymentPair === null
+      ? null
+      : paymentNoticeText(
+          query[PAYMENT_NOTICE_PARAM],
+          directedRemainderMinor(
+            transfers,
+            paymentPair.fromMembershipId,
+            paymentPair.toMembershipId,
+          ),
+          access.group.currency,
+        );
+
+  return (
+    <GroupDetail
+      access={access}
+      expenses={ledger.expenses}
+      members={ledger.members}
+      balances={ledger.balances}
+      transfers={transfers}
+      payments={ledger.payments}
+      filters={filters}
+      section={section}
+      activity={activity}
+      activityFailed={activityFailed}
+      retryHref={retryHref}
+      paymentNotice={paymentNotice}
+    />
+  );
+}
+
+/**
+ * What a reader sees when the ledger could not be read (IAC-6).
+ *
+ * Deliberately not the screen with empty lists in it: an empty group and an unreadable one look
+ * identical if the page renders its zero states on failure, and the reader would be told they owe
+ * nobody when the truth is that nobody answered. One sentence, one way out, and the retry lands
+ * on the section and the filters they were already looking at.
+ *
+ * It fills the body rather than the whole window: the breadcrumb and the header above it came from
+ * the guard, which answered, and they are still true — the thing that did not come back is the
+ * ledger. Its heading is an `h2` for the same reason, since the group's own name is the page's one
+ * `h1` and a second one would make the error the page's title.
+ */
+function GroupFailure({ retryHref }: { retryHref: string }) {
+  return (
+    <div className="flex flex-1 flex-col justify-center">
+      <section
+        aria-labelledby="group-error"
+        className="flex flex-col items-start gap-3 rounded-token border border-danger/40 bg-surface p-4 shadow-sm"
+      >
+        <h2 id="group-error" className="text-page font-semibold text-ink">
+          We could not load this group
+        </h2>
+        <p className="text-body text-ink-muted">
+          Nothing has been lost — the group did not come back this time. Try again.
+        </p>
+        <Link className={buttonClasses('primary', 'md')} href={retryHref}>
+          Retry
+        </Link>
+      </section>
+    </div>
+  );
+}
+
+function GroupDetail({
+  access,
+  expenses,
+  members,
+  balances,
+  transfers,
+  payments,
+  filters,
+  section,
+  activity,
+  activityFailed,
+  retryHref,
+  paymentNotice,
+}: {
+  access: Extract<GroupAccess, { status: 'ok' }>;
+  expenses: ExpenseListRow[];
+  members: MemberRow[];
+  balances: MemberBalance[];
+  transfers: Transfer[];
+  payments: PaymentRow[];
+  filters: ReturnType<typeof expenseFiltersFrom>;
+  section: GroupSection;
+  activity: ActivityRow[];
+  activityFailed: boolean;
+  retryHref: string;
+  paymentNotice: string | null;
+}) {
+  const { group, membership } = access;
+  const filtered = filters.memberId !== null || filters.category !== null || filters.search !== null;
+  const newExpenseHref = `/groups/${group.id}/expenses/new`;
+
+  // Every current member is on the balances card even at zero — a row that vanished would read as
+  // somebody missing — while a departed seat (ADR-0007) is only worth a row when it still holds a
+  // balance: at zero it is a name the group can do nothing about.
+  const currentIds = new Set(members.map((member) => member.id));
+  const shown = balances.filter(
+    (balance) => currentIds.has(balance.membershipId) || balance.balanceMinor !== 0,
+  );
+
+  const ownMinor =
+    balances.find((balance) => balance.membershipId === membership.id)?.balanceMinor ?? 0;
+  const settled = transfers.length === 0;
+  // The settled case says what the *number* means and leaves the group-wide sentence to the banner
+  // below it: "Everyone is settled up — nobody owes anybody" is the banner's line, and printing it
+  // here too stacked the same sentence twice under the hero.
+  const heroNote = settled
+    ? 'You are settled up here.'
+    : ownMinor > 0
+      ? 'You are owed in this group.'
+      : ownMinor < 0
+        ? 'You owe in this group.'
+        : 'You are settled up here — the others still owe each other.';
+
+  const excerpt = activity.slice(0, ACTIVITY_EXCERPT);
+  const balanceOf = new Map(balances.map((balance) => [balance.membershipId, balance.balanceMinor]));
+
+  // The shell — breadcrumb, header, notices — is rendered by the page above the Suspense boundary,
+  // because the guard's own result already answers all of it. This renders the region that waits on
+  // the ledger, as a fragment rather than a second `<main>`: one main landmark per screen, and the
+  // page owns the one this fills.
+  return (
+    <>
+      <Card>
           <div className="flex flex-col gap-1">
             <h2 className="text-caption font-medium tracking-wide text-ink-muted uppercase">
               Your balance
@@ -826,10 +900,9 @@ function GroupDetail({
             </Link>
           </Panel>
         ) : null}
-      </main>
 
       {/* The phone's half of the primary action: fixed where a thumb already is, and out of the
-          flow so it never covers the row being read (the main element carries its height). */}
+          flow so it never covers the row being read (the page's main element carries its height). */}
       {group.archived ? null : (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-4 sm:hidden">
           <Link className={buttonClasses('primary', 'md', 'w-full')} href={newExpenseHref}>
@@ -838,7 +911,7 @@ function GroupDetail({
           </Link>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }
 

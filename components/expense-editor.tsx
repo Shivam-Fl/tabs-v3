@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useReducer, useState } from 'react';
 import Link from 'next/link';
 import { createExpense, deleteExpense, updateExpense } from '../lib/expenses/actions';
 import type { EditorParticipant, EditorPayer, ExpenseEditorData } from '../lib/expenses/queries';
@@ -177,6 +177,15 @@ export function ExpenseEditor({
     expenseId === null ? createExpense : updateExpense,
     IDLE_EXPENSE_STATE,
   );
+  const [, repaintAfterRefusal] = useReducer((n: number) => n + 1, 0);
+
+  // A refused save resets the form element to its defaults, which flips controlled checkboxes and
+  // selects whose defaults are stale, while React state still holds what the person set. One extra
+  // commit repaints them from that intact state. Deliberately not a key remount (that would drop
+  // focus) and not defaultChecked (React ignores it after mount).
+  useEffect(() => {
+    if (state.status === 'error') repaintAfterRefusal();
+  }, [state]);
 
   const [description, setDescription] = useState(data.description);
   const [amount, setAmount] = useState(data.amount);

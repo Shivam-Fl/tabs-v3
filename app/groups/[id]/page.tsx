@@ -294,8 +294,14 @@ function GroupDetail({
         </nav>
 
         <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold">{group.name}</h1>
-          <p className="text-muted">
+          {/* The heading wraps an unbroken 80-character name rather than letting it set the
+              document width: a title truncated to an ellipsis would stop confirming which group
+              the page is about, while `break-words` keeps the whole name readable (AC-1). The
+              breadcrumb beside it keeps its ellipsis — a crumb is a location, not the name. */}
+          <h1 className="text-2xl font-semibold break-words">{group.name}</h1>
+          {/* The same shape one line down: the viewer's own display name sits in this line, and a
+              placeholder-maximum name would widen the page with it (AC-6). */}
+          <p className="text-muted break-words">
             {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} ·{' '}
             {user.displayName}
           </p>
@@ -308,11 +314,14 @@ function GroupDetail({
 
         {group.archived ? (
           <>
+            {/* The notice re-prints the group's name, so it carries the same treatment as the
+                heading above it: the sentence names the group in full and wraps inside the
+                viewport rather than widening the page (AC-4). */}
             {justArchived ? (
               <p
                 role="status"
                 aria-live="polite"
-                className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+                className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent break-words"
               >
                 {archivedNoticeText(group.name)}
               </p>
@@ -385,8 +394,12 @@ function GroupDetail({
                 key={balance.membershipId}
                 className="flex flex-wrap items-baseline justify-between gap-2"
               >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{balance.displayName}</span>
+                {/* `min-w-0` twice over: on this column so it takes the width the row gives it,
+                    and on the name below so the name can be narrower than its own longest word.
+                    `break-words` then wraps an 80-character unbroken name — the same idiom the
+                    activity feed's audit lines use (AC-6). */}
+                <span className="flex min-w-0 flex-wrap items-center gap-2 break-words">
+                  <span className="min-w-0 font-medium break-words">{balance.displayName}</span>
                   {currentIds.has(balance.membershipId) ? null : (
                     <span className="rounded-token border border-muted/40 px-2 text-sm text-muted">
                       No longer in the group
@@ -549,7 +562,10 @@ function GroupDetail({
                         {formatMinorUnits(expense.amountMinor, group.currency)}
                       </span>
                     </div>
-                    <p className="text-secondary text-ink-muted">
+                    {/* `break-words` because this line re-prints the payers' names: a
+                        placeholder-maximum name here would otherwise widen the row and the page
+                        with it (AC-6). */}
+                    <p className="text-secondary text-ink-muted break-words">
                       {/* What a person calls that day, with the machine-readable one still in the
                           markup for anything that reads `datetime`. */}
                       <time dateTime={expense.date}>{humanDateLabel(expense.date, today)}</time> ·{' '}

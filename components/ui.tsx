@@ -53,10 +53,19 @@ interface MessageState {
  */
 export function StateMessage({ state }: { state: MessageState }) {
   return (
+    // `min-w-0 break-words`: these sentences interpolate group, member and expense names at up to
+    // their 80/200-character maxima, and an unbroken one is a single line that sets the document
+    // width on a 375px phone. `min-w-0` is load-bearing where the message renders as an item of a
+    // flex-wrap row rather than as a block; `overflow-wrap` is a no-op on ordinary text, so short
+    // messages are unchanged (AC-2, AC-4).
     <p
       role={state.status === 'error' ? 'alert' : 'status'}
       aria-live="polite"
-      className={state.status === 'error' ? 'text-sm text-danger' : 'text-sm text-lent'}
+      className={
+        state.status === 'error'
+          ? 'min-w-0 text-sm text-danger break-words'
+          : 'min-w-0 text-sm text-lent break-words'
+      }
     >
       {state.message}
     </p>
@@ -94,7 +103,12 @@ export function ConfirmStep({
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-token border border-danger/40 p-3">
-      <p role="alert" className="text-sm">
+      {/* The question names the object it acts on — a group, a member, a payment — so it is
+          rendered whole and wraps rather than being clipped or elided; an 80-character unbroken
+          name here would otherwise widen the page past a 375px viewport. `break-words` alone is
+          enough: the question is always the only child of this flex-col box, so it stretches to
+          the column's width and `min-w-0` would be inert (AC-2). */}
+      <p role="alert" className="text-sm break-words">
         {question}
       </p>
       <div className="flex flex-wrap gap-2">

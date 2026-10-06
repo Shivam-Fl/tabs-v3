@@ -679,7 +679,17 @@ function MemberRow({
             </span>
             <span className="sr-only">{`Actions for ${member.displayName}`}</span>
           </summary>
-          <div className="mt-2 w-64 max-w-[calc(100vw-3rem)]">
+          {/* The panel floats over the rows below rather than sitting in this one's flow: it is a
+              fixed 256px box, and the row's own content — avatar, gaps and this disclosure —
+              plus that box is wider than the `li` has inside the Card at a 375px viewport, so
+              the row, and with it the page, overflowed with *any* name length (AC-7: short names
+              read byte-identical to 80-character ones, which is how the wrapping diagnosis was
+              disproved). `absolute` pairs with the `relative` above to take the panel's width
+              out of the row's arithmetic entirely, `w-64 max-w-[calc(100vw-3rem)]` still caps it,
+              and the surface card is the MenuPanel idiom every other overlay in the app uses. The
+              disclosure, the form and the shared ConfirmStep are untouched, so the keyboard path
+              and the question's own wrapping are unchanged. */}
+          <div className="absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-3rem)] rounded-token border border-border bg-surface p-3 shadow-md">
             <RemoveMemberForm groupId={groupId} groupName={groupName} member={member} />
           </div>
         </details>
@@ -842,14 +852,19 @@ function ClaimSeatForm({
         {/* A hint, not an assertion: the visitor decides, and the badge only says why this seat
             is being offered to them first (ui.md's Badge). */}
         {matchesYou ? <Badge tone="accent">Looks like you</Badge> : null}
+        {/* The label is its own box rather than a bare text node, and the button shrinks with it:
+            this is a flex-wrap row, and a flex item's automatic minimum size is its min-content
+            width, so a placeholder-maximum name would hold the button — and the row, and the page
+            — at the full string. `min-w-0` joins `ml-auto` rather than replacing it, so the
+            button still takes its own line beside the truncated seat name (AC-1). */}
         <Button
           type="submit"
           variant="secondary"
-          className="ml-auto"
+          className="ml-auto min-w-0"
           pending={isPending}
           pendingLabel="Claiming…"
         >
-          {`This is me — claim ${seat.displayName}`}
+          <span className="min-w-0 break-words">{`This is me — claim ${seat.displayName}`}</span>
         </Button>
       </div>
       <StateMessage state={state} />
@@ -887,8 +902,12 @@ export function JoinPanel({
 
       <form action={joinAction} className="flex flex-col gap-3">
         <input type="hidden" name="token" value={token} />
-        <Button type="submit" pending={joinPending} pendingLabel="Joining…">
-          {`Join ${groupName}`}
+        {/* Same two-level treatment as the claim button below: `break-words` on the label so an
+            80-character unbroken group name wraps, and `min-w-0` on both the label and the button
+            so the flex item can be narrower than its own longest word instead of widening the
+            page (AC-1). */}
+        <Button type="submit" className="min-w-0" pending={joinPending} pendingLabel="Joining…">
+          <span className="min-w-0 break-words">{`Join ${groupName}`}</span>
         </Button>
         <StateMessage state={state} />
       </form>

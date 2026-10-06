@@ -147,7 +147,13 @@
     "unknowns": [],
     "version": 1
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "lib/money/human-date.ts",
+    "components/expense-editor.tsx",
+    "lib/settle/actions.ts",
+    "components/activity-feed.tsx",
+    "lib/money/human-date.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

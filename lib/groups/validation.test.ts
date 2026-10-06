@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_GROUP_SECTION,
   DEFAULT_GROUP_TYPE,
+  GROUP_SECTIONS,
   INVITE_DISABLED,
   INVITE_DISABLED_NOTICE,
   INVITE_ROTATED,
@@ -9,6 +11,7 @@ import {
   claimPlaceholderSchema,
   createGroupSchema,
   groupScope,
+  groupSectionFrom,
   inviteNoticeText,
   isSameOriginPath,
   joinByTokenSchema,
@@ -179,5 +182,25 @@ describe('the post-sign-in destination', () => {
     expect(parseNextPath(`/groups/${UUID}`)).toBe(`/groups/${UUID}`);
     expect(parseNextPath('/profile')).toBe('/profile');
     expect(parseNextPath(`  /groups/${UUID}  `)).toBe(`/groups/${UUID}`);
+  });
+});
+
+describe('groupSectionFrom', () => {
+  it('accepts each of the four closed values', () => {
+    for (const section of GROUP_SECTIONS) {
+      expect(groupSectionFrom(section)).toBe(section);
+    }
+  });
+
+  it('accepts a value however the URL spells its case or its whitespace', () => {
+    // Case is not a meaning a query carries, which is the rule the sibling parsers apply too.
+    expect(groupSectionFrom(' BALANCES ')).toBe('balances');
+    expect(groupSectionFrom('Activity')).toBe('activity');
+  });
+
+  it('defaults a blank, missing or unknown value to expenses', () => {
+    for (const value of [undefined, '', '   ', 'settings', 'feed', 'members,activity', '0', '/']) {
+      expect(groupSectionFrom(value)).toBe(DEFAULT_GROUP_SECTION);
+    }
   });
 });

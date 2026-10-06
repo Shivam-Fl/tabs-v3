@@ -135,6 +135,40 @@ export function inviteNoticeText(raw: string | undefined): string | null {
 }
 
 /**
+ * Which section of the group page is open (IAC-2).
+ *
+ * The tab state lives in the URL for the same reason the expense filters do: a section somebody
+ * is looking at is a section they can send to somebody else, and the page can be server-rendered
+ * with the right panel already in it. The set is closed and its default is `expenses` — the thing
+ * a person opening a group is most often there for — so an unknown, blank or missing value
+ * renders the same panel a fresh visit does rather than an empty one.
+ *
+ * The parser mirrors `activityFilterFrom` and `expenseFiltersFrom` beside it: trim and lower-case,
+ * then membership of the closed set. Case is not a meaning a URL carries, so `?section=Balances`
+ * and `?section=balances` are the same request.
+ */
+export const GROUP_SECTION_PARAM = 'section';
+export const GROUP_SECTIONS = ['expenses', 'balances', 'activity', 'members'] as const;
+export type GroupSection = (typeof GROUP_SECTIONS)[number];
+export const DEFAULT_GROUP_SECTION: GroupSection = 'expenses';
+
+/** What each section is called where a person reads it. */
+export const GROUP_SECTION_LABELS: Record<GroupSection, string> = {
+  expenses: 'Expenses',
+  balances: 'Balances and settle up',
+  activity: 'Activity',
+  members: 'Members',
+};
+
+/** The section a query asked for, or the default when it asked for nothing this app has. */
+export function groupSectionFrom(raw: string | undefined): GroupSection {
+  const value = (raw ?? '').trim().toLowerCase();
+  return (GROUP_SECTIONS as readonly string[]).includes(value)
+    ? (value as GroupSection)
+    : DEFAULT_GROUP_SECTION;
+}
+
+/**
  * The name a notice query carried, or null when it carried none. A note names the object it is
  * about, so a blank one has nothing to say and renders nothing rather than a sentence with a
  * hole in it — and the value is reflected, never trusted for anything but that sentence.

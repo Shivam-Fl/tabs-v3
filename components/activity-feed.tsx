@@ -15,6 +15,7 @@ import {
 } from '../lib/expenses/validation';
 import { formatBasisPoints, formatMinorUnits } from '../lib/money/format';
 import type { PaymentSnapshot } from '../lib/settle/validation';
+import { Timestamp } from './timestamp';
 import { PRIMARY_BUTTON, QUIET_BUTTON } from './ui';
 
 /**
@@ -70,13 +71,34 @@ export function ActivityFeed({
           {filter === 'all' ? emptyText : 'No events match this filter.'}
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <ActivityRowItem key={row.id} row={row} showGroup={showGroup} />
-          ))}
-        </ul>
+        <ActivityRows rows={rows} showGroup={showGroup} />
       )}
     </div>
+  );
+}
+
+/**
+ * The rows themselves, without the chips (IAC-2).
+ *
+ * The group page shows a five-row excerpt of the same feed and links out to the full one, so the
+ * excerpt renders this rather than a second copy of the row markup — a payment row has to read
+ * the same on both screens or the excerpt is a different feed with the same data. Chips stay in
+ * `ActivityFeed`: the excerpt is five rows and a link, not a filterable list, and a chip row that
+ * filtered a slice would filter five rows out of the newest five.
+ */
+export function ActivityRows({
+  rows,
+  showGroup = false,
+}: {
+  rows: ActivityRow[];
+  showGroup?: boolean;
+}) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <ActivityRowItem key={row.id} row={row} showGroup={showGroup} />
+      ))}
+    </ul>
   );
 }
 
@@ -173,24 +195,14 @@ function actionText(row: ActivityRow): string {
 }
 
 /**
- * When it happened (TR-11).
+ * When it happened (TR-11, IAC-7).
  *
- * Rendered in **UTC and labelled as such**. The invariant is that timestamps are stored in UTC
- * and shown in the viewer's time zone, and a server component cannot know the viewer's zone — the
- * agent that renders this runs wherever the app runs. Rather than silently printing the server's
- * clock and calling it the viewer's, this prints the one zone both the writer and the reader
- * agree on and says which it is. Lifting it means a client-side timestamp island, which the work
- * order rules out for this slice.
+ * The row used to print the instant in UTC with the zone spelled out, because a server component
+ * cannot know the viewer's zone and labelling the server's clock as the reader's would have been
+ * worse. `Timestamp` is the island that lifts that limit: a zone-neutral absolute day for the
+ * server's paint, then how long ago it was in the reader's own zone once it has mounted. The
+ * element keeps its `dateTime`, so the machine-readable value never changes shape.
  */
-const TIMESTAMP_FORMAT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-
-function timestampText(value: Date): string {
-  return `${TIMESTAMP_FORMAT.format(value)} UTC`;
-}
 
 /** Whether a payload is an edit's before/after rather than a payment's snapshot. */
 function isEditPayload(
@@ -230,7 +242,7 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
       </p>
 
       <p className="text-sm text-muted">
-        <time dateTime={row.createdAt.toISOString()}>{timestampText(row.createdAt)}</time>
+        <Timestamp instant={row.createdAt.toISOString()} />
         {showGroup ? (
           <>
             {' · '}

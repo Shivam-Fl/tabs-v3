@@ -1,41 +1,55 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { ActivityFeed, type PreservedParams } from '../../../components/activity-feed';
+import { notFound, redirect, unstable_rethrow } from 'next/navigation';
+import type { ReactNode } from 'react';
+import { ChevronDown, Plus, ReceiptText, SlidersHorizontal } from 'lucide-react';
+import { ActivityRows } from '../../../components/activity-feed';
 import { AppShell } from '../../../components/app-shell';
-import { DeleteExpenseForm } from '../../../components/expense-editor';
-import { ArchiveGroupForm, RenameGroupForm } from '../../../components/groups-panels';
+import { ExpenseRowMenu, GroupSettingsEntry } from '../../../components/group-page';
 import { DeletePaymentForm, SettleUpForm } from '../../../components/settle-panels';
-import { INPUT_CLASSES, QUIET_BUTTON } from '../../../components/ui';
+import { ExpenseDate } from '../../../components/timestamp';
 import {
-  ACTIVITY_FILTER_PARAM,
-  activityFilterFrom,
+  Avatar,
+  Badge,
+  Card,
+  EmptyState,
+  INPUT_CLASSES,
+  ListRow,
+  QUIET_BUTTON,
+  buttonClasses,
+} from '../../../components/ui';
+import {
+  ACTIVITY_GROUP_PARAM,
+  DEFAULT_ACTIVITY_FILTER,
   listGroupActivity,
-  type ActivityFilter,
   type ActivityRow,
 } from '../../../lib/activity/queries';
 import { withDb } from '../../../lib/db/client';
+import { listExpenses, type ExpenseListRow, type ExpensePayerRow } from '../../../lib/expenses/queries';
 import {
-  EXPENSE_CATEGORY_PARAM,
   EXPENSE_CATEGORIES,
+  EXPENSE_CATEGORY_PARAM,
   EXPENSE_MEMBER_PARAM,
   EXPENSE_NOTICE_PARAM,
   EXPENSE_SEARCH_PARAM,
-  SPLIT_TYPE_LABELS,
   expenseCategoryLabel,
   expenseFiltersFrom,
   expenseNoticeText,
 } from '../../../lib/expenses/validation';
-import { listExpenses, type ExpenseListRow } from '../../../lib/expenses/queries';
 import { guardGroup, type GroupAccess } from '../../../lib/groups/authz';
+import { listMembers, type MemberRow } from '../../../lib/groups/queries';
 import {
   ARCHIVED_NOTICE,
   ARCHIVED_NOTICE_PARAM,
+  GROUP_SECTION_LABELS,
+  GROUP_SECTION_PARAM,
+  GROUP_SECTIONS,
   GROUP_TYPE_LABELS,
   archivedNoticeText,
+  groupSectionFrom,
+  type GroupSection,
   type GroupType,
 } from '../../../lib/groups/validation';
-import { listMembers, type MemberRow } from '../../../lib/groups/queries';
 import { formatMinorUnits } from '../../../lib/money/format';
 import { computeNetBalances, type MemberBalance } from '../../../lib/settle/balances';
 import { listPayments, type PaymentRow } from '../../../lib/settle/queries';
@@ -43,28 +57,36 @@ import { simplifyDebts, type Transfer } from '../../../lib/settle/simplify';
 
 export const metadata: Metadata = { title: 'Group · Tabs' };
 
+/** Three transfer lines and five rows of each excerpt: enough to answer the question, not a dump. */
+const TRANSFER_LINES = 3;
+const ACTIVITY_EXCERPT = 5;
+const MEMBERS_EXCERPT = 5;
+
+/** The id the filter disclosure's summary and its form are joined by. */
+const FILTER_CONTROL_ID = 'expense-filters';
+
 /**
- * The group detail screen: who owes whom here, and what happened recently — the header, the
- * balance banner, the debts card with the simplified transfers and the settle-up payments, the
- * expense list with its filters, and the settings section. The activity excerpt belongs to TR-10
- * and lands on this page rather than in a second one.
+ * The group detail screen, organised rather than stacked (IAC-1 .. IAC-7).
+ *
+ * It answers one question first — what does this group cost me — and then lets the reader move
+ * between the four things that question is made of: the expenses, the balances and the settle-up,
+ * the activity, and the members. The move is a **navigation**, not a client-side toggle: each
+ * panel is a `?section=` value, so a section can be linked, bookmarked and reloaded, the panels
+ * are server-rendered, and a reader without JavaScript gets all four.
  *
  * Every balance on it comes from the one recompute path (TR-9) and every transfer from the one
- * simplification beside it, so the banner, the member rows, the suggested payments and the
- * members page are four renderings of one arithmetic rather than four opinions. The card is
- * above the expense list in the DOM, which is what makes a narrow screen stack the two the way
- * ui.md describes.
+ * simplification beside it, so the hero number, the member rows, the suggested payments and the
+ * members page are four renderings of one arithmetic rather than four opinions.
  *
  * The guard decides everything else. A signed-out visitor is sent to sign in with the way back;
- * a stranger, a malformed id and a group that does not exist all render the same 404, because
- * the guard cannot tell them apart any more than the reader can.
+ * a stranger, a malformed id and a group that does not exist all render the same 404, because the
+ * guard cannot tell them apart any more than the reader can.
  *
- * The list reads through the filter the query carries, so a bookmarked or shared URL shows the
- * same rows to everybody it is opened by, and every filter is applied in the query rather than
- * after it — a filter applied on screen would be a filter that lies about the page count the
- * moment there is a second page. The activity excerpt's chip carries its own parameter beside
- * them, and the two forms re-submit each other's values so neither filter clears the other
- * (AC-8).
+ * Two reads fail differently, on purpose. The **ledger** — expenses, members, balances, payments —
+ * is one read: a failure there would leave a summary that disagrees with a list that never
+ * arrived, so it takes the whole page down to an error card with a retry. The **activity excerpt**
+ * is not part of that arithmetic, so its failure is its own panel's message and the rest of the
+ * page stays true.
  *
  * An archive lands here carrying the notice flag, because archiving is what unmounts the settings
  * form that would have shown the confirmation (AC-11). A create, an edit and a delete land here
@@ -77,9 +99,9 @@ export default async function GroupPage({
 }: {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
+    section?: string;
     archived?: string;
     expense?: string;
-    activity?: string;
     member?: string;
     category?: string;
     q?: string;
@@ -93,48 +115,73 @@ export default async function GroupPage({
   }
   if (access.status === 'not-found') notFound();
 
+  const groupId = access.group.id;
+  const section = groupSectionFrom(query[GROUP_SECTION_PARAM]);
   const filters = expenseFiltersFrom(query);
-  const activityFilter = activityFilterFrom(query[ACTIVITY_FILTER_PARAM]);
 
-  // One read at a time: the embedded backend serves a single connection, so two queries in
-  // flight together are a queue pretending to be a race.
-  const expenses = await withDb((handle) => listExpenses(handle.db, access.group.id, filters));
-  const members = await withDb((handle) => listMembers(handle.db, access.group.id));
-  const balances = await withDb((handle) => computeNetBalances(handle.db, access.group.id));
-  const payments = await withDb((handle) => listPayments(handle.db, access.group.id));
+  let ledger: {
+    expenses: ExpenseListRow[];
+    members: MemberRow[];
+    balances: MemberBalance[];
+    payments: PaymentRow[];
+  } | null = null;
+
+  try {
+    // One read at a time: the embedded backend serves a single connection, so two queries in
+    // flight together are a queue pretending to be a race.
+    ledger = {
+      expenses: await withDb((handle) => listExpenses(handle.db, groupId, filters)),
+      members: await withDb((handle) => listMembers(handle.db, groupId)),
+      balances: await withDb((handle) => computeNetBalances(handle.db, groupId)),
+      payments: await withDb((handle) => listPayments(handle.db, groupId)),
+    };
+  } catch (error) {
+    // Reading the session's cookie is what makes this route dynamic, and Next marks a route
+    // dynamic by throwing through it — that throw is control flow, not a failure to report.
+    unstable_rethrow(error);
+    console.error('[tabs] group: could not load the group', error);
+  }
 
   // The feed is read on its own, and its failure is kept on its own too: the balances, the debts
   // and the expense list on this page are still true, and taking the whole screen down for the
-  // one section that did not come back is a worse answer than saying which one it was. The page's
-  // own load covers the loading state — this section has none of its own to show.
+  // one panel that did not come back is a worse answer than saying which one it was. The excerpt
+  // needs no filter — it is the newest five of everything — so the read signature is the one the
+  // full feed uses, with the default chip.
   let activity: ActivityRow[] = [];
   let activityFailed = false;
   try {
     activity = await withDb((handle) =>
-      listGroupActivity(handle.db, access.group.id, activityFilter),
+      listGroupActivity(handle.db, groupId, DEFAULT_ACTIVITY_FILTER),
     );
   } catch (error) {
     console.error('[tabs] group activity: could not load the feed', error);
     activityFailed = true;
   }
 
+  if (ledger === null) {
+    return (
+      <GroupFailure
+        groupName={access.group.name}
+        retryHref={tabHref(groupId, section, filters)}
+      />
+    );
+  }
+
   // The simplification is arithmetic on the numbers above, not another read: it is the same call
   // the home screen makes, so "Cy pays you 100" here and "Cy owes you 100" there cannot diverge.
-  const transfers = simplifyDebts(balances);
-
   return (
     <GroupDetail
       access={access}
-      expenses={expenses}
-      members={members}
-      balances={balances}
-      transfers={transfers}
-      payments={payments}
+      expenses={ledger.expenses}
+      members={ledger.members}
+      balances={ledger.balances}
+      transfers={simplifyDebts(ledger.balances)}
+      payments={ledger.payments}
       filters={filters}
+      section={section}
       activity={activity}
-      activityFilter={activityFilter}
       activityFailed={activityFailed}
-      retryHref={pageHref(access.group.id, query)}
+      retryHref={tabHref(groupId, section, filters)}
       justArchived={query[ARCHIVED_NOTICE_PARAM] === ARCHIVED_NOTICE}
       expenseNotice={expenseNoticeText(query[EXPENSE_NOTICE_PARAM])}
     />
@@ -142,21 +189,34 @@ export default async function GroupPage({
 }
 
 /**
- * This page's own URL, rebuilt from the parameters it was opened with — every filter, both of
- * them, exactly as the reader set them.
+ * What a reader sees when the ledger could not be read (IAC-6).
  *
- * It is what the activity section's retry re-requests, which is why it is built from the raw
- * query rather than from the parsed filters: the retry has to land on the page the reader was
- * already looking at, filter and all, not on a version of it this code thought was tidier.
+ * Deliberately not the screen with empty lists in it: an empty group and an unreadable one look
+ * identical if the page renders its zero states on failure, and the reader would be told they owe
+ * nobody when the truth is that nobody answered. One sentence, one way out, and the retry lands
+ * on the section and the filters they were already looking at.
  */
-function pageHref(groupId: string, query: Record<string, string | undefined>): string {
-  const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(query)) {
-    if (typeof value === 'string' && value !== '') params.set(name, value);
-  }
-
-  const search = params.toString();
-  return search === '' ? `/groups/${groupId}` : `/groups/${groupId}?${search}`;
+function GroupFailure({ groupName, retryHref }: { groupName: string; retryHref: string }) {
+  return (
+    <AppShell place={groupName}>
+      <main className="mx-auto flex w-full max-w-[640px] flex-1 flex-col justify-center gap-5 px-4 py-5">
+        <section
+          aria-labelledby="group-error"
+          className="flex flex-col items-start gap-3 rounded-token border border-danger/40 bg-surface p-4 shadow-sm"
+        >
+          <h1 id="group-error" className="text-page font-semibold text-ink">
+            We could not load this group
+          </h1>
+          <p className="text-body text-ink-muted">
+            Nothing has been lost — the group did not come back this time. Try again.
+          </p>
+          <Link className={buttonClasses('primary', 'md')} href={retryHref}>
+            Retry
+          </Link>
+        </section>
+      </main>
+    </AppShell>
+  );
 }
 
 function GroupDetail({
@@ -167,8 +227,8 @@ function GroupDetail({
   transfers,
   payments,
   filters,
+  section,
   activity,
-  activityFilter,
   activityFailed,
   retryHref,
   justArchived,
@@ -181,8 +241,8 @@ function GroupDetail({
   transfers: Transfer[];
   payments: PaymentRow[];
   filters: ReturnType<typeof expenseFiltersFrom>;
+  section: GroupSection;
   activity: ActivityRow[];
-  activityFilter: ActivityFilter;
   activityFailed: boolean;
   retryHref: string;
   justArchived: boolean;
@@ -191,43 +251,38 @@ function GroupDetail({
   const { group, membership, user } = access;
   const isOwner = membership.role === 'owner';
   const filtered = filters.memberId !== null || filters.category !== null || filters.search !== null;
+  const newExpenseHref = `/groups/${group.id}/expenses/new`;
 
-  // What the chip row re-submits: the expense filter exactly as it stands, so choosing a chip
-  // cannot clear it (AC-8). Only values that are set travel — an empty parameter is noise the
-  // reader did not ask for, and a Clear that left one behind would be a Clear that did nothing.
-  const activityPreserved: PreservedParams = {
-    ...(filters.memberId ? { [EXPENSE_MEMBER_PARAM]: filters.memberId } : {}),
-    ...(filters.category ? { [EXPENSE_CATEGORY_PARAM]: filters.category } : {}),
-    ...(filters.search ? { [EXPENSE_SEARCH_PARAM]: filters.search } : {}),
-  };
-
-  // And the other direction: the expense form's own Clear resets the expense filter and leaves
-  // the chip where it was, which is why it goes to a URL that still carries the chip.
-  const clearExpenseHref =
-    activityFilter === 'all'
-      ? `/groups/${group.id}`
-      : `/groups/${group.id}?${ACTIVITY_FILTER_PARAM}=${encodeURIComponent(activityFilter)}`;
-
-  // Every current member is on the debts card even at zero — a row that vanished would read as
-  // somebody missing — while a departed seat (ADR-0007) is only worth a row when it still holds
-  // a balance: at zero it is a name the group can do nothing about.
+  // Every current member is on the balances card even at zero — a row that vanished would read as
+  // somebody missing — while a departed seat (ADR-0007) is only worth a row when it still holds a
+  // balance: at zero it is a name the group can do nothing about.
   const currentIds = new Set(members.map((member) => member.id));
   const shown = balances.filter(
     (balance) => currentIds.has(balance.membershipId) || balance.balanceMinor !== 0,
   );
-  const ownMinor = balances.find((balance) => balance.membershipId === membership.id)?.balanceMinor ?? 0;
+
+  const ownMinor =
+    balances.find((balance) => balance.membershipId === membership.id)?.balanceMinor ?? 0;
   const settled = transfers.length === 0;
-  const bannerNote = settled
-    ? 'Everyone is settled up — nobody owes anybody.'
+  // The settled case says what the *number* means and leaves the group-wide sentence to the banner
+  // below it: "Everyone is settled up — nobody owes anybody" is the banner's line, and printing it
+  // here too stacked the same sentence twice under the hero.
+  const heroNote = settled
+    ? 'You are settled up here.'
     : ownMinor > 0
-      ? 'You are owed in this group. The card below shows who pays you.'
+      ? 'You are owed in this group.'
       : ownMinor < 0
-        ? 'You owe in this group. The card below shows who to pay and how much.'
-        : 'You are settled up here. The card below shows what the others owe each other.';
+        ? 'You owe in this group.'
+        : 'You are settled up here — the others still owe each other.';
+
+  const excerpt = activity.slice(0, ACTIVITY_EXCERPT);
+  const balanceOf = new Map(balances.map((balance) => [balance.membershipId, balance.balanceMinor]));
 
   return (
     <AppShell place={group.name} viewer={{ displayName: user.displayName }}>
-      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
+      {/* The bottom padding is the phone's fixed Add-expense button: content scrolls under it
+          rather than ending behind it. */}
+      <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 pt-5 pb-24 sm:pb-5">
         {/* Where this screen sits: the group is one click from Home, and the shell's place is only
             a label, not a way back. */}
         <nav aria-label="Breadcrumb">
@@ -249,17 +304,38 @@ function GroupDetail({
           </ol>
         </nav>
 
-        <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold">{group.name}</h1>
-          <p className="text-muted">
-            {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} ·{' '}
-            {user.displayName}
-          </p>
-          <p>
-            <Link className="text-accent underline" href={`/groups/${group.id}/members`}>
-              Members and invite link
+        <header className="flex items-center gap-3">
+          <Avatar name={group.name} size={40} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <h1 className="truncate text-page font-semibold text-ink" title={group.name}>
+              {group.name}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{group.currency}</Badge>
+              {group.archived ? <Badge>Archived</Badge> : null}
+              <span className="text-secondary text-ink-muted">
+                {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type}
+              </span>
+            </div>
+          </div>
+
+          {/* Owner-only, and never for an archived group: rename and archive are the only things
+              in there, and an archived group can do neither. */}
+          {isOwner && !group.archived ? (
+            <GroupSettingsEntry groupId={group.id} groupName={group.name} />
+          ) : null}
+
+          {/* The desktop half of the primary action; the phone's is the fixed button at the end
+              of this screen. */}
+          {group.archived ? null : (
+            <Link
+              className={buttonClasses('primary', 'md', 'max-sm:hidden')}
+              href={newExpenseHref}
+            >
+              <Plus aria-hidden="true" className="size-5" />
+              Add expense
             </Link>
-          </p>
+          )}
         </header>
 
         {group.archived ? (
@@ -268,14 +344,14 @@ function GroupDetail({
               <p
                 role="status"
                 aria-live="polite"
-                className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+                className="rounded-token border border-border bg-surface p-3 text-secondary text-lent"
               >
                 {archivedNoticeText(group.name)}
               </p>
             ) : null}
             <p
               role="status"
-              className="rounded-token border border-muted/40 bg-surface p-3 text-sm"
+              className="rounded-token border border-border bg-surface p-3 text-secondary"
             >
               This group is archived. You can read it, but nothing in it can change — and you can
               still leave it.
@@ -289,287 +365,583 @@ function GroupDetail({
           <p
             role="status"
             aria-live="polite"
-            className="rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent"
+            className="rounded-token border border-border bg-surface p-3 text-secondary text-lent"
           >
             {expenseNotice}
           </p>
         ) : null}
 
-        <section
-          className="rounded-token border border-muted/20 bg-surface p-4"
-          aria-labelledby="balance-heading"
-        >
-          <h2 id="balance-heading" className="text-lg font-semibold">
-            Your balance
-          </h2>
-          <p
-            data-amount
-            className={`text-xl font-semibold ${ownMinor > 0 ? 'text-lent' : ownMinor < 0 ? 'text-owed' : ''}`}
-          >
-            {formatMinorUnits(ownMinor, group.currency)}
-          </p>
-          <p className="text-sm text-muted">{bannerNote}</p>
-        </section>
-
-        {/* The debts card sits above the expense list in the DOM, so a narrow screen stacks the two
-            in the order ui.md asks for without a second layout. */}
-        <section
-          className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4"
-          aria-labelledby="debts-heading"
-        >
-          <h2 id="debts-heading" className="text-lg font-semibold">
-            Who owes what
-          </h2>
-
-          <ul className="flex flex-col gap-2">
-            {shown.map((balance) => (
-              <li
-                key={balance.membershipId}
-                className="flex flex-wrap items-baseline justify-between gap-2"
-              >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{balance.displayName}</span>
-                  {currentIds.has(balance.membershipId) ? null : (
-                    <span className="rounded-token border border-muted/40 px-2 text-sm text-muted">
-                      No longer in the group
-                    </span>
-                  )}
-                  <span className="text-sm text-muted">
-                    {balance.balanceMinor > 0
-                      ? 'is owed'
-                      : balance.balanceMinor < 0
-                        ? 'owes'
-                        : 'is settled up'}
-                  </span>
-                </span>
-                {balance.balanceMinor === 0 ? null : (
-                  <span
-                    data-amount
-                    className={`font-semibold ${balance.balanceMinor > 0 ? 'text-lent' : 'text-owed'}`}
-                  >
-                    {formatMinorUnits(Math.abs(balance.balanceMinor), group.currency)}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          <h3 className="text-lg font-semibold">Suggested payments</h3>
-          <p className="text-sm text-muted">
-            {settled
-              ? 'Nothing to settle — the totals above are all zero.'
-              : 'Settle up records a payment between two people. It does not move money by itself.'}
-          </p>
-          <SettleUpForm
-            groupId={group.id}
-            currency={group.currency}
-            transfers={transfers}
-            archived={group.archived}
-          />
-
-          <DeletePaymentForm
-            groupId={group.id}
-            currency={group.currency}
-            payments={payments}
-            archived={group.archived}
-          />
-        </section>
-
-        <section className="flex flex-col gap-4" aria-labelledby="expenses-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="expenses-heading" className="text-lg font-semibold">
-              Expenses
+        <Card>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-caption font-medium tracking-wide text-ink-muted uppercase">
+              Your balance
             </h2>
-            {group.archived ? null : (
-              <Link
-                className="inline-flex min-h-11 items-center rounded-token bg-accent px-4 font-medium text-surface"
-                href={`/groups/${group.id}/expenses/new`}
-              >
-                Add expense
-              </Link>
-            )}
+            <p
+              data-amount
+              className={`text-hero font-semibold ${
+                ownMinor > 0 ? 'text-lent' : ownMinor < 0 ? 'text-owed' : 'text-ink'
+              }`}
+            >
+              {formatMinorUnits(ownMinor, group.currency)}
+            </p>
+            <p className="text-secondary text-ink-muted">{heroNote}</p>
           </div>
 
-          {/* A plain GET form: the filter is in the URL, so the page someone is looking at is the
-              page they can send to somebody else — and it works before any JavaScript arrives. */}
-          <form
-            method="get"
-            action={`/groups/${group.id}`}
-            className="flex flex-col gap-3 rounded-token border border-muted/20 bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
-          >
-            <div className="flex flex-col gap-1 sm:w-48">
-              <label className="text-sm font-medium" htmlFor="expense-filter-member">
-                Member
-              </label>
-              <select
-                id="expense-filter-member"
-                name={EXPENSE_MEMBER_PARAM}
-                defaultValue={filters.memberId ?? ''}
-                className={INPUT_CLASSES}
-              >
-                <option value="">Everyone</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1 sm:w-48">
-              <label className="text-sm font-medium" htmlFor="expense-filter-category">
-                Category
-              </label>
-              <select
-                id="expense-filter-category"
-                name={EXPENSE_CATEGORY_PARAM}
-                defaultValue={filters.category ?? ''}
-                className={INPUT_CLASSES}
-              >
-                <option value="">All categories</option>
-                {EXPENSE_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {expenseCategoryLabel(category)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-1 flex-col gap-1">
-              <label className="text-sm font-medium" htmlFor="expense-filter-search">
-                Search descriptions
-              </label>
-              <input
-                id="expense-filter-search"
-                name={EXPENSE_SEARCH_PARAM}
-                type="search"
-                defaultValue={filters.search ?? ''}
-                className={INPUT_CLASSES}
-              />
-            </div>
-
-            {/* The chip this page's other form holds, carried through a submit of this one: a
-                browser sends only the form it submits, so without this, filtering expenses would
-                silently drop the activity chip (AC-8). */}
-            {activityFilter === 'all' ? null : (
-              <input type="hidden" name={ACTIVITY_FILTER_PARAM} value={activityFilter} />
-            )}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="submit" className={QUIET_BUTTON}>
-                Filter
-              </button>
-              {filtered ? (
-                <Link className="text-accent underline" href={clearExpenseHref}>
-                  Clear
-                </Link>
-              ) : null}
-            </div>
-          </form>
-
-          {expenses.length === 0 ? (
-            <p className="text-sm text-muted">
-              {filtered
-                ? 'No expenses match these filters.'
-                : 'No expenses yet. Add the first one and the balances will follow.'}
+          {transfers.length === 0 ? (
+            // Zero is neutral and says so in words: a settled group must never read as a debt.
+            <p className="rounded-token bg-lent-tint p-3 text-secondary text-lent">
+              Everyone is settled up — nobody owes anybody.
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {expenses.map((expense) => (
+              {/* Endpoints and amount, the identity the settle panel also keys its rows by — spelled
+                  out here rather than imported, because the panel is a client module and a server
+                  component cannot call into one. These lines carry no state, so the key only has to
+                  be stable within this list. */}
+              {transfers.slice(0, TRANSFER_LINES).map((transfer) => (
                 <li
-                  key={expense.id}
-                  className="flex flex-col gap-2 rounded-token border border-muted/20 bg-surface p-3"
+                  key={`${transfer.fromMembershipId}:${transfer.toMembershipId}:${transfer.amountMinor}`}
+                  className="flex flex-wrap items-baseline justify-between gap-2"
                 >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-medium">{expense.description}</span>
-                    <span data-amount className="font-semibold">
-                      {formatMinorUnits(expense.amountMinor, group.currency)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted">
-                    <time dateTime={expense.date}>{expense.date}</time> ·{' '}
-                    {expenseCategoryLabel(expense.category)} ·{' '}
-                    {SPLIT_TYPE_LABELS[expense.splitType]} · Paid by{' '}
-                    {expense.payers
-                      .map((payer) =>
-                        expense.payers.length === 1
-                          ? payer.displayName
-                          : `${payer.displayName} ${formatMinorUnits(payer.amountMinor, group.currency)}`,
-                      )
-                      .join(', ')}
-                  </p>
-                  {group.archived ? null : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        className="inline-flex min-h-11 items-center rounded-token border border-muted/40 px-4 font-medium"
-                        href={`/groups/${group.id}/expenses/${expense.id}/edit`}
-                      >
-                        Edit
-                      </Link>
-                      <DeleteExpenseForm
-                        groupId={group.id}
-                        expenseId={expense.id}
-                        description={expense.description}
-                      />
-                    </div>
-                  )}
+                  <span
+                    className={`text-body ${directionTone(transfer, membership.id)}`}
+                  >
+                    {transferWords(transfer, membership.id)}
+                  </span>
+                  <span
+                    data-amount
+                    className={`font-semibold ${directionTone(transfer, membership.id)}`}
+                  >
+                    {formatMinorUnits(transfer.amountMinor, group.currency)}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
-        </section>
 
-        {isOwner && !group.archived ? (
-          <section
-            className="flex flex-col gap-4 rounded-token border border-muted/20 bg-surface p-4"
-            aria-labelledby="settings-heading"
-          >
-            <h2 id="settings-heading" className="text-lg font-semibold">
-              Group settings
-            </h2>
-            <RenameGroupForm groupId={group.id} name={group.name} />
-            <ArchiveGroupForm groupId={group.id} groupName={group.name} />
-            <p className="text-sm text-muted">
-              Removing members and leaving live with the member list.
-            </p>
-            <p>
-              <Link className="text-accent underline" href={`/groups/${group.id}/members`}>
-                Go to members
+          {transfers.length > TRANSFER_LINES ? (
+            <Link
+              className="text-secondary font-medium text-accent underline-offset-4 hover:underline"
+              href={tabHref(group.id, 'balances', filters)}
+            >
+              +{transfers.length - TRANSFER_LINES} more in Balances and settle up
+            </Link>
+          ) : null}
+
+          <div className="flex flex-wrap gap-3">
+            {group.archived ? null : (
+              <Link className={buttonClasses('primary', 'md')} href={newExpenseHref}>
+                Add expense
               </Link>
-            </p>
-          </section>
+            )}
+            <Link
+              className={buttonClasses('secondary', 'md')}
+              href={tabHref(group.id, 'balances', filters)}
+            >
+              Settle up
+            </Link>
+          </div>
+        </Card>
+
+        {/* The four panels, one of them in the document at a time. A nav of links rather than a
+            client-side toggle: the section is in the URL, so it survives a reload, a shared link
+            and the reader's own Back button. */}
+        <nav aria-label="Group sections">
+          <ul className="flex gap-1 overflow-x-auto">
+            {GROUP_SECTIONS.map((value) => {
+              const current = value === section;
+              return (
+                <li key={value} className="shrink-0">
+                  <Link
+                    href={tabHref(group.id, value, filters)}
+                    aria-current={current ? 'page' : undefined}
+                    className={`inline-flex min-h-11 items-center rounded-token px-3 text-secondary font-medium ${
+                      current
+                        ? 'bg-accent-tint text-accent'
+                        : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
+                    }`}
+                  >
+                    {GROUP_SECTION_LABELS[value]}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {section === 'expenses' ? (
+          <Panel id="panel-expenses" label={GROUP_SECTION_LABELS.expenses}>
+            <FilterDisclosure summary={filterSummary(filters, members)}>
+              {/* A plain GET form: the filter is in the URL, so the page someone is looking at is
+                  the page they can send to somebody else — and it works before any JavaScript
+                  arrives, which is also what lets the disclosure be built out of a checkbox
+                  rather than a hook. */}
+              <form
+                method="get"
+                action={`/groups/${group.id}`}
+                className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+              >
+                <input type="hidden" name={GROUP_SECTION_PARAM} value="expenses" />
+
+                <div className="flex flex-col gap-1 sm:w-48">
+                  <label className="text-secondary font-medium text-ink" htmlFor="expense-filter-member">
+                    Member
+                  </label>
+                  <select
+                    id="expense-filter-member"
+                    name={EXPENSE_MEMBER_PARAM}
+                    defaultValue={filters.memberId ?? ''}
+                    className={INPUT_CLASSES}
+                  >
+                    <option value="">Everyone</option>
+                    {members.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1 sm:w-48">
+                  <label
+                    className="text-secondary font-medium text-ink"
+                    htmlFor="expense-filter-category"
+                  >
+                    Category
+                  </label>
+                  <select
+                    id="expense-filter-category"
+                    name={EXPENSE_CATEGORY_PARAM}
+                    defaultValue={filters.category ?? ''}
+                    className={INPUT_CLASSES}
+                  >
+                    <option value="">All categories</option>
+                    {EXPENSE_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {expenseCategoryLabel(category)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-1 flex-col gap-1">
+                  <label
+                    className="text-secondary font-medium text-ink"
+                    htmlFor="expense-filter-search"
+                  >
+                    Search descriptions
+                  </label>
+                  <input
+                    id="expense-filter-search"
+                    name={EXPENSE_SEARCH_PARAM}
+                    type="search"
+                    defaultValue={filters.search ?? ''}
+                    className={INPUT_CLASSES}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="submit" className={QUIET_BUTTON}>
+                    Filter
+                  </button>
+                  {filtered ? (
+                    <Link
+                      className="font-medium text-accent underline-offset-4 hover:underline"
+                      href={tabHref(group.id, 'expenses', {
+                        memberId: null,
+                        category: null,
+                        search: null,
+                      })}
+                    >
+                      Clear
+                    </Link>
+                  ) : null}
+                </div>
+              </form>
+            </FilterDisclosure>
+
+            {expenses.length === 0 ? (
+              filtered ? (
+                <p className="text-secondary text-ink-muted">No expenses match these filters.</p>
+              ) : (
+                <EmptyState
+                  icon={<ReceiptText className="size-5" />}
+                  title="No expenses yet"
+                  body={
+                    members.length <= 1
+                      ? 'Add what you paid for and the balances will follow. You can also add people to the group and split with them.'
+                      : 'Add the first expense, and the balances will follow.'
+                  }
+                  action={
+                    group.archived ? undefined : (
+                      <Link className={buttonClasses('primary', 'md')} href={newExpenseHref}>
+                        Add expense
+                      </Link>
+                    )
+                  }
+                />
+              )
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {expenses.map((expense) => (
+                  <li key={expense.id}>
+                    <ListRow
+                      leading={
+                        <Avatar
+                          name={expense.payers[0]?.displayName ?? ''}
+                          memberId={expense.payers[0]?.membershipId}
+                        />
+                      }
+                      title={expense.description}
+                      meta={
+                        <>
+                          <ExpenseDate date={expense.date} /> ·{' '}
+                          {expenseCategoryLabel(expense.category)} ·{' '}
+                          {payerWords(expense.payers, membership.id)}
+                        </>
+                      }
+                      trailing={
+                        <span className="flex items-center gap-2">
+                          {/* In ink, with the direction in the payer words beside it: an expense
+                              row is a fact about what happened, not a claim about who owes whom,
+                              and the totals that are claims live on the balances panel. */}
+                          <span data-amount className="font-semibold text-ink">
+                            {formatMinorUnits(expense.amountMinor, group.currency)}
+                          </span>
+                          {group.archived ? null : (
+                            <ExpenseRowMenu
+                              groupId={group.id}
+                              expenseId={expense.id}
+                              description={expense.description}
+                            />
+                          )}
+                        </span>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
         ) : null}
 
-        {/* Last, which is where ui.md puts the excerpt in this screen's regions: the ledger first,
-            then the record of how it got that way. The failure is the one section failing, so it
-            is the one section that says so — with the retry on the URL the reader was already
-            looking at, filter and all (TR-11). */}
-        <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
-          <h2 id="activity-heading" className="text-lg font-semibold">
-            Recent activity
-          </h2>
+        {section === 'balances' ? (
+          <Panel id="panel-balances" label={GROUP_SECTION_LABELS.balances}>
+            <Card title="Who owes what">
+              <ul className="flex flex-col gap-2">
+                {shown.map((balance) => (
+                  <li key={balance.membershipId}>
+                    <ListRow
+                      leading={<Avatar name={balance.displayName} memberId={balance.membershipId} />}
+                      title={
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate">{balance.displayName}</span>
+                          {/* ADR-0007: a seat whose membership row is gone still owns its ledger
+                              rows, and its net is still true — so it renders with the name it was
+                              last recorded under, labelled for what it is. */}
+                          {currentIds.has(balance.membershipId) ? null : (
+                            <span className="shrink-0">
+                              <Badge>No longer in the group</Badge>
+                            </span>
+                          )}
+                        </span>
+                      }
+                      trailing={
+                        <span className="flex flex-col items-end">
+                          <span className="text-caption text-ink-muted">
+                            {balanceWords(balance.balanceMinor, balance.membershipId === membership.id)}
+                          </span>
+                          <span
+                            data-amount
+                            className={`font-semibold ${balanceTone(balance.balanceMinor)}`}
+                          >
+                            {formatMinorUnits(Math.abs(balance.balanceMinor), group.currency)}
+                          </span>
+                        </span>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            </Card>
 
-          {activityFailed ? (
-            <div className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4">
-              <p className="font-medium">We could not load this group&rsquo;s activity</p>
-              <p className="text-sm text-muted">
-                Everything else on this page is up to date. The feed did not come back this time.
+            <Card title="Settle up">
+              <p className="text-secondary text-ink-muted">
+                {settled
+                  ? 'Nothing to settle — the totals above are all zero.'
+                  : 'Settle up records a payment between two people. It does not move money by itself.'}
               </p>
-              <Link className="text-accent underline" href={retryHref}>
-                Retry
-              </Link>
-            </div>
-          ) : (
-            <ActivityFeed
-              rows={activity}
-              filter={activityFilter}
-              action={`/groups/${group.id}`}
-              preserved={activityPreserved}
-              emptyText="No activity yet. Adding an expense, recording a payment or changing the members all show up here."
-            />
-          )}
-        </section>
+              <SettleUpForm
+                groupId={group.id}
+                currency={group.currency}
+                transfers={transfers}
+                archived={group.archived}
+              />
+              <DeletePaymentForm
+                groupId={group.id}
+                currency={group.currency}
+                payments={payments}
+                archived={group.archived}
+              />
+            </Card>
+          </Panel>
+        ) : null}
+
+        {section === 'activity' ? (
+          <Panel id="panel-activity" label={GROUP_SECTION_LABELS.activity}>
+            {activityFailed ? (
+              <div className="flex flex-col items-start gap-3 rounded-token border border-danger/40 bg-surface p-4 shadow-sm">
+                <p className="font-medium text-ink">We could not load this group&rsquo;s activity</p>
+                <p className="text-secondary text-ink-muted">
+                  Everything else on this page is up to date. The feed did not come back this
+                  time.
+                </p>
+                <Link className={buttonClasses('secondary', 'sm')} href={retryHref}>
+                  Retry
+                </Link>
+              </div>
+            ) : (
+              <>
+                {excerpt.length === 0 ? (
+                  <p className="text-secondary text-ink-muted">
+                    No activity yet. Adding an expense, recording a payment or changing the
+                    members all show up here.
+                  </p>
+                ) : (
+                  // The same rows the full feed renders, from the same component (AC-13): an
+                  // excerpt that drew its own markup would be a second opinion about the same
+                  // events. No chips here — five newest rows are not a filterable list, and the
+                  // full feed is one link away.
+                  <ActivityRows rows={excerpt} />
+                )}
+                <Link
+                  className="text-secondary font-medium text-accent underline-offset-4 hover:underline"
+                  href={`/activity?${ACTIVITY_GROUP_PARAM}=${group.id}`}
+                >
+                  View all activity
+                </Link>
+              </>
+            )}
+          </Panel>
+        ) : null}
+
+        {section === 'members' ? (
+          <Panel id="panel-members" label={GROUP_SECTION_LABELS.members}>
+            <ul className="flex flex-col gap-2">
+              {members.slice(0, MEMBERS_EXCERPT).map((member) => (
+                <li key={member.id}>
+                  <ListRow
+                    leading={<Avatar name={member.displayName} memberId={member.id} />}
+                    title={member.displayName}
+                    meta={memberBadges(member, membership.id)}
+                    trailing={
+                      <span className="flex flex-col items-end">
+                        <span className="text-caption text-ink-muted">
+                          {balanceWords(
+                            balanceOf.get(member.id) ?? 0,
+                            member.id === membership.id,
+                          )}
+                        </span>
+                        <span
+                          data-amount
+                          className={`font-semibold ${balanceTone(balanceOf.get(member.id) ?? 0)}`}
+                        >
+                          {formatMinorUnits(Math.abs(balanceOf.get(member.id) ?? 0), group.currency)}
+                        </span>
+                      </span>
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+            <Link
+              className="text-secondary font-medium text-accent underline-offset-4 hover:underline"
+              href={`/groups/${group.id}/members`}
+            >
+              View all members
+            </Link>
+          </Panel>
+        ) : null}
       </main>
+
+      {/* The phone's half of the primary action: fixed where a thumb already is, and out of the
+          flow so it never covers the row being read (the main element carries its height). */}
+      {group.archived ? null : (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-4 sm:hidden">
+          <Link className={buttonClasses('primary', 'md', 'w-full')} href={newExpenseHref}>
+            <Plus aria-hidden="true" className="size-5" />
+            Add expense
+          </Link>
+        </div>
+      )}
     </AppShell>
+  );
+}
+
+/**
+ * One section of the group screen.
+ *
+ * The heading is `sr-only`: the tab the reader just pressed already names the panel, and printing
+ * the name a second time would be the screen telling them what they did. The heading is still
+ * there for the reason every region has one — anything navigating by heading or landmark can find
+ * the four sections, and there is exactly one `h1` on the page, on the group's name.
+ */
+function Panel({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-4">
+      <h2 id={id} className="sr-only">
+        {label}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The search and filter form, folded away until it is asked for on a phone (IAC-3).
+ *
+ * A checkbox and a label rather than `<details>` or a hook, and that is the whole point: which
+ * state the disclosure starts in depends on the width of the screen, and the only thing that
+ * knows the width at first paint is the stylesheet. A `<details>` server-rendered open would
+ * flash open and then collapse on every phone; server-rendered closed would leave desktop readers
+ * folding it out until hydration. A checkbox costs one hidden input — still focusable, with its
+ * focus ring drawn on the label — and gets both widths right before any JavaScript runs.
+ *
+ * The label is `sm:hidden`, so on desktop the form is simply there with no summary above it, and
+ * the whole thing degrades to a plain GET form when scripting is off.
+ */
+function FilterDisclosure({
+  summary,
+  children,
+}: {
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col rounded-token border border-border bg-surface p-3 shadow-sm sm:p-4">
+      <input id={FILTER_CONTROL_ID} type="checkbox" className="peer sr-only" />
+      <label
+        htmlFor={FILTER_CONTROL_ID}
+        className="flex min-h-11 cursor-pointer items-center gap-2 font-medium text-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-checked:[&>svg]:rotate-180 sm:hidden"
+      >
+        <SlidersHorizontal aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
+        <span className="min-w-0 flex-1 truncate">{summary}</span>
+        <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
+      </label>
+      <div className="hidden pt-3 peer-checked:block sm:block sm:pt-0">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The list of every parameter a tab link carries.
+ *
+ * The section is the one thing that changes; the expense filter rides along untouched, so
+ * switching to the balances and back does not silently clear what somebody searched for (AC-3).
+ * It is also the retry URL for a failed ledger read, which is why the section is written out
+ * explicitly rather than left to the default.
+ */
+function tabHref(
+  groupId: string,
+  section: GroupSection,
+  filters: ReturnType<typeof expenseFiltersFrom>,
+): string {
+  const params = new URLSearchParams();
+  if (filters.memberId) params.set(EXPENSE_MEMBER_PARAM, filters.memberId);
+  if (filters.category) params.set(EXPENSE_CATEGORY_PARAM, filters.category);
+  if (filters.search) params.set(EXPENSE_SEARCH_PARAM, filters.search);
+  params.set(GROUP_SECTION_PARAM, section);
+
+  return `/groups/${groupId}?${params.toString()}`;
+}
+
+/**
+ * What the folded filter says about itself while it is folded.
+ *
+ * A collapsed disclosure with filters still applied is the one state where a reader could believe
+ * they are looking at everything, so the active ones are named on the summary that hides them.
+ */
+function filterSummary(
+  filters: ReturnType<typeof expenseFiltersFrom>,
+  members: MemberRow[],
+): string {
+  const parts: string[] = [];
+
+  if (filters.memberId) {
+    const name = members.find((member) => member.id === filters.memberId)?.displayName;
+    parts.push(name ?? 'One member');
+  }
+  if (filters.category) parts.push(expenseCategoryLabel(filters.category));
+  if (filters.search) parts.push(`“${filters.search}”`);
+
+  return parts.length === 0 ? 'Search and filters' : `Filters: ${parts.join(' · ')}`;
+}
+
+/** "You paid" / "Bo paid" / "You and Bo paid" — who put the money in, never a direction. */
+function payerWords(payers: ExpensePayerRow[], viewerMembershipId: string): string {
+  const names = payers.map((payer) =>
+    payer.membershipId === viewerMembershipId ? 'You' : payer.displayName,
+  );
+  if (names.length === 0) return 'Nobody paid';
+  if (names.length === 1) return `${names[0]} paid`;
+
+  const last = names[names.length - 1];
+  return `${names.slice(0, -1).join(', ')} and ${last} paid`;
+}
+
+/** "You owe Bo" / "Bo owes you" / "Bo owes Cy" — the transfer, in words, in the reader's terms. */
+function transferWords(transfer: Transfer, viewerMembershipId: string): string {
+  const from =
+    transfer.fromMembershipId === viewerMembershipId ? 'You' : transfer.fromDisplayName;
+  const to = transfer.toMembershipId === viewerMembershipId ? 'you' : transfer.toDisplayName;
+  return `${from} ${transfer.fromMembershipId === viewerMembershipId ? 'owe' : 'owes'} ${to}`;
+}
+
+/** Colour only where the reader has a side in it, so a stranger's transfer is never red. */
+function directionTone(transfer: Transfer, viewerMembershipId: string): string {
+  if (transfer.fromMembershipId === viewerMembershipId) return 'text-owed';
+  if (transfer.toMembershipId === viewerMembershipId) return 'text-lent';
+  return 'text-ink';
+}
+
+/** The direction of one net, in words — the colour beside it is never the only carrier. */
+function balanceWords(balanceMinor: number, isViewer: boolean): string {
+  if (balanceMinor === 0) return 'Settled up';
+  if (isViewer) return balanceMinor > 0 ? 'You are owed' : 'You owe';
+  return balanceMinor > 0 ? 'is owed' : 'owes';
+}
+
+/** Zero stays in ink: a settled row is not a debt and must not wear a debt's colour. */
+function balanceTone(balanceMinor: number): string {
+  if (balanceMinor > 0) return 'text-lent';
+  if (balanceMinor < 0) return 'text-owed';
+  return 'text-ink';
+}
+
+/** The pills that say what a member's seat is, in the words the members page already uses. */
+function memberBadges(member: MemberRow, viewerMembershipId: string): ReactNode {
+  const badges: { key: string; label: string; tone?: 'accent' }[] = [];
+
+  if (member.id === viewerMembershipId) badges.push({ key: 'you', label: 'You', tone: 'accent' });
+  if (member.role === 'owner') badges.push({ key: 'owner', label: 'Owner' });
+  if (member.userId === null) badges.push({ key: 'placeholder', label: 'Hasn\u2019t joined yet' });
+
+  if (badges.length === 0) return undefined;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {badges.map((badge) => (
+        <Badge key={badge.key} tone={badge.tone}>
+          {badge.label}
+        </Badge>
+      ))}
+    </span>
   );
 }

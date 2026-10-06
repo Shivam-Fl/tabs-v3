@@ -41,6 +41,20 @@ export const DEFAULT_ACTIVITY_FILTER: ActivityFilter = 'all';
 /** The query key the chip form writes and both pages read. */
 export const ACTIVITY_FILTER_PARAM = 'activity';
 
+/**
+ * The query key that scopes the cross-group feed to one group (IAC-2).
+ *
+ * The group page's excerpt is the newest five rows of one group and it links here; without this
+ * parameter that link would land the reader on every group at once, which is a different screen
+ * from the one the excerpt was showing them. It is a **page-level filter, not a read**: the rows
+ * are the caller's own either way, and this narrows what is rendered by `row.groupId`, so no
+ * query, endpoint or index changes for it.
+ *
+ * It lives here, beside the filter key, so the page that writes the link and the page that reads
+ * the parameter cannot drift into two spellings of the same thing.
+ */
+export const ACTIVITY_GROUP_PARAM = 'group';
+
 export const ACTIVITY_FILTER_LABELS: Record<ActivityFilter, string> = {
   all: 'All',
   expenses: 'Expenses',

@@ -75,5 +75,81 @@
     "decided_at": "2026-10-06T04:00:55.641Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "On the members page, after removing a member of a group whose name is an 80-character unbroken string, the removal notice wraps inside the 375px viewport and document.documentElement.scrollWidth equals 375 (no horizontal scroll); the full member and group names remain visible (wrapped, not truncated).",
+        "how_to_verify": "Sign up, create a group named with 80 'x' characters, add a placeholder member, remove them, land on /groups/<id>/members?removed=…, set viewport to 375px wide and read document.documentElement.scrollWidth.",
+        "id": "AC-1"
+      },
+      {
+        "check": "On the group page of an archived group whose name is an 80-character unbroken string, the 'is archived' notice wraps inside the 375px viewport and document.documentElement.scrollWidth equals 375 (no horizontal scroll); the full group name remains visible (wrapped, not truncated).",
+        "how_to_verify": "Sign up, create a group named with 80 'x' characters, archive it, open /groups/<id> at a 375px viewport and read document.documentElement.scrollWidth.",
+        "id": "AC-2"
+      },
+      {
+        "check": "The unit case rendering MembersPanel with removedNoticeText built from an 80-character unbroken group name asserts the notice tag carries break-words and still contains the full name.",
+        "how_to_verify": "CI runs app/groups/[id]/members/archived-readonly.test.ts case 'wraps a max-length unbroken group name instead of letting it widen the page'.",
+        "id": "AC-3",
+        "verify": "test"
+      }
+    ],
+    "approach": "Apply the exact one-class fix PR #45 used for the ?left= notice (LeftGroupNotice in components/home-panels.tsx:487, proven by app/home.test.ts:524-535) to its two remaining siblings: add break-words to the removed-notice <p> in MembersPanel (components/groups-panels.tsx:717-724) and to the just-archived notice <p> in app/groups/[id]/page.tsx:267-274. Add one unit case mirroring the home wrap case that renders MembersPanel with removedNoticeText built from an 80-character unbroken group name and asserts the notice tag carries break-words. The archived notice lives inline in a Server Component page that unit tests cannot render, so it is covered by browser acceptance AC-2. Drop the third item (the ?left= leave notice): it already carries break-words with a passing unit case, so there is nothing to implement.",
+    "confidence": 85,
+    "confidence_rationale": "Both remaining defects were confirmed line-by-line in the current tree and share the exact proven shape of the already-fixed BUG-1; the fix is a single already-proven class in each place with no logic, copy, or contract change.",
+    "evidence": [
+      "components/groups-panels.tsx:717-724: removed-notice <p role=status> class is 'rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent' with no break-words while rendering removedNoticeText(memberName, groupName), both unbounded user input.",
+      "app/groups/[id]/page.tsx:267-274: just-archived <p role=status> class is 'rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent' with no break-words while rendering archivedNoticeText(group.name), an 80-char-maximum user value (GROUP_NAME_MAX, lib/groups/validation.ts:21).",
+      "components/home-panels.tsx:482-492: LeftGroupNotice already carries break-words with a comment citing AC-11, and app/home.test.ts:524-535 asserts tagFor(html, name) contains break-words — the QA leave-notice item is already fixed on this branch, so it is dropped rather than re-implemented."
+    ],
+    "files": [
+      {
+        "action": "edit",
+        "change": "Add break-words to the removed-notice <p role=status> className (line ~720), changing 'rounded-token border border-border bg-lent-tint p-3 text-secondary text-lent' to include break-words, mirroring LeftGroupNotice. No other markup, copy, or logic change.",
+        "path": "components/groups-panels.tsx",
+        "why": "This <p> renders removedNoticeText(memberName, groupName); an 80-character unbroken group or member name sets the document width past the 375px viewport without overflow-wrap."
+      },
+      {
+        "action": "edit",
+        "change": "Add break-words to the just-archived notice <p role=status> className (line ~271), changing 'rounded-token border border-muted/40 bg-surface p-3 text-sm text-lent' to include break-words, mirroring LeftGroupNotice. No other markup, copy, or logic change.",
+        "path": "app/groups/[id]/page.tsx",
+        "why": "This <p> renders archivedNoticeText(group.name); an 80-character unbroken group name sets the document width past the 375px viewport without overflow-wrap."
+      }
+    ],
+    "issue": 49,
+    "kind": "bug",
+    "out_of_scope": [
+      "The ?left= leave notice on Home (LeftGroupNotice): already carries break-words with a passing wrap case (app/home.test.ts:524) — verified done, not re-implemented.",
+      "Invite/expense fixed-string notices (inviteNoticeText/expenseNoticeText): closed-set strings with no interpolated names, no wrapping risk, untouched.",
+      "The static archived-state banner ('This group is archived. You can read it…') and other fixed-string notices: no interpolated names, untouched."
+    ],
+    "qa_script": [
+      "Sign up a fresh account at /signup.",
+      "Create a group named with 80 'x' characters (GROUP_NAME_MAX, no spaces).",
+      "Add a placeholder member by name, then remove them; on the members page observe the removal notice at a 375px viewport and confirm document.documentElement.scrollWidth is 375.",
+      "Archive the same group; on /groups/<id> observe the 'is archived' notice at a 375px viewport and confirm document.documentElement.scrollWidth is 375.",
+      "Repeat both pages at 1280px to confirm no visual regression on desktop."
+    ],
+    "reproduced": true,
+    "risks": [
+      "The archived notice lives inline in a Server Component page, so no unit test can render it; its coverage is browser acceptance AC-2 plus the shared one-class pattern.",
+      "Group/member names are user input reflected into these sentences; the change only affects wrapping, not escaping — existing escaping behaviour is untouched."
+    ],
+    "tests": [
+      {
+        "action": "edit",
+        "cases": [
+          "renders the removal notice as the panel's status slot with role=status and aria-live=polite",
+          "wraps a max-length unbroken group name instead of letting it widen the page: render MembersPanel with removedNotice = removedNoticeText('Bo', 'x'.repeat(GROUP_NAME_MAX)), assert the markup still contains the full name and tagFor(html, name) contains break-words"
+        ],
+        "path": "app/groups/[id]/members/archived-readonly.test.ts"
+      }
+    ],
+    "understanding": "Issue #49 collects three notice-wrapping follow-ups from #34/#45: the ?left= leave notice on Home, and two siblings with the identical defect shape — the member-removed notice (MembersPanel in components/groups-panels.tsx) and the just-archived notice (app/groups/[id]/page.tsx) — each rendering an interpolated group/member name in a plain <p> with no word-breaking, so an 80-character unbroken name (GROUP_NAME_MAX) pushes scrollWidth past a 375px viewport. Verification against the current tree shows the leave notice is already fixed (break-words at home-panels.tsx:487 with a passing wrap case), while the two siblings still lack break-words. Scope is therefore the same one-class treatment in those two <p> elements plus a matching unit case.",
+    "version": 1
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-06T04:04:28.615Z",
+  "validated_ac_changes": []
 }

@@ -543,14 +543,16 @@ function GroupDetail({
                   key={`${transfer.fromMembershipId}:${transfer.toMembershipId}:${transfer.amountMinor}`}
                   className="flex flex-wrap items-baseline justify-between gap-2"
                 >
+                  {/* min-w-0: overflow-wrap cannot lower a flex item's min-content floor.
+                      ml-auto keeps the amount right when the name takes the line. */}
                   <span
-                    className={`text-body ${directionTone(transfer, membership.id)}`}
+                    className={`min-w-0 break-words text-body ${directionTone(transfer, membership.id)}`}
                   >
                     {transferWords(transfer, membership.id)}
                   </span>
                   <span
                     data-amount
-                    className={`font-semibold tabular-nums ${directionTone(transfer, membership.id)}`}
+                    className={`ml-auto font-semibold tabular-nums ${directionTone(transfer, membership.id)}`}
                   >
                     {formatMinorUnits(transfer.amountMinor, group.currency)}
                   </span>

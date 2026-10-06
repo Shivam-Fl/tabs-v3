@@ -574,10 +574,22 @@ jobs:
           REJECTED_HEAD: ${{ needs.prepare.outputs.rejected_head }}
         run: |
           git fetch _out/branch.bundle "refs/heads/$BRANCH:refs/heads/$BRANCH"
+          # A GitHub 5xx or a dropped connection is tried again here: tabs-v3 #35's push got an
+          # Internal Server Error, and the cooldown that answered it re-ran the whole agent session
+          # for a push. A rejection — a moved branch, a lease — is an answer, and fails at once.
+          push() {
+            for i in 1 2 3; do
+              out=$(git push "$@" 2>&1) && { echo "$out"; return 0; }
+              echo "$out"
+              echo "$out" | grep -qiE 'Internal Server Error|HTTP 50[0-9]|returned error: 50[0-9]|hung up unexpectedly|early EOF|RPC failed' || return 1
+              sleep $((i * ${PUSH_BACKOFF_SECONDS:-20}))
+            done
+            return 1
+          }
           if [ "$FRESH" = "true" ]; then
-            git push --force-with-lease="refs/heads/$BRANCH:$REJECTED_HEAD" origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
+            push --force-with-lease="refs/heads/$BRANCH:$REJECTED_HEAD" origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
           else
-            git push origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
+            push origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
           fi
           echo "pushed=true" >> "$GITHUB_OUTPUT"
           echo "head=$(git rev-parse "refs/heads/$BRANCH")" >> "$GITHUB_OUTPUT"

@@ -53,8 +53,14 @@ vi.mock('next/navigation', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 const { signin, signOut, signup, updateProfile } = await import('./actions');
-const { IDLE_AUTH_STATE, NEUTRAL_CREDENTIALS_MESSAGE, SIGNUP_SUCCESS_MESSAGE, THROTTLE_MESSAGE } =
-  await import('./validation');
+const {
+  IDLE_AUTH_STATE,
+  IDLE_PROFILE_STATE,
+  NEUTRAL_CREDENTIALS_MESSAGE,
+  PROFILE_REFUSAL_MESSAGE,
+  SIGNUP_SUCCESS_MESSAGE,
+  THROTTLE_MESSAGE,
+} = await import('./validation');
 const { SESSION_COOKIE, hashToken, mintSession } = await import('./session');
 const { EMAIL_FAILURE_LIMIT, IP_FAILURE_LIMIT, recordFailure } = await import('./rate-limit');
 const { hashPassword } = await import('./password');
@@ -324,17 +330,65 @@ describe('updateProfile', () => {
 
   it('writes the display name and currency for the signed-in user only', async () => {
     await expect(
-      updateProfile(form({ displayName: 'Ada Lovelace', currency: 'usd' })),
-    ).rejects.toBeInstanceOf(redirected.Redirected);
+      updateProfile(IDLE_PROFILE_STATE, form({ displayName: 'Ada Lovelace', currency: 'usd' })),
+    ).rejects.toMatchObject({ url: '/profile?saved=1' });
 
     const [row] = await withDb((handle) => handle.db.select().from(users));
     expect(row).toMatchObject({ email, displayName: 'Ada Lovelace', currency: 'USD' });
   });
 
-  it('refuses a currency it cannot render', async () => {
-    await expect(updateProfile(form({ displayName: 'Ada', currency: 'BTC' }))).rejects.toMatchObject(
-      { url: '/profile?error=invalid' },
+  it('answers a currency it cannot render with field errors instead of a redirect', async () => {
+    // The refusal is the island's: it comes back as state so the form keeps what was typed,
+    // which a redirect to `?error=invalid` could not do (ADR-0008).
+    const [before] = await withDb((handle) => handle.db.select().from(users));
+
+    const state = await updateProfile(
+      IDLE_PROFILE_STATE,
+      form({ displayName: 'Ada', currency: 'BTC' }),
     );
+
+    expect(state).toMatchObject({ status: 'error', message: PROFILE_REFUSAL_MESSAGE });
+    expect(state.fieldErrors?.currency).toBeDefined();
+
+    const [row] = await withDb((handle) => handle.db.select().from(users));
+    expect(row).toMatchObject({ currency: before.currency, displayName: before.displayName });
+  });
+
+  it('names the display name field when the name is the empty one', async () => {
+    const state = await updateProfile(IDLE_PROFILE_STATE, form({ displayName: '', currency: 'USD' }));
+
+    expect(state.status).toBe('error');
+    expect(state.fieldErrors?.displayName).toBeDefined();
+    expect(state.fieldErrors?.currency).toBeUndefined();
+  });
+
+  it('echoes the submitted values on a refusal, so the island can restore the chosen currency', async () => {
+    // The regression PR #44 BUG-1 pinned: the island renders from the *saved* props, so a
+    // refusal that does not carry the submission back has nothing to repaint the select from
+    // and reverts it to the stored currency.
+    const state = await updateProfile(IDLE_PROFILE_STATE, form({ displayName: '', currency: 'EUR' }));
+
+    expect(state).toMatchObject({
+      status: 'error',
+      message: PROFILE_REFUSAL_MESSAGE,
+      fieldErrors: { displayName: expect.any(String) },
+      values: { displayName: '', currency: 'EUR' },
+    });
+    expect(state.fieldErrors?.currency).toBeUndefined();
+
+    const [row] = await withDb((handle) => handle.db.select().from(users));
+    expect(row).toMatchObject({ displayName: 'Ada', currency: 'INR' });
+  });
+
+  it('echoes what was submitted verbatim, not the normalized form of it', async () => {
+    // A refusal restores literally what the person chose; a normalized echo would put a
+    // different string back under the cursor than the one the field held.
+    const state = await updateProfile(
+      IDLE_PROFILE_STATE,
+      form({ displayName: '  Ada  ', currency: 'bTc' }),
+    );
+
+    expect(state.values).toEqual({ displayName: '  Ada  ', currency: 'bTc' });
   });
 
   it('sends a caller with no session to sign in rather than updating anything', async () => {
@@ -342,7 +396,7 @@ describe('updateProfile', () => {
     jar.entries.clear();
 
     await expect(
-      updateProfile(form({ displayName: 'Someone Else', currency: 'USD' })),
+      updateProfile(IDLE_PROFILE_STATE, form({ displayName: 'Someone Else', currency: 'USD' })),
     ).rejects.toMatchObject({ url: '/signin' });
 
     const [row] = await withDb(

@@ -1,5 +1,6 @@
 import { ActivityFeedSkeleton } from '../../components/activity-feed';
 import { AppShell } from '../../components/app-shell';
+import { Skeleton } from '../../components/ui';
 
 /**
  * What a cold navigation to the cross-group feed paints (TR-11).
@@ -13,6 +14,10 @@ import { AppShell } from '../../components/app-shell';
  * It holds no data and reads none, which is what makes it safe to paint before the session has
  * been checked at all. That is also why it can wear the shell: the chrome is markup with one
  * placeholder in it, and the place it names — Activity — is a constant this route already knows.
+ *
+ * The two header blocks are the shared `Skeleton`, so the fill and the `motion-safe` pulse come
+ * from the one place the rest of the app's fallbacks get them; the chip and row blocks stay in
+ * `ActivityFeedSkeleton`, which is the feed's own shape.
  */
 export default function ActivityLoading() {
   return (
@@ -26,14 +31,12 @@ export default function ActivityLoading() {
         </p>
 
         <header className="flex flex-wrap items-center justify-between gap-3">
-          <div
-            data-skeleton="title"
-            className="h-8 w-40 rounded-token bg-muted/20 motion-safe:animate-pulse"
-          />
-          <div
-            data-skeleton="nav"
-            className="h-6 w-16 rounded-token bg-muted/20 motion-safe:animate-pulse"
-          />
+          <div data-skeleton="title">
+            <Skeleton className="h-8 w-40" />
+          </div>
+          <div data-skeleton="nav">
+            <Skeleton className="h-6 w-16" />
+          </div>
         </header>
 
         <ActivityFeedSkeleton />

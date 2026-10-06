@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABELS,
@@ -15,7 +16,8 @@ import {
 } from '../lib/expenses/validation';
 import { formatBasisPoints, formatMinorUnits } from '../lib/money/format';
 import type { PaymentSnapshot } from '../lib/settle/validation';
-import { PRIMARY_BUTTON, QUIET_BUTTON } from './ui';
+import { Avatar, Button, EmptyState } from './ui';
+import { Timestamp } from './ui-interactive';
 
 /**
  * The one rendering of an activity feed (TR-10, AC-1, AC-2, AC-9).
@@ -51,6 +53,8 @@ interface ActivityFeedProps {
   showGroup?: boolean;
   /** What an empty feed with no filter says. The page knows why there is nothing to show. */
   emptyText: string;
+  /** The one thing to do about it, for the pages that know one: the cross-group page's links. */
+  emptyAction?: ReactNode;
 }
 
 export function ActivityFeed({
@@ -60,15 +64,21 @@ export function ActivityFeed({
   preserved = {},
   showGroup = false,
   emptyText,
+  emptyAction,
 }: ActivityFeedProps) {
   return (
     <div className="flex flex-col gap-3">
       <FilterChips filter={filter} action={action} preserved={preserved} />
 
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">
-          {filter === 'all' ? emptyText : 'No events match this filter.'}
-        </p>
+        filter === 'all' ? (
+          <EmptyState {...splitEmpty(emptyText)} action={emptyAction} />
+        ) : (
+          // Deliberately not the EmptyState: a filter that matched nothing is not an empty place
+          // with something to start, it is a question the chips above can answer — and the same
+          // one-line sentence it has always been is what says so (AC-4).
+          <p className="text-secondary text-ink-muted">No events match this filter.</p>
+        )
       ) : (
         <ul className="flex flex-col gap-2">
           {rows.map((row) => (
@@ -81,6 +91,21 @@ export function ActivityFeed({
 }
 
 /**
+ * The page's one sentence about why the feed is empty, set as an empty state.
+ *
+ * The pages own the copy because they are what knows the reason; the feed owns the shape it is
+ * set in, so all three cases look like the same app. The first sentence becomes the title and
+ * the rest the body, which is why a page writes its reason in one sentence followed by the
+ * consequence. A text with no second sentence repeats itself rather than rendering a blank
+ * paragraph under the title.
+ */
+function splitEmpty(text: string): { title: string; body: string } {
+  const end = text.search(/[.!?](\s|$)/);
+  if (end === -1) return { title: text, body: text };
+  return { title: text.slice(0, end + 1), body: text.slice(end + 1).trim() || text };
+}
+
+/**
  * The four chips, as one GET form.
  *
  * A submit button carrying `name=activity` is what puts the chosen value in the query string, so
@@ -88,15 +113,20 @@ export function ActivityFeed({
  * the expense filter is a *second* GET form on the same route, and a browser sends only the form
  * it submits — without these, choosing a chip would silently clear the member, category and
  * search somebody had set (AC-8).
+ *
+ * Exported because the cross-group page draws this same row above its failed-load card: the
+ * filter is where the reader was when the read failed, so the screen keeps the control that
+ * says so instead of the retry being the only thing left of it (AC-4).
  */
-function FilterChips({
+export function FilterChips({
   filter,
   action,
-  preserved,
+  preserved = {},
 }: {
   filter: ActivityFilter;
   action: string;
-  preserved: PreservedParams;
+  /** Params the chip form re-submits. The cross-group page has none to carry. */
+  preserved?: PreservedParams;
 }) {
   return (
     <form method="get" action={action} className="flex flex-wrap gap-2" aria-label="Filter activity">
@@ -104,18 +134,18 @@ function FilterChips({
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       {ACTIVITY_FILTERS.map((value) => (
-        <button
+        <Button
           key={value}
           type="submit"
           name={ACTIVITY_FILTER_PARAM}
           value={value}
+          variant={value === filter ? 'primary' : 'secondary'}
           // The chips select rather than toggle, so the pressed state is what tells a screen
           // reader which one is showing — the colour alone must not carry it.
           aria-pressed={value === filter}
-          className={value === filter ? PRIMARY_BUTTON : QUIET_BUTTON}
         >
           {ACTIVITY_FILTER_LABELS[value]}
-        </button>
+        </Button>
       ))}
     </form>
   );
@@ -173,24 +203,13 @@ function actionText(row: ActivityRow): string {
 }
 
 /**
- * When it happened (TR-11).
+ * When it happened (TR-11) is not decided here any more.
  *
- * Rendered in **UTC and labelled as such**. The invariant is that timestamps are stored in UTC
- * and shown in the viewer's time zone, and a server component cannot know the viewer's zone — the
- * agent that renders this runs wherever the app runs. Rather than silently printing the server's
- * clock and calling it the viewer's, this prints the one zone both the writer and the reader
- * agree on and says which it is. Lifting it means a client-side timestamp island, which the work
- * order rules out for this slice.
+ * A row's time is the `Timestamp` island from `components/ui-interactive.tsx`, which renders the
+ * UTC-labelled time on the server and replaces it with the viewer's own zone in an effect — so
+ * the server-rendered markup a row ships with is still the one zone both the writer and the
+ * reader agree on, and the reader's local time is what they end up looking at (AC-3).
  */
-const TIMESTAMP_FORMAT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-
-function timestampText(value: Date): string {
-  return `${TIMESTAMP_FORMAT.format(value)} UTC`;
-}
 
 /** Whether a payload is an edit's before/after rather than a payment's snapshot. */
 function isEditPayload(
@@ -217,38 +236,56 @@ function ActivityRowItem({ row, showGroup }: { row: ActivityRow; showGroup: bool
   const payment = payload && isPaymentSnapshot(payload) ? payload : null;
 
   return (
-    <li className="flex flex-col gap-1 rounded-token border border-muted/20 bg-surface p-3">
-      <p className="text-sm">
-        <span className="font-medium">{row.actorName}</span>{' '}
-        {href ? (
-          <Link className="text-accent underline" href={href}>
-            {action}
-          </Link>
-        ) : (
-          action
-        )}
-      </p>
+    <li className="flex items-start gap-3 rounded-token border border-border bg-surface p-3">
+      {/* Keyed by the name, not a membership id: the actor's name is the one identifier every
+          row carries — the join is a LEFT JOIN and the row survives its actor's account — so the
+          same person keeps the same colour across the excerpt and the cross-group feed (ui.md). */}
+      <Avatar name={row.actorName} />
 
-      <p className="text-sm text-muted">
-        <time dateTime={row.createdAt.toISOString()}>{timestampText(row.createdAt)}</time>
-        {showGroup ? (
-          <>
-            {' · '}
-            <Link className="text-accent underline" href={`/groups/${row.groupId}`}>
-              {row.groupName}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-body text-ink">
+          <span className="font-medium">{row.actorName}</span>{' '}
+          {href ? (
+            <Link className="text-accent underline underline-offset-4" href={href}>
+              {action}
             </Link>
-            {row.groupArchived ? ' (archived)' : ''}
-          </>
-        ) : null}
-      </p>
-
-      {payment ? (
-        <p data-amount className="text-sm">
-          {formatMinorUnits(payment.amountMinor, row.currency)}
+          ) : (
+            action
+          )}
         </p>
-      ) : null}
 
-      {edit ? <EditDetail payload={edit} currency={row.currency} /> : null}
+        <p className="text-secondary text-ink-muted">
+          <Timestamp value={row.createdAt} />
+          {showGroup ? (
+            <>
+              {' · '}
+              <Link
+                className="text-accent underline underline-offset-4"
+                href={`/groups/${row.groupId}`}
+              >
+                {row.groupName}
+              </Link>
+              {row.groupArchived ? ' (archived)' : ''}
+            </>
+          ) : null}
+        </p>
+
+        {payment ? (
+          // Who paid whom, in words, with the amount in the neutral ink rather than a direction
+          // colour: a recorded payment is a fact about the past, not a balance anybody still
+          // carries — and the words are what say which way it went (AC-3, ui.md's money rule).
+          <p className="flex flex-wrap items-baseline gap-1 text-secondary text-ink-muted">
+            <span className="font-medium text-ink">{payment.fromDisplayName}</span>
+            <span>paid</span>
+            <span className="font-medium text-ink">{payment.toDisplayName}</span>
+            <span data-amount className="font-semibold text-ink-muted">
+              {formatMinorUnits(payment.amountMinor, row.currency)}
+            </span>
+          </p>
+        ) : null}
+
+        {edit ? <EditDetail payload={edit} currency={row.currency} /> : null}
+      </div>
     </li>
   );
 }

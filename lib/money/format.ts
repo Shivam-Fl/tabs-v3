@@ -12,6 +12,37 @@ export function formatMinorUnits(amountMinor: number, currency: string): string 
   return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amountMinor / 100);
 }
 
+/** The tone a balance reads in — ui.md's colour role, never the only carrier of the direction. */
+export type BalanceTone = 'neutral' | 'lent' | 'owed';
+
+export interface DirectionWords {
+  /** How the balance reads, in words. Always present: direction is never colour alone (AC-6). */
+  words: string;
+  /** Which colour role the words and the amount wear. `neutral` is the settled state. */
+  tone: BalanceTone;
+}
+
+/**
+ * A balance as the sentence and the colour a row shows it in (AC-1, AC-6).
+ *
+ * Positive is what the group owes the seat, so the seat is **owed** — read from the viewer's
+ * side when the row is the viewer's own, and in the third person otherwise. Zero is neutral
+ * wherever it appears: ui.md forbids a red zero, because "settled up" is not a debt.
+ *
+ * The two perspectives are one function rather than two spellings of the same three branches,
+ * which is what keeps the home screen, the group page and the members roster from drifting into
+ * three opinions about which way a number points.
+ */
+export function directionWords(balanceMinor: number, viewerIsSubject: boolean): DirectionWords {
+  if (balanceMinor === 0) {
+    return { words: viewerIsSubject ? 'All settled up' : 'is settled up', tone: 'neutral' };
+  }
+  if (balanceMinor > 0) {
+    return { words: viewerIsSubject ? 'You are owed' : 'is owed', tone: 'lent' };
+  }
+  return { words: viewerIsSubject ? 'You owe' : 'owes', tone: 'owed' };
+}
+
 /**
  * Basis points as the percentage a person typed (3333 -> "33.33%", 9950 -> "99.5%", 10000 ->
  * "100%"), for the sentence that names a percentage split's shortfall.

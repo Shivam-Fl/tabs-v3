@@ -1,6 +1,6 @@
 # QA environment notes
 
-Facts observed by QA runs and implementer browser walks on 2026-10-05 (PRs #9, #12, #14, #16, #19, #20, #23). Facts, not orders — each one was hit in the wild at least once.
+Facts observed by QA runs and implementer browser walks on 2026-10-05 (PRs #9, #12, #14, #16, #19, #20, #23) and re-hit through 2026-10-06 (PRs #40–#54). Facts, not orders — each one was hit in the wild at least once.
 
 ## The preview on port 3000 lags the branch
 The compose preview is a static build served from before the branch's changes, and the process
@@ -15,7 +15,20 @@ merged on 2026-10-05 hit it, with three symptoms that all look like the change i
 
 The runs that needed the current build served a fresh production build of the branch on a
 spare port (3100) and walked their scripts there. Every "still broken on the preview" result
-that day traced to the stale build, not the code.
+that day traced to the stale build, not the code. Hit again by PRs #43 and #48 on
+2026-10-06 (there: chunks 404ing *and* `/` answering 500).
+
+**How to tell whether `:3000` serves the branch you are about to test** — check the build id
+against the build on disk (`_pr/.next/BUILD_ID` is where this box's only `.next` build lives):
+a matching id answers 200, a bogus id 404s. Verified-before-testing is one probe, not a
+re-run-and-hope cycle (PR #22's QA did it first).
+
+**The base preview can also wedge under Playwright traffic outright** — health timeouts and
+aborted requests rather than stale content (PR #43's BUG-1 base-check; PR #44's `/profile`
+rendered no form at all, just Next error chrome). When a before/after needs the base branch,
+the honest "before" is the pipeline's own base-branch recording job: building `main` in a
+scratch tree fails here (hardlinks across the overlay return `Invalid cross-device link`,
+and Turbopack rejects an out-of-root `node_modules` symlink).
 
 ## Console noise that is not a bug
 - A test that deliberately navigates to a route that must 404 (stranger probes, a dead invite
@@ -49,6 +62,39 @@ throttling cannot create one (it slows the wire, not the render). PR #16 pinned 
 on the streamed Flight response instead of pixels: the `<!--$?-->` marker and the
 `data-skeleton` attributes appear in the stream, ahead of the resolved content. Against real
 Neon latency the fallback paints first.
+
+## The verify suite has known noise in it
+- **`lib/db/*.test.ts` flake at vitest's default 5s timeout under parallel load.** PGlite boot
+  takes ~5.0s against a 5.0s limit; at high file parallelism one of `migrate.test.ts`,
+  `client.test.ts` or `backend-invariant.test.ts` times out, each passes alone in ~3s, and the
+  full suite is green on re-run. Seen twice independently (PRs #40 and #43). A timeout there
+  is timing, not a product regression.
+- **Vitest's GitHub Actions reporter prints an `EROFS` stack** trying to write a step summary
+  into a read-only path. Reporter noise; the exit code is what counts (PR #22).
+- **This repo has no DOM/React-render test harness** — vitest is `environment: 'node'` over
+  `lib/`, `app/` and `scripts/` only (vitest.config.ts). A client-half repaint bug cannot be
+  unit-tested here, so a work order's unit test for one passes on the unfixed tree; the
+  browser walk is the evidence, and adding jsdom/testing-library would be a new dependency a
+  plan must name (PRs #22 settled-branch region, #53 include-switch repaint).
+
+## Each `playwright test` run wipes test-results
+Playwright clears `test-results/` at every invocation, so run the *full* suite last — a `-g`
+filter run after a full run erases its traces, videos and screenshots (PR #43's QA recorded
+this flatly). The per-QA-report replay recipe stands: download the `qa-evidence`
+artifact, then `npx playwright show-report qa-evidence/playwright-report`.
+
+## Agent-box sandbox quirks (implementer sessions)
+These shaped several implementer replies on 2026-10-05/06 and will cost the next one the
+same time if rediscovered:
+- `package.json` and `scripts/` are read-only inside an implementer session: a new dependency
+  is staged at `sdlc-protected/` for the pipeline to apply (PR #40), and a scratch driver
+  written into `scripts/` cannot be deleted afterwards (PR #22 left `scripts/.tmp-ac10-walk.mjs`).
+- `npm ci` cannot run in place — the sandbox makes `node_modules/.bin` a mount point it cannot
+  remove — so CI-shaped runs happen in a scratch clone of the head with the committed lockfile
+  (PR #40).
+- `pr-demo.spec.ts` sits at the repo root, uncommitted and hidden by `.git/info/exclude`; it
+  imports `@playwright/test`, which is not a dependency, so its mere presence alone fails a
+  bare `npm run typecheck` with one `TS2307`. The committed tree typechecks clean.
 
 ## Other constraints of this box
 - Playwright runs Chromium only; no Firefox/WebKit pass is possible. Assertions are DOM- and

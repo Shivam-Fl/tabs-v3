@@ -81,7 +81,11 @@ export default async function JoinPage({
     <AppShell place={group.name} viewer={{ displayName: userName }}>
       <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center gap-5 px-4 py-5">
         <div className="flex flex-col gap-2">
-          <h1 className="text-page font-semibold text-ink">Join {group.name}</h1>
+          {/* The heading names the group in full, so an 80-character unbroken name wraps inside
+              the phone rather than setting the document width — the same one-class treatment as
+              the group page's h1, whose truncated ellipsis would stop saying which group the page
+              is about (AC-1). */}
+          <h1 className="text-page font-semibold text-ink break-words">Join {group.name}</h1>
           <p className="text-body text-ink-muted">
             {GROUP_TYPE_LABELS[group.type as GroupType] ?? group.type} · {group.currency} · invited
             by link

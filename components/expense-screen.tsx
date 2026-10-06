@@ -48,7 +48,13 @@ export function ExpenseScreen({
             accident should be able to leave before reading what the page is. */}
         <nav aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-2 text-secondary">
-            <li>
+            {/* This crumb is a link naming the group, so it takes the members back-link treatment
+                and wraps — `min-w-0` because the crumb row is a flex container and a flex item's
+                automatic minimum size is its min-content width, then `break-words` (inherited by
+                the inline anchor) for an 80-character unbroken name. The current-page crumb beside
+                it keeps `truncate`: a crumb that names a location may shorten, one that names the
+                group may not. */}
+            <li className="min-w-0 break-words">
               <Link
                 className="font-medium text-accent underline-offset-4 hover:underline"
                 href={`/groups/${groupId}`}
@@ -66,8 +72,14 @@ export function ExpenseScreen({
         </nav>
 
         <header className="flex flex-col gap-2">
-          <h1 className="text-page font-semibold text-ink">{title}</h1>
-          <p className="text-secondary text-ink-muted">{subtitle}</p>
+          {/* The title names the group on the create screen and the expense's description on the
+              edit one — up to 200 unbroken characters — so it is rendered whole and wraps rather
+              than set the document width; a title cut to an ellipsis would stop saying what is
+              being added or edited (AC-3). */}
+          <h1 className="text-page font-semibold text-ink break-words">{title}</h1>
+          {/* The subline re-prints the group name and the viewer's own display name, so it wraps
+              the same way (AC-3). */}
+          <p className="text-secondary text-ink-muted break-words">{subtitle}</p>
         </header>
 
         {archived ? (
@@ -80,7 +92,9 @@ export function ExpenseScreen({
           children
         )}
 
-        <p className="text-muted">
+        {/* The same wrapping treatment as the members bottom link: `overflow-wrap` inherits, so
+            the paragraph carries it and the inline anchor inside it wraps with it (AC-3). */}
+        <p className="text-muted break-words">
           <Link className="text-accent underline" href={`/groups/${groupId}`}>
             {`Back to ${groupName}`}
           </Link>

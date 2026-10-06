@@ -824,14 +824,19 @@ function ClaimSeatForm({
         {/* A hint, not an assertion: the visitor decides, and the badge only says why this seat
             is being offered to them first (ui.md's Badge). */}
         {matchesYou ? <Badge tone="accent">Looks like you</Badge> : null}
+        {/* The label is its own box rather than a bare text node, and the button shrinks with it:
+            this is a flex-wrap row, and a flex item's automatic minimum size is its min-content
+            width, so a placeholder-maximum name would hold the button — and the row, and the page
+            — at the full string. `min-w-0` joins `ml-auto` rather than replacing it, so the
+            button still takes its own line beside the truncated seat name (AC-1). */}
         <Button
           type="submit"
           variant="secondary"
-          className="ml-auto"
+          className="ml-auto min-w-0"
           pending={isPending}
           pendingLabel="Claiming…"
         >
-          {`This is me — claim ${seat.displayName}`}
+          <span className="min-w-0 break-words">{`This is me — claim ${seat.displayName}`}</span>
         </Button>
       </div>
       <StateMessage state={state} />
@@ -869,8 +874,12 @@ export function JoinPanel({
 
       <form action={joinAction} className="flex flex-col gap-3">
         <input type="hidden" name="token" value={token} />
-        <Button type="submit" pending={joinPending} pendingLabel="Joining…">
-          {`Join ${groupName}`}
+        {/* Same two-level treatment as the claim button below: `break-words` on the label so an
+            80-character unbroken group name wraps, and `min-w-0` on both the label and the button
+            so the flex item can be narrower than its own longest word instead of widening the
+            page (AC-1). */}
+        <Button type="submit" className="min-w-0" pending={joinPending} pendingLabel="Joining…">
+          <span className="min-w-0 break-words">{`Join ${groupName}`}</span>
         </Button>
         <StateMessage state={state} />
       </form>

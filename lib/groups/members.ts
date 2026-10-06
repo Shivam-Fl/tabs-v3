@@ -1,5 +1,6 @@
 import type { Db } from '../db/client';
 import { memberBalanceMinor } from '../settle/balances';
+import { nonZeroBalanceMessage } from './validation';
 
 /**
  * The membership rules that need a balance (TR-7's non-zero-balance block, TR-9's derivation).
@@ -9,13 +10,20 @@ import { memberBalanceMinor } from '../settle/balances';
  * deciding for itself what "settled up" means.
  */
 
-/** A removal or a leave the ledger does not allow yet. Carries who and how much, for logs. */
+/**
+ * A removal or a leave the ledger does not allow yet. Carries who and how much, for logs.
+ *
+ * The sentence comes from `validation.ts` rather than being written here, because the members
+ * panel classifies the message it gets back to decide whether to offer a settle-up link — and a
+ * private copy here would let the thrower and the classifier drift into two sentences that no
+ * longer match (AC-2).
+ */
 export class NonZeroBalanceError extends Error {
   constructor(
     readonly displayName: string,
     readonly balanceMinor: number,
   ) {
-    super(`${displayName} has a non-zero balance. Settle up first, then try again.`);
+    super(nonZeroBalanceMessage(displayName));
     this.name = 'NonZeroBalanceError';
   }
 }

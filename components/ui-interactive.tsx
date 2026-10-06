@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 /**
@@ -113,6 +113,133 @@ export function SegmentedControl<T extends string>({
       })}
     </div>
   );
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Time, in the viewer's zone (TR-11, AC-3).
+ *
+ * The invariant is that an instant is stored in UTC and read in the viewer's zone — but a server
+ * component cannot know the viewer's zone, because it renders wherever the app runs. So the
+ * label is split in two: the server (and the client's first render) emit the same UTC-labelled
+ * instant, and an effect replaces it with the relative-then-human reading once the browser can
+ * say what its zone is. Rendering the human form on the first client pass would be a hydration
+ * mismatch; rendering it only in an effect is what keeps one element's text correct on both
+ * sides of the boundary.
+ * ------------------------------------------------------------------------------------------- */
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const RELATIVE_LIMIT_MS = 7 * DAY_MS;
+
+const UTC_LABEL = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC',
+});
+
+/** The instant in UTC, labelled as such — the fallback both renders agree on. */
+export function utcTimestampText(value: Date): string {
+  return `${UTC_LABEL.format(value)} UTC`;
+}
+
+/**
+ * How long ago it was, or `''` once a count of days stops helping.
+ *
+ * A future value clamps to "just now" rather than printing a negative age: a clock a few
+ * seconds ahead of the server is not a thing to tell somebody about, and "in 3 hours" on an
+ * event that has already happened reads as a bug.
+ */
+export function relativeTimestamp(value: Date, now: Date): string {
+  const elapsed = now.getTime() - value.getTime();
+  if (elapsed < MINUTE_MS) return 'just now';
+  if (elapsed < HOUR_MS) return `${Math.floor(elapsed / MINUTE_MS)}m ago`;
+  if (elapsed < DAY_MS) return `${Math.floor(elapsed / HOUR_MS)}h ago`;
+  if (elapsed < RELATIVE_LIMIT_MS) return `${Math.floor(elapsed / DAY_MS)}d ago`;
+  return '';
+}
+
+/** The calendar day an instant falls on, in a zone — `en-CA` prints it as `yyyy-mm-dd`. */
+function dayKeyIn(value: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value);
+}
+
+/**
+ * The half a person actually reads: the time alone today, "Yesterday" and a weekday soon after,
+ * and a dated form once the week is out — the way somebody says it, per ui.md's money/date rule.
+ *
+ * `timeZone` comes from the viewer; when it is missing the caller falls back to the UTC label
+ * rather than guessing, so an environment that cannot name its zone is honest about it instead
+ * of printing the server's clock as if it were the reader's.
+ */
+export function humanTimestamp(value: Date, now: Date, timeZone: string): string {
+  const time = new Intl.DateTimeFormat(undefined, { timeStyle: 'short', timeZone }).format(value);
+  const day = dayKeyIn(value, timeZone);
+
+  if (day === dayKeyIn(now, timeZone)) return time;
+
+  const yesterday = new Date(now.getTime() - DAY_MS);
+  if (day === dayKeyIn(yesterday, timeZone)) return `Yesterday ${time}`;
+
+  if (Math.abs(now.getTime() - value.getTime()) < RELATIVE_LIMIT_MS) {
+    const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'long', timeZone }).format(value);
+    return `${weekday} ${time}`;
+  }
+
+  const date = new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    timeZone,
+  }).format(value);
+  return `${date} ${time}`;
+}
+
+/**
+ * The whole label: relative, then human, joined by the same middot the feed uses — so a row
+ * reads "2h ago · 14:30" and a row from last month reads just its date.
+ */
+export function timestampLabel(value: Date, now: Date, timeZone: string): string {
+  const relative = relativeTimestamp(value, now);
+  const human = humanTimestamp(value, now, timeZone);
+  return relative === '' ? human : `${relative} · ${human}`;
+}
+
+/** The viewer's zone, or undefined when the runtime cannot name one it can also format in. */
+function viewerTimeZone(): string | undefined {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (typeof zone !== 'string' || zone === '') return undefined;
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return zone;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One instant, rendered for the person looking at it.
+ *
+ * The first paint is the UTC label — byte-identical to what the server sent — and the effect
+ * swaps in the relative-then-human reading in the viewer's zone. An environment that cannot
+ * name a zone keeps the UTC label, which is the honest answer rather than the server's clock
+ * wearing the viewer's name.
+ */
+export function Timestamp({ value }: { value: Date }) {
+  const iso = value.toISOString();
+  const [label, setLabel] = useState(() => utcTimestampText(value));
+
+  useEffect(() => {
+    const zone = viewerTimeZone();
+    if (zone === undefined) return;
+    setLabel(timestampLabel(new Date(iso), new Date(), zone));
+  }, [iso]);
+
+  return <time dateTime={iso}>{label}</time>;
 }
 
 const FOCUSABLE =

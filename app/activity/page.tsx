@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { redirect } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { AppShell } from '../../components/app-shell';
-import { ActivityFeed } from '../../components/activity-feed';
+import { ActivityFeed, FilterChips } from '../../components/activity-feed';
+import { Card } from '../../components/ui';
 import {
   ACTIVITY_FILTER_PARAM,
   ACTIVITY_GROUP_PARAM,
@@ -78,12 +80,15 @@ export default async function ActivityPage({
   const scoped = groups.find((group) => group.id === query[ACTIVITY_GROUP_PARAM]) ?? null;
   const shown = scoped === null ? rows : rows.filter((row) => row.groupId === scoped.id);
 
+  // Built once: the empty state's sentence and its action are one decision about one case.
+  const empty = emptyFeed(groups, scoped);
+
   return (
     <AppShell place="Activity" viewer={{ displayName: viewer.displayName }}>
       <main className="mx-auto flex w-full max-w-[1024px] flex-1 flex-col gap-5 px-4 py-5">
         <header className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-2xl font-semibold">Activity</h1>
+            <h1 className="text-page font-semibold text-ink">Activity</h1>
             {/* The feed is every group at once, so its way back is Home — where the groups are. */}
             <Link
               className="inline-flex items-center gap-2 text-secondary text-accent underline-offset-4 hover:underline"
@@ -95,7 +100,7 @@ export default async function ActivityPage({
           </div>
 
           {scoped === null ? null : (
-            <p className="text-secondary text-muted">
+            <p className="text-secondary text-ink-muted">
               Showing{' '}
               <Link
                 className="font-medium text-accent underline-offset-4 hover:underline"
@@ -115,20 +120,30 @@ export default async function ActivityPage({
         </header>
 
         {failed ? (
-          <section
-            className="flex flex-col gap-3 rounded-token border border-danger/40 bg-surface p-4"
-            aria-labelledby="activity-error"
-          >
-            <h2 id="activity-error" className="text-lg font-semibold">
-              We could not load your activity
-            </h2>
-            <p className="text-muted">
-              Nothing has been lost — the feed did not come back this time. Try again.
-            </p>
-            <Link className="text-accent underline" href={activityHref(filter, scoped?.id ?? null)}>
-              Retry
-            </Link>
-          </section>
+          <>
+            {/* The chips stay: the filter is where the reader was when the read failed, so the
+                control that says which feed this is outlives the feed, and the retry below
+                carries the same value (AC-4). */}
+            <FilterChips filter={filter} action="/activity" />
+            {/* A card, like every other surface on the page: the failure is one section of the
+                screen rather than the screen, and the shared Card is what says so (TR-11). */}
+            <Card>
+              <section className="flex flex-col gap-3" aria-labelledby="activity-error">
+                <h2 id="activity-error" className="text-section font-semibold text-ink">
+                  We could not load your activity
+                </h2>
+                <p className="text-body text-ink-muted">
+                  Nothing has been lost — the feed did not come back this time. Try again.
+                </p>
+                <Link
+                  className="text-body text-accent underline underline-offset-4"
+                  href={activityHref(filter, scoped?.id ?? null)}
+                >
+                  Retry
+                </Link>
+              </section>
+            </Card>
+          </>
         ) : (
           <ActivityFeed
             rows={shown}
@@ -138,7 +153,8 @@ export default async function ActivityPage({
             // one control on the page that is meant to narrow the feed further.
             preserved={scoped === null ? {} : { [ACTIVITY_GROUP_PARAM]: scoped.id }}
             showGroup
-            emptyText={emptyFeedText(groups, scoped)}
+            emptyText={empty.text}
+            emptyAction={empty.action}
           />
         )}
       </main>
@@ -160,25 +176,64 @@ function activityHref(filter: ActivityFilter, groupId: string | null): string {
   return search === '' ? '/activity' : `/activity?${search}`;
 }
 
+/** The shared look of the two links an empty feed can offer. */
+const FEED_LINK = 'text-body text-accent underline underline-offset-4';
+
 /**
  * Why the feed is empty, in the cases that would otherwise read identically (TR-11).
  *
  * "Nothing has happened yet" and "you are not in a group" call for different next steps, and a
  * viewer whose every group is archived is looking at a fourth thing again: history that exists
  * but can no longer grow. A scoped feed has its own answer, because the reader is looking at one
- * group and the reason there is nothing in it is about that group and not about the others. The
- * filter is not one of these — a filtered-empty feed says so itself inside the component, because
- * that is the only case the chips can fix.
+ * group and the reason there is nothing in it is about that group and not about the others. Each
+ * case therefore gets its own sentence *and* its own action — the one thing that actually helps
+ * from there, rather than one shared "go home" link under three different reasons. The filter is
+ * not one of these — a filtered-empty feed says so itself inside the component, because that is
+ * the only case the chips can fix.
+ *
+ * The sentence is one reason followed by its consequence, which is the shape the feed sets: the
+ * first sentence becomes the empty state's title and the rest its body.
  */
-function emptyFeedText(groups: ActivityGroup[], scoped: ActivityGroup | null): string {
+function emptyFeed(
+  groups: ActivityGroup[],
+  scoped: ActivityGroup | null,
+): { text: string; action: ReactNode } {
   if (scoped !== null) {
-    return `Nothing has been recorded in ${scoped.name} yet.`;
+    return {
+      text: `Nothing has been recorded in ${scoped.name} yet. Activity from your other groups is on the full feed.`,
+      action: (
+        <Link className={FEED_LINK} href="/activity">
+          Show every group
+        </Link>
+      ),
+    };
   }
   if (groups.length === 0) {
-    return 'You are not in a group yet. Activity appears here once you create one or join somebody else’s.';
+    return {
+      text: 'You are not in a group yet. Activity appears here once you create one or join somebody else’s.',
+      action: (
+        <Link className={FEED_LINK} href="/groups/new">
+          Create a group
+        </Link>
+      ),
+    };
   }
   if (groups.every((group) => group.archived)) {
-    return 'Every group you are in is archived, so nothing new is being recorded. An archived group keeps the history it has on its own page.';
+    return {
+      text: 'Every group you are in is archived, so nothing new is being recorded. An archived group keeps the history it has on its own page.',
+      action: (
+        <Link className={FEED_LINK} href="/">
+          Go to your groups
+        </Link>
+      ),
+    };
   }
-  return 'No activity yet. The feed fills as your groups record expenses, payments and members.';
+  return {
+    text: 'No activity yet. The feed fills as your groups record expenses, payments and members.',
+    action: (
+      <Link className={FEED_LINK} href={`/groups/${groups[0].id}`}>
+        {`Open ${groups[0].name}`}
+      </Link>
+    ),
+  };
 }

@@ -213,6 +213,14 @@
       "confidence": 0,
       "diagnosis": "the triage agent itself did not finish",
       "run": "37452413092"
+    },
+    {
+      "at": "2026-10-06T11:25:20.291Z",
+      "stage": "plan",
+      "verdict": "wait",
+      "confidence": 0,
+      "diagnosis": "the triage agent itself did not finish",
+      "run": "37455942637"
     }
   ]
 }

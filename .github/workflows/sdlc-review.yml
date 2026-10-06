@@ -392,6 +392,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Review (single agent)
         id: review_single_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode != 'council') && steps.review_single.outcome != 'skipped' && steps.review_single.outputs.structured_output == '' && steps.review_single_record.outputs.needed == 'true' }}
@@ -620,6 +627,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Council 1/2 — correctness
         id: review_a_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode == 'council') && steps.review_a.outcome != 'skipped' && steps.review_a.outputs.structured_output == '' && steps.review_a_record.outputs.needed == 'true' }}
@@ -780,6 +794,13 @@ jobs:
             echo "Its transcript was not kept (the step was cut off). What it wrote is on disk." >> "$out"
           fi
           wc -c "$out"
+          # A session that ended in an error says why only in the transcript the action keeps hidden:
+          # a refused credential or a spent quota read as "returned no result" (tabs-v3, Sonnet's
+          # first runs). Its last words, short, with anything shaped like a key taken out.
+          if [ -n "$EXEC" ] && [ -f "$EXEC" ]; then
+            err=$(jq -rs '(if length == 1 and (.[0] | type) == "array" then .[0] else . end) | (map(select(type == "object" and .type == "result")) | last) as $r | if $r.is_error then ([.[] | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // empty) else empty end' "$EXEC" 2>/dev/null | tr '\n' ' ' | sed -E 's/sk-[A-Za-z0-9_-]{8,}/[key]/g' | cut -c1-300)
+            if [ -n "$err" ]; then echo "::error::the session ended in an error: $err"; fi
+          fi
       - name: Finish — Council 2/2 — design, and verify reviewer A
         id: review_b_finish
         if: ${{ !cancelled() && (needs.prepare.outputs.mode == 'council') && steps.review_b.outcome != 'skipped' && steps.review_b.outputs.structured_output == '' && steps.review_b_record.outputs.needed == 'true' }}

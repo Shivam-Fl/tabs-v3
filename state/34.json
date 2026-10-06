@@ -102,6 +102,180 @@
   "stopped_at": null,
   "dispatched_stage": "plan",
   "validated_from": "plan",
-  "validated_at": "2026-10-05T23:48:02.199Z",
-  "validated_ac_changes": []
+  "validated_at": "2026-10-06T00:02:57.975Z",
+  "validated_ac_changes": [],
+  "validated_work_order": {
+    "acceptance": [
+      {
+        "check": "Home shows the app shell plus a balance summary card whose hero number is the net position (owed minus owe, viewer currency, largest text on screen), with you-are-owed and you-owe totals beside it.",
+        "how_to_verify": "Seed two groups with expenses, sign in, open /: hero equals owed minus owe, totals beside it.",
+        "id": "AC-1",
+        "source": "IAC-1",
+        "verify": "browser"
+      },
+      {
+        "check": "Per-person rows show who the user owes and who owes the user, each with avatar, name, and words-plus-colour direction; group list shows rich rows with name, member count, per-group balance, and chevron; the left-group notice and the All activity link (the only UI path to /activity) render above the Suspense boundary in the signed-in section and survive loading and section failure.",
+        "how_to_verify": "Same session: People rows each carry Avatar plus owes-you/you-owe words in lent/owed colour; each group row links to /groups/[id] with count, balance, chevron, words and the sr-only Balance label; ?left= name renders role=status above the boundary; All activity reaches /activity even when the group section fails.",
+        "id": "AC-2",
+        "source": "IAC-2",
+        "verify": "browser"
+      },
+      {
+        "check": "Zero balances read neutral, never debt red: the settled-up sentence renders only when nothing is outstanding (owedMinor is 0 and oweMinor is 0); a net of zero with live rows in both directions renders a neutral figure with both totals visible and no settled-up sentence; a person row whose cross-group net cancels to exactly zero renders neutral settled-up words with no amount. Cross-group totals format in the viewer currency and group rows in their group currency, all through formatMinorUnits with data-amount, words plus colour, never colour alone.",
+        "how_to_verify": "Settle a group to zero and check the neutral banner and neutral zero-net person row; construct A-owes-you-100 plus you-owe-B-100 and check the hero shows a neutral zero with both totals and no settled-up sentence. Covered by zero-net and net-zero-gross-nonzero unit cases in app/home.test.ts.",
+        "id": "AC-3",
+        "source": "IAC-3",
+        "verify": "browser"
+      },
+      {
+        "check": "Empty state (zero groups) shows illustration or icon, one sentence on what Tabs does, and a Create-your-first-group button that owns the Create action while groups are empty; a user with no groups never sees the failure card (groupCount 0 forces the empty branch even though failedCount is also 0). Boot/session failure renders BootFailure in MarketingFrame; group-read failure with a live session renders HomeFailure inside the shell; both carry retry and never present cached or zeroed balances as current.",
+        "how_to_verify": "Fresh account sees empty state with a single Create action and no failure card; stop the database to see the boot failure card with retry and no numbers (the session read fails first); group-read failure with session intact renders the section failure card. The empty-vs-failure boundary is pinned by homeSections unit cases.",
+        "id": "AC-4",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Primary Create group action is obvious: group-list section-header button on desktop (AppShell has no action slot and is untouched) and thumb-reachable fixed button on phones, mutually exclusive per breakpoint so exactly one tab stop, with compensating bottom padding; cards stack vertically at 375px and lay out up to 1024px with no horizontal scroll. All hand-built action surfaces (section-header button, fixed mobile button, inline retry rows) meet the 44px minimum.",
+        "how_to_verify": "Playwright screenshots at 375x812 (fixed bottom button visible, single column, last row not covered) and 1280x800 (section-header button, max 1024 column).",
+        "id": "AC-5",
+        "source": "IAC-5",
+        "verify": "browser"
+      },
+      {
+        "check": "Row hit targets are 44px, keyboard path and visible focus hold, one h1 (rendered by the page above the cards at text-page, never via Card title which renders h2) with heading hierarchy, icons are lucide-react aria-hidden next to text, and the ui.md checklists pass including long names and large amounts at 375px.",
+        "how_to_verify": "Keyboard-only walk: tab order matches visual order, focus ring visible, rows activatable; axe/aria check for single h1 and labelled controls; run the frontend-design craft checklist and the UX checklist.",
+        "id": "AC-6",
+        "source": "IAC-6",
+        "verify": "browser"
+      },
+      {
+        "check": "Home consumes the shell, tokens, and shared rows/cards/avatars/badges/skeletons from piece 1 unchanged and reads the existing home balance and group queries through the current server path with no new endpoint or data shape (calls only regrouped into withDb blocks, the established activity/group-page pattern).",
+        "how_to_verify": "Review: no change to lib/settle, lib/groups/queries, lib/money, components/ui.tsx, components/app-shell.tsx, or globals.css; sdlc:verify passes (typecheck, test:ci, build).",
+        "id": "AC-7",
+        "source": "TR-11",
+        "verify": "test"
+      },
+      {
+        "check": "Loading renders HomeSkeleton (raw data-skeleton div blocks shaped like summary card and rows per the loading.tsx precedent, aria-busy container, sr-only Loading your balances status) through a Suspense boundary that actually suspends around the async SignedInGroups child, so the served Flight stream carries the skeleton marker plus data-skeleton attributes ahead of the resolved content; proven by stream observation, not by network throttling which PGlite renders useless.",
+        "how_to_verify": "QA curls the served / stream while signed in and asserts the skeleton marker plus data-skeleton attributes arrive ahead of the resolved content; on real (Neon) latency the skeleton paints first. The app/home.test.ts skeleton-markup case covers the fallback itself in CI.",
+        "id": "AC-8",
+        "source": "IAC-4",
+        "verify": "browser"
+      },
+      {
+        "check": "Partial failure honesty: loaded groups render with balances and failed ones show inline retry rows, and whenever any group failed the summary card carries an explicit incomplete-totals note (mirroring the excluded-currency sentence) instead of a bare hero — a number the screen could not compute is never rendered as a number. The section decision is the pure exported homeSections({groupCount, failedCount}) function the page calls, with a unit case per branch.",
+        "how_to_verify": "CI cases in app/home.test.ts: homeSections maps groupCount 0 to empty, failedCount === groupCount (groupCount > 0) to failure, 0 < failedCount < groupCount to partial with the note, failedCount 0 to loaded; and a failed group absent from the summary inputs forces the incomplete note. A live single-group failure is not inducible in QA (PGlite serves one connection), so the unit cases are the proof.",
+        "id": "AC-9",
+        "source": "IAC-4",
+        "verify": "test"
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Add a root app/loading.tsx skeleton boundary for the whole route.",
+        "rejected_because": "The boundary would also paint over the static visitor landing on first navigation; a Suspense boundary scoped to the signed-in async child gives skeletons exactly where data loads and nowhere else."
+      },
+      {
+        "approach": "Derive member count from balances.length, avoiding any extra read.",
+        "rejected_because": "computeNetBalances appends departed ledger participants behind current members, so its length overcounts real membership; listMembers is the group page's own source of truth for who is in the group."
+      },
+      {
+        "approach": "Add a batched member-count column to listGroupsForUser.",
+        "rejected_because": "The issue forbids any new data shape on the server path, and changing a shared query risks its other callers; reusing the existing listMembers read keeps the contract unchanged."
+      },
+      {
+        "approach": "Drop the All activity link, the left-group notice, and the exclusion note under a strict reading of follows ui.md Home structure exactly.",
+        "rejected_because": "The activity link is the only UI path to /activity (account menu links only /profile, the group excerpt does not link out), so dropping it strands TR-10's feed; dropping the exclusion note makes totals silently incomplete; dropping the notice removes the qa/selectors.md assertion surface. All three are additive and stay."
+      }
+    ],
+    "approach": "Migrate only the signed-in half of app/page.tsx to the ui.md Home screen, reusing the existing queries with no new endpoint or data shape (calls only regrouped into withDb blocks, the established activity/group-page pattern). Read the session eagerly in HomePage but inside its own try/catch with unstable_rethrow(error) first in the catch (the dynamic-route throw must still escape): session/boot failure renders <MarketingFrame><BootFailure /></MarketingFrame> exactly as today, so BootFailure stays reachable, while group-read failure with a live session renders HomeFailure inside the shell — files[] states which card owns which failure. Move listGroupsForUser plus the sequential per-group loop (computeNetBalances, simplifyDebts, plus listMembers for the member count) plus summarizeHome into an async SignedInGroups child rendered inside <Suspense fallback={<HomeSkeleton/>}>, with the failure card and unstable_rethrow living in the child — a Suspense around the current sync child with resolved props would never suspend. Render the ?left= role=status notice and the All activity link in HomePage above the Suspense boundary (both need no data; the notice is a pinned QA selector surface and the link is the only route to /activity, so neither may disappear into the fallback or the failure card); keep the exclusion note inside with the summary, which needs it. Track per-group failures explicitly through the pure exported homeSections({groupCount, failedCount}) decision in components/home-panels.tsx (groupCount 0 -> empty; failedCount === groupCount with groupCount > 0 -> failure; 0 < failedCount < groupCount -> partial; failedCount 0 -> loaded): every read failed renders HomeFailure for the section (never a zero hero over retry rows); some failed renders loaded groups with inline retry rows plus an explicit incomplete-totals note on the summary card mirroring the excluded-currency sentence, because a number the screen could not compute is never rendered as a number. Build components/home-panels.tsx as pure presentational (no hooks, no server-only imports, mirroring groups-panels.tsx): BalanceSummaryCard (hero net owed-minus-owe in viewer currency as the largest text, owed/owe totals beside it, exclusion note naming foreign-currency groups beside the totals, incomplete note when partial, settled-up sentence only when owedMinor is 0 and oweMinor is 0 so a net-zero with live rows in both directions shows a neutral figure with both totals and no settled claim; used without Card title so the page keeps its own h1), PeopleList (Avatar tinted by person.key with name fallback, words-plus-colour direction, zero-net rows neutral settled-up with no amount per the group-page settled-seat treatment, People empty sentence when empty), GroupList (whole-row links with avatar mark, name, pluralized member count, per-group balance in that group currency with words plus the sr-only Balance label, ChevronRight; failed groups as inline retry rows at 44px), HomeEmpty (EmptyState plus Create-your-first-group, owning the Create action when groups are empty so header/fixed copies are suppressed), HomeFailure (message plus retry to /, no numbers), HomeSkeleton (raw data-skeleton div blocks with bg-muted/20 motion-safe:animate-pulse per the app/activity/loading.tsx and members/loading.tsx precedent, aria-busy container, sr-only Loading your balances status — not the shared Skeleton component, which takes only className and cannot carry data-skeleton, and ui.tsx stays untouched per AC-7). Keep one h1 at text-page rendered by the page above the cards with section h2s, 44px targets on every hand-built action surface, data-amount on every amount (the globals.css tabular hook), and lucide icons aria-hidden. Render the Create action as the group-list section-header button on desktop (AppShell has no action slot and stays untouched) plus a thumb-reachable fixed bottom button on phones, mutually exclusive via hidden/sm:hidden so exactly one tab stop, with compensating bottom padding and safe-area inset treated as unproven work.",
+    "assumptions": [
+      "S-8 is the Experience section (docs/spec/tabs.md:76-83: clean/consistent, mobile-first, one h1 and heading hierarchy, designed empty/loading/error states, group-currency amounts, main screens under a second), realised for Home through TR-11, which is what AC-7 sources.",
+      "Piece 1 (issue #33) has landed the shared set used here — Card, Avatar, Badge, ListRow, Skeleton, EmptyState, buttonClasses — present in components/ui.tsx with lucide-react as a dependency; Home is its first screen consumer, not one of a series.",
+      "lucide-react exports the icons this screen needs (Users, ChevronRight, Plus, Wallet or Scale for the summary/empty art).",
+      "Home group counts per user are small (single digits), so sequential per-group reads stay inside the interactive budget on paper; PGlite hides the real cost locally, and the extra listMembers read per group is payable on Neon against the TR-11 1s budget — unproven at the tail."
+    ],
+    "confidence": 78,
+    "confidence_rationale": "The data path is verified in-tree and reused untouched, the shared set exists, and every critique claim was re-checked against the code before folding its fix in — the eager-session BootFailure break, the never-suspending sync child, the uncounted catches, the 0===0 empty/failure collision, the net-zero hero contradiction, the Skeleton data-skeleton conflict, and the boundary placement of the notice and link. What would move the number up is seeing the skeleton marker in a served stream and a Neon-latency read on the 1+2N loop; what would move it down is the shared set misfitting Home (Card title level, ListRow truncation, Avatar tint fallback) with AC-7 forbidding any ui.tsx change.",
+    "debate_summary": "The critique was sustained in full on all seven findings and none was dismissed as unfounded; no finding contradicted a decision in plan/brief.md, which pins only docs/ui.md and prior decisions as-is. Blocking finding 1 (verbatim activity-pattern eager session read is unguarded, orphaning BootFailure and turning a landing-page DB outage into a route error) forced the try/catch + unstable_rethrow eager read with explicit card ownership. Major findings 2-4 forced the pure exported homeSections decision with a unit case per branch (leaf-only AC-9 proof did not reach the counting code), the groupCount-0 empty guard, and the settled-up sentence keyed on owedMinor and oweMinor both zero rather than net zero (net-zero with live rows shows a neutral figure with both totals; refined from the critique's people.length key so a single cross-group zero-net row stays consistent with a settled hero). Minor findings 5-7 were folded as specified: HomeSkeleton uses raw data-skeleton blocks per the loading.tsx precedent since shared Skeleton takes only className and ui.tsx is frozen; the S-8 assumption is corrected to docs/spec/tabs.md:76-83 realised via TR-11; the ?left= notice and All activity link render above the Suspense boundary with the exclusion note inside. Dismissed as non-work: desktop long-list reachability (ui.md mandates a header button on desktop and a fixed button only on phones, so scroll-away is intended), back-button ?left= re-announcement (inherent to the ADR-0008 redirect-param pattern, pre-existing behaviour), unicode avatar names (shared avatarInitials is already grapheme-safe; the long-name case covers truncation), same-person different display names (first-seen-wins is deterministic per summary.ts and cosmetic), a per-person foreign-currency note (the group-naming exclusion note is what the issue and ui.md require; person-level notes would widen the ticket), all-archived accounts seeing first-group copy (recorded as residual risk, not a new criterion), and a succeeded-balance/failed-count group split (one try per group keeps the row honest via the retry row plus incomplete note; finer splitting would complicate the loop for no honesty gain).",
+    "files": [
+      {
+        "action": "create",
+        "change": "Pure presentational Home sections built only from ui.md tokens and the shared ui.tsx set (Card, Avatar, Badge, ListRow, EmptyState, buttonClasses) plus lucide-react icons, exporting the pure homeSections({groupCount, failedCount}) decision (empty | failure | partial | loaded, with groupCount 0 forcing empty) alongside: BalanceSummaryCard (hero net owed-minus-owe in viewer currency, owed/owe totals, exclusion note, incomplete-totals note, settled-up sentence only when owedMinor is 0 and oweMinor is 0 with net-zero-gross-nonzero rendering a neutral figure plus both totals and no settled claim; no Card title so the page keeps its h1), PeopleList (Avatar by person.key with name fallback, words-plus-colour direction, zero-net rows neutral with no amount, People empty sentence), GroupList (whole-row links with avatar mark, name, pluralized member count, per-group balance in group currency with words plus the sr-only Balance label, ChevronRight, inline 44px retry rows for failed groups), HomeEmpty (EmptyState owning the Create action when groups are empty), HomeFailure (message plus retry, no numbers), HomeSkeleton (raw data-skeleton div blocks with bg-muted/20 motion-safe:animate-pulse per the loading.tsx precedent, aria-busy, sr-only loading status — shared Skeleton is not used for the blocks since it takes only className). Every amount carries data-amount. No data fetching, no hooks, no server-only imports so app/home.test.ts can render with renderToStaticMarkup.",
+        "path": "components/home-panels.tsx",
+        "why": "The shared-set pattern keeps Home from inventing its own spacing, type, or row treatment, a pure module is unit-renderable under vitest without next/* server modules, and naming every preserved element (notice, activity link, exclusion note, sr-only labels, data-amount) plus every failure rule and the homeSections decision here is what stops this slice from silently dropping them."
+      },
+      {
+        "action": "edit",
+        "change": "Split HomePage into an eager session read in its own try/catch with unstable_rethrow(error) first in the catch (session/boot failure renders <MarketingFrame><BootFailure /></MarketingFrame> exactly as today, so BootFailure stays reachable) plus an async SignedInGroups child inside Suspense with HomeSkeleton fallback; move listGroupsForUser, the sequential per-group loop (computeNetBalances, simplifyDebts, listMembers for counts), summarizeHome, the failure card, and unstable_rethrow into the child, deciding the section through homeSections({groupCount, failedCount}) so all failed renders HomeFailure, some failed renders loaded groups with inline retry rows plus the incomplete-totals note, and zero groups renders HomeEmpty never HomeFailure. Render the left-group role=status notice and the All activity link in HomePage above the Suspense boundary (both need no data), keep the exclusion note inside with the summary; keep the single h1 at text-page above the cards with section h2s; render Create in the group-list section header on desktop plus a fixed bottom button on phones (hidden/sm:hidden exclusive, compensating bottom padding, both 44px), both suppressed while groups are empty. Landing half, guard flow, and the queries themselves stay exactly as they are.",
+        "path": "app/page.tsx",
+        "why": "This is the one file that owns the signed-in Home assembly; the eager-read guard is what keeps the public landing's boot failure reachable, the async child is what makes the skeleton boundary actually suspend, counting failures through one pure decision is what keeps partial and total outages honest, and boundary placement is what keeps the leave notice and the only path to /activity visible through loading and failure."
+      }
+    ],
+    "issue": 34,
+    "kind": "feature",
+    "out_of_scope": [
+      "Any balance-math, simplification, or query change; numbers come from the existing recompute path through unchanged queries and shapes.",
+      "Group page, expense editor, settle-up, members, activity, and profile screens.",
+      "Dark mode.",
+      "docs/ui.md and every other approved doc stay untouched; S-8 is implemented, not rewritten.",
+      "No change to components/ui.tsx, components/app-shell.tsx, or globals.css: an AppShell action slot, Card heading levels, Skeleton props, and any fixed-button system refinement belong to separate piece-1 tickets, not quiet edits inside this one."
+    ],
+    "qa_script": [
+      "Run npm run db:seed, then sign up a fresh account so Home starts empty: illustration, one-sentence explainer, and exactly one Create action (no doubled fixed button, no failure card).",
+      "Create two groups in different currencies with expenses between members: hero net, owed/owe totals in viewer currency, the other-currency exclusion note, per-person rows with avatars and owes-you/you-owe words, rich group rows with count, balance, chevron and words; follow All activity to /activity.",
+      "Append ?left=<name> to / and check the role=status notice renders above the loading and failure states; leave a group via the members screen and check the notice names it.",
+      "Settle one group fully to zero: neutral settled hero, neutral zero-net person row with no amount, never red; then arrange A-owes-you-100 plus you-owe-B-100 and check the hero shows a neutral zero with both totals and no settled-up sentence while both People rows state their direction.",
+      "Reload at 375x812 and 1280x800: cards stack on the phone with the fixed Create button thumb-reachable and the last row uncovered; header button on desktop; a very long group name truncates with the amount readable; no horizontal scroll.",
+      "Keyboard-only pass with visible focus throughout; then a failure probe (stop the database) for the boot failure card with retry and no numbers — the session read fails first, so BootFailure is the card under total outage; the section failure card is proven by the unit cases.",
+      "Assert the skeleton in the served Flight stream (curl / while signed in: skeleton marker plus data-skeleton attributes ahead of the resolved content) rather than by throttling, which PGlite renders useless; on real latency the skeleton paints first."
+    ],
+    "residual_risks": [
+      "The skeleton marker may never appear in a locally served stream because PGlite resolves inside the microtask queue; QA asserts the marker in the stream and the paint only on real (Neon) latency.",
+      "The loop grows from 1+N to 1+2N sequential reads per Home visit; invisible locally for the same PGlite reason, payable on Neon against the TR-11 1s budget — group counts are small in practice but unproven at the tail.",
+      "Retry links point at / via soft navigation to the URL already on screen; if the App Router replays the cached RSC payload instead of refetching, retry looks like it does nothing — the failure probe must confirm the refetch.",
+      "Home is the shared set's first screen consumer, so any misfit (Card title level, ListRow truncation, Avatar tint fallback) has no proven fallback inside this ticket; AC-7 forbids touching components/ui.tsx.",
+      "Two placeholder seats sharing one display name in different groups share an Avatar tint via the name fallback; cosmetic only, accepted.",
+      "The fixed mobile Create button's overlap compensation and iOS safe-area inset have no in-repo precedent; the 375px screenshot with a long list is the proof.",
+      "An account whose every group is archived sees the first-group empty copy, because listGroupsForUser excludes archived groups; distinguishing all-archived from never-had-groups would widen this ticket.",
+      "A group whose balance read succeeded but whose listMembers count read failed renders as a fully failed group row and is dropped from the summary inputs, pushing the hero into the incomplete note; one try per group keeps this honest but coarse."
+    ],
+    "risks": [
+      "One extra listMembers read per group runs sequentially (PGlite single connection) and adds Neon latency on accounts with many groups against the TR-11 1s budget; group counts on Home are small in practice and the reads stay in the existing loop rather than a new fan-out — but the cost is invisible locally and only shows on Neon, which QA never runs.",
+      "The HomePage restructure touches the file the visitor landing lives in, so the landing-half-unchanged promise rests on diff review plus the existing landing assertions, not on structural separation; the eager-read guard is what keeps BootFailure reachable for logged-out visitors.",
+      "Preserving yesterday's elements (All activity link, ?left= notice, exclusion note, data-amount hooks, sr-only Balance labels, words-plus-colour) is now explicit in files[] and acceptance with boundary placement stated, but each still needs a review pass confirming it survived, since dropping any one strands a feed, a QA surface, honest totals, or tabular figures."
+    ],
+    "root_cause": "The signed-in Home was built before the ui.md redesign and was never migrated to it: it renders correct numbers through the correct queries but assembles them with its own one-off markup instead of the shared set, tokens, and Home screen structure — and as the critique proved, the naive migration (eager session read copied from the activity pattern, Suspense around a sync child, uncounted per-group catches, net-zero hero, Skeleton misuse, boundary-unplaced notice and link) would have shipped an unreachable boot failure, dead loading code, dishonest totals, a failure card for brand-new users, a self-contradicting hero, an unimplementable skeleton spec, and invisible leave confirmations.",
+    "tests": [
+      {
+        "action": "create",
+        "cases": [
+          "hero number equals owed minus owe with owed/owe totals beside it, formatted in viewer currency",
+          "net zero with live rows in both directions renders a neutral figure with both totals and no settled-up sentence",
+          "zero net with nothing outstanding renders the neutral settled treatment with no owed/danger tone",
+          "person rows carry avatar, name, and words-plus-colour direction (owes you vs you owe)",
+          "person netting to zero across two groups renders neutral settled-up words with no amount and no debt tone",
+          "group rows carry name, member count, per-group balance in group currency with words and chevron as one link target",
+          "excluded-currency note names foreign-currency groups beside the totals, including a zero-balance foreign group",
+          "homeSections: zero groups renders empty, never the failure treatment",
+          "homeSections: every group failing with groups present renders the failure treatment with no balance figures",
+          "homeSections: some groups failing renders loaded groups with inline retry rows plus the incomplete-totals note",
+          "any failed group forces the incomplete-totals note instead of a bare hero",
+          "empty state carries illustration slot, one sentence, and exactly one Create action",
+          "skeleton fallback carries raw data-skeleton blocks, aria-busy, and an sr-only loading status",
+          "failure card carries retry and no balance figures",
+          "left-group notice and All activity link render in the signed-in section above the boundary",
+          "every rendered amount carries data-amount"
+        ],
+        "path": "app/home.test.ts"
+      }
+    ],
+    "understanding": "Home (app/page.tsx) serves two screens: the visitor landing, already redesigned, and the signed-in overview, whose SignedInHome still wears pre-redesign markup (raw text-muted/border-muted classes, text-2xl/text-lg headings, inline-styled New group link, person rows without avatars, group rows without member count or chevron, two plain total boxes instead of a hero-net card). The data path underneath is correct and is reused unchanged: listGroupsForUser plus per-group computeNetBalances/simplifyDebts folded by summarizeHome, formatted at render by formatMinorUnits. S-8 is the Experience section (docs/spec/tabs.md:76-83), proved for Home via TR-11. Adjudication re-verified every critique claim in-tree and sustained it: the activity-pattern eager session read sits outside any try/catch (activity/page.tsx:44) so copying it orphans BootFailure, whose only trigger is the failed flag set inside the withDb try today (app/page.tsx:64-97); a Suspense around the current sync child with resolved props can never suspend; uncounted per-group catches turn a full outage into a confident settled hero since summarizeHome([]) is zeros; the naive failedCount === groups.length check is 0 === 0 for a fresh account; net-zero with gross-nonzero is exactly representable (owed == owe == 100) while the group page keys its settled banner on transfers.length === 0 (groups/[id]/page.tsx:219); shared Skeleton takes only className (ui.tsx:434-441) while both loading precedents hand-roll raw data-skeleton divs; the ?left= name is parsed eagerly from searchParams (app/page.tsx:57-58) yet the notice and the sole UI link to /activity (app/page.tsx:303) were left boundary-unplaced; and zero-net person rows render you-owe in debt red today (app/page.tsx:362-367). Callers checked: listGroupsForUser is read only by app/page.tsx (plus tests), summarizeHome only by app/page.tsx (plus summary.test.ts), listMembers by the members/group pages and expense reads (reused, not changed), and formatMinorUnits across all panels (reused, not changed).",
+    "unknowns": [
+      "Whether QA seed data mixes viewer-foreign currencies on one Home, exercising the exclusion note; the qa_script covers it explicitly.",
+      "Whether a soft navigation to / refetches the RSC payload for retry links; the failure probe must confirm it.",
+      "Whether the skeleton marker reaches the locally served stream at all, given PGlite resolves inside the microtask queue; proven only against real latency."
+    ],
+    "version": 3
+  }
 }

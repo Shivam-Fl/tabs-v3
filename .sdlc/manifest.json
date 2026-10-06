@@ -1,5 +1,5 @@
 {
-  "source_sha": "f90c73ea713b1174ec62212d6760076b5d265fe3",
+  "source_sha": "9fae880eb9e1a1bcc5cdd16880bcd656b92da399",
   "source_repo": "Shivam-Fl/automated-ai-sdlc",
   "files": {
     ".github/workflows/ci-verify.yml": "f31654d925f79b1b38402aa9d4115c15cf888ac4e17e87b488620000167399e9",
@@ -117,7 +117,7 @@
     ".sdlc/bin/lib/guards.js": "4a8554a0dbb92daa5ed8a961001f51f021761a3b1da423e3f2f6bd0294c4eb6d",
     ".sdlc/bin/lib/handoff.js": "0026acfc5240f5cadb98aa8545780e6e2dad7f8f3e753e4b6650624f5cbcc417",
     ".sdlc/bin/lib/issue-body.js": "a1a1bad7dd87dd6b80431d2322b81450dc36c36a6befad06fcbe2ee0016de16f",
-    ".sdlc/bin/lib/issue-text.js": "04148ea5f0503aae4fff55e7c7a090cfc27687d4beaa509706cddec381b1fe68",
+    ".sdlc/bin/lib/issue-text.js": "6aa4b3382c09b152651b750ab1fa8fa5e7db5c197024ebfe3aa73317d5bf5a13",
     ".sdlc/bin/lib/js-yaml.mjs": "1ddcddaab734237a859c742b14622ef54ad02daf4538283ecee8a8bce8ba0434",
     ".sdlc/bin/lib/ledger.js": "53b2f5e75d275c2fa145849ed1999396f725f9dac307faef051f62ff9dad2599",
     ".sdlc/bin/lib/lock-chains.js": "24bb3b2f131bab0757c5e8b461157977f5166780cbbd13f053cc0e76854c399a",

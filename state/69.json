@@ -17,8 +17,13 @@
   "work_order": null,
   "touch_paths": [],
   "acceptance": [],
-  "planned_route": [],
-  "on_complete": null,
+  "planned_route": [
+    "plan",
+    "implement",
+    "review",
+    "qa"
+  ],
+  "on_complete": "merge",
   "artifacts": {},
   "failure_history": [],
   "review_history": [],
@@ -30,6 +35,11 @@
       "at": "2026-10-07T02:36:49.645Z",
       "agent": "intake",
       "action": "-> planning"
+    },
+    {
+      "at": "2026-10-07T02:37:48.827Z",
+      "agent": "router",
+      "action": "route plan -> implement -> review -> qa (fallback:no-plan-produced, confidence 0)"
     }
   ],
   "issue_snapshot": {
@@ -38,5 +48,14 @@
     "sha256": "06450de904a4892c78ee9b070b424bea5fbc32ce0f72e4473431ee4cad271702",
     "by": "github-actions[bot]",
     "at": "2026-10-07T02:36:47.352Z"
+  },
+  "resume_at": null,
+  "flow_plan": {
+    "kind": "feature",
+    "confidence": 0,
+    "matched_rule": "fallback:no-plan-produced",
+    "gates": {},
+    "councils": {},
+    "decided_at": "2026-10-07T02:37:48.827Z"
   }
 }

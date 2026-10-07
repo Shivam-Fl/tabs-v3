@@ -340,8 +340,5 @@
     "at": "2026-10-06T13:16:19.350Z"
   },
   "qa_open_bugs": [],
-  "ceiling_run": "37469515490",
-  "retry_after": "2026-10-07T00:00:00.000Z",
-  "retry_stage": "implement",
-  "parked_at": "2026-10-06T13:16:45.304Z"
+  "ceiling_run": "37469515490"
 }

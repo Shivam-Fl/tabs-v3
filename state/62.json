@@ -175,7 +175,14 @@
     "debate_summary": "The critique's verdict was 'sound' and I agree with the diagnosis; it changed three things. Accepted: the AC-1 and AC-4 skeleton halves cannot be observed in a browser here (environment.md says so), so they are test-verified and the 'throttle the network' QA steps are dropped. Accepted: the 4px arrival shift is avoidable, so the loaded scope line gets min-h-5 to match the 24px skeleton and the 'moves by no more than 4px' clause is gone. Accepted in spirit: the index-order wire test is brittle and a regex on the failed expression is the same flaw that finding 4 reported, so I went further than the critique's two options and extracted a pure failedFeedScope helper with a behavioural test, which also covers the groups-OK + own-group keep case the critique said was missed. The single-flag simplification (drop `failed &&`) is accepted and subsumed by the helper. Dismissed: the aria-busy placement finding (scope-line skeleton outside the busy region) is a note, not a defect, since an empty pulse div is not announced and the proposal's reason about testability stands; the repeated-param and withDb-before-reads edge cases are already handled by existing behaviour and are now unit-cased. Not resolved by debate: -mt-4 is a first in this repo and depends on Tailwind v4 negating the replaced spacing keys; both proposer and critic called it likely but unverified, so the implementer measures it.",
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "components/activity-feed.tsx",
+    "lib/activity/queries.ts",
+    "app/activity/page.tsx",
+    "app/activity/failed-feed.test.ts",
+    "lib/activity/queries.test.ts",
+    "app/activity/guard-wire-status.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

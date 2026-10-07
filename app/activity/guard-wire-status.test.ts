@@ -27,8 +27,10 @@ describe('the activity route', () => {
     expect(redirectAt).toBeLessThan(boundaryAt);
   });
 
-  it('keeps the raw group scope on the failed branch when the groups read is what failed', () => {
+  it('carries the raw group id on the failed branch only when the groups read could not confirm it', () => {
     expect(page).toContain('<ActivityFailed');
-    expect(page).toMatch(/groupId=\{scoped\?\.id \?\? rawGroupScope\(/);
+    expect(page).toContain('failedFeedScope(groupsLoaded, groups, rawGroup)');
+    expect(page).toContain('groupsLoaded = true');
+    expect(page).not.toContain('scoped?.id ?? rawGroupScope(');
   });
 });

@@ -25,5 +25,12 @@
   "review_root_caused": [],
   "created_at": "2026-10-07T01:17:10.667Z",
   "updated_at": "2026-10-07T01:17:10.667Z",
-  "history": []
+  "history": [],
+  "issue_snapshot": {
+    "title": "Follow-ups from #62: 1 from the review",
+    "body": "What the review and QA of PR #64 (for #62) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### Nothing tests where groupsLoaded is set, and the page's try block is untested, so the one wiring that makes failedFeedScope correct can silently regress.\n\n> Nothing tests where groupsLoaded is set, and the page's try block is untested, so the one wiring that makes failedFeedScope correct can silently regress.\n> \n> `app/activity/guard-wire-status.test.ts:32`\n> \n> Evidence: The wire test only asserts the source contains 'groupsLoaded = true' and the helper call. If the assignment moved below the listUserActivity await (or above the groups read), a feed-read failure would pass groupsLoaded=false and carry a stranger's uuid again (the original defect), and every test would still pass. The helper itself is correctly unit-tested.\n> \n> Fix: Optionally assert the order of 'listActivityGroups', 'groupsLoaded = true' and 'listUserActivity' in the page source, or accept the residual risk the work order already recorded.\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #62.",
+    "sha256": "18de863f752f691d5e67d6932933374a8f916910805a2623a553848b37a572d7",
+    "by": "github-actions[bot]",
+    "at": "2026-10-07T01:17:27.198Z"
+  }
 }

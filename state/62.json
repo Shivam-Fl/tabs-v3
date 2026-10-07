@@ -18,7 +18,163 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "issue": 62,
+    "version": 1,
+    "kind": "bug",
+    "understanding": "Four review findings from PR #59 on the /activity screen; all four still reproduce on main. (1) ActivityFeedSkeleton has no aria-busy and no sr-only role=status line, unlike GroupPageSkeleton, so the fallback is silent to a screen reader. (2) app/activity/page.tsx:140 passes `scoped?.id ?? rawGroupScope(rawGroup)` to ActivityFailed, so when the groups read succeeded but the feed read failed, a stranger's ?group= uuid still lands in the chip form's hidden input and the Retry href. (3) The 'Showing X only' line left <header className=\"flex flex-col gap-2\"> and is now a child of <main ... gap-5>; in this repo's replaced spacing scale (globals.css --spacing-2=8px, -4=16px, -5=24px) it sits 24px under the title instead of 8px, and its fallback Skeleton h-6 (32px) is taller than the 20px text line. (4) is (2) seen from the comment/test side: the comment says the raw id is carried only when the groups read failed, the code carries it whenever the feed failed and the id is not a confirmed scope, and the wire test's third case is titled for the groups-read case while matching only the loose expression. (2) and (4) are one change. One screen, one component: no split.",
+    "root_cause": "PR #59 moved the scope line and the failed branch into ActivityContent without tracking which read failed (one try block covers both awaits), so the failed branch falls back to the raw id regardless of whether the groups read could confirm it; and restructuring loading.tsx and the header dropped the loading semantics and the header's gap-2 wrapper.",
+    "approach": "Fold the critique's better test shape into the proposal. (a) ActivityFeedSkeleton root gets aria-busy=\"true\" and a first child `<p role=\"status\" className=\"sr-only\">Loading activity…</p>` as GroupPageSkeleton does (sr-only is absolutely positioned, so it adds no gap). It lives in the shared skeleton so failed-feed.test.ts can render it. (b)+(d) Add a pure helper `failedFeedScope(groupsLoaded: boolean, groups: ActivityGroup[], raw)` to lib/activity/queries.ts next to rawGroupScope: when the groups read completed, return the id only if it is one of the viewer's groups (else null); when it did not complete, return rawGroupScope(raw) because nothing can confirm it and dropping it would widen a scoped feed's Retry to every group. ActivityContent tracks a single `let groupsLoaded = false`, set true right after the listActivityGroups await and before the rows read, and the failed branch becomes `<ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />` with the comment reworded to 'the raw id is carried only when the groups read could not confirm anything (it did not complete)'. This is a behavioural unit test target instead of another source-text regex, and covers the groups-ok + own-group keep case that the proposal's tests missed. (c) Restore the 8px rhythm with `-mt-4` on the loaded scope `<p>` (main gap 24px - 16px = 8px; the review's `-mt-3` would leave 12px in this scale) plus `min-h-5` (24px) on that `<p>`, and give the fallback scope Skeleton `-mt-4 h-5` (24px). Both occupy 24px at the same position, so the 4px arrival shift the proposal accepted is avoided (docs/ui.md: no layout shift when data arrives). The text stays top-aligned in its box; the chips stay 24px below the block. A wrapper div is rejected because it would shrink the line-to-chips distance too; moving the line back into <header> would need a second groups read outside Suspense. The implementer must confirm Tailwind v4 emits `-mt-4` under the replaced --spacing-* keys by grepping the built CSS and measuring in a browser; if it does not, report back and fall back to accepting 24px and documenting it, not to an invented structure.",
+    "files": [
+      {
+        "path": "components/activity-feed.tsx",
+        "action": "edit",
+        "change": "In ActivityFeedSkeleton add aria-busy=\"true\" to the root `<div className=\"flex flex-col gap-3\">` and make `<p role=\"status\" className=\"sr-only\">Loading activity…</p>` its first child, above the <noscript>. Extend the doc comment by one clause: the busy flag and status line are what the deleted loading.tsx carried and what GroupPageSkeleton keeps.",
+        "why": "Finding 1."
+      },
+      {
+        "path": "lib/activity/queries.ts",
+        "action": "edit",
+        "change": "Add exported pure `failedFeedScope(groupsLoaded: boolean, groups: ActivityGroup[], raw: string | string[] | undefined): string | null` beside rawGroupScope: `groupsLoaded ? (groups.find((g) => g.id === rawGroupScope(raw))?.id ?? null) : rawGroupScope(raw)`, with a short comment: the raw id is only carried when the groups read could not confirm anything, so a failed feed keeps its scope instead of widening to every group, and a confirmed read never carries a stranger's id.",
+        "why": "Findings 2 and 4: one tested decision instead of a pinned source expression."
+      },
+      {
+        "path": "app/activity/page.tsx",
+        "action": "edit",
+        "change": "ActivityContent: add `let groupsLoaded = false;` beside `failed`, set `groupsLoaded = true;` immediately after the listActivityGroups await, import failedFeedScope, and change the failed branch to `<ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />` with its comment reworded to the helper's rule. Scope line `<p>`: className becomes `-mt-4 min-h-5 text-secondary text-ink-muted` with a one-line comment that it restores the 8px gap it had under the title when it lived in the header (main's gap is 24px) and reserves the skeleton's 24px. ActivityPage fallback: `<Skeleton className=\"-mt-4 h-5 w-64\" />` in place of `h-6 w-64`, comment updated to say it holds the loaded line's position and height.",
+        "why": "Findings 2, 3 and 4."
+      }
+    ],
+    "tests": [
+      {
+        "path": "app/activity/failed-feed.test.ts",
+        "action": "edit",
+        "cases": [
+          "ActivityFeedSkeleton: renderToStaticMarkup output contains aria-busy=\"true\" and `<p role=\"status\" class=\"sr-only\">Loading activity…</p>`"
+        ]
+      },
+      {
+        "path": "lib/activity/queries.test.ts",
+        "action": "edit",
+        "cases": [
+          "failedFeedScope: groups read did not complete -> returns the raw uuid (and the first uuid of a repeated param); non-uuid or missing -> null",
+          "failedFeedScope: groups read completed and the raw id is not one of the viewer's groups (stranger's uuid) -> null",
+          "failedFeedScope: groups read completed and the raw id is one of the viewer's groups -> that id"
+        ]
+      },
+      {
+        "path": "app/activity/guard-wire-status.test.ts",
+        "action": "edit",
+        "cases": [
+          "failed branch routes its scope through failedFeedScope(groupsLoaded, groups, rawGroup), with the title saying the raw id is carried only when the groups read could not confirm it; replaces the loose `scoped?.id ?? rawGroupScope(` regex",
+          "page sets groupsLoaded between the listActivityGroups call and the listUserActivity call is NOT asserted (index-order brittleness rejected); instead assert the source contains `groupsLoaded = true` and no longer contains `scoped?.id ?? rawGroupScope(`"
+        ]
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "The /activity loading fallback (ActivityFeedSkeleton) carries aria-busy=\"true\" on its root and an sr-only role=status 'Loading activity…' line, as GroupPageSkeleton does; nothing visible moves because of it.",
+        "verify": "test",
+        "how_to_verify": "failed-feed.test.ts ActivityFeedSkeleton case. A browser cannot see the fallback locally (PGlite never yields; .sdlc/memory/qa/environment.md), so no throttling step is part of this check."
+      },
+      {
+        "id": "AC-2",
+        "check": "When the feed read fails but the groups read completed, the failed branch's chip hidden input and Retry carry only a ?group= id that is one of the viewer's groups; a stranger's uuid is dropped, matching the success branch; the viewer's own group id is kept.",
+        "verify": "test",
+        "how_to_verify": "queries.test.ts failedFeedScope cases (completed + stranger -> null; completed + own -> id) plus the existing ActivityFailed render cases. The live app cannot make a read fail."
+      },
+      {
+        "id": "AC-3",
+        "check": "When the groups read did not complete, the raw (uuid-shaped) ?group= id is still carried into the chips and Retry so a scoped feed's failure does not widen to every group.",
+        "verify": "test",
+        "how_to_verify": "queries.test.ts failedFeedScope groups-not-loaded case; existing 'keeps the group scope in the chip form and in Retry' case."
+      },
+      {
+        "id": "AC-4",
+        "check": "On /activity?group=<one of my groups>, the 'Showing <group> only. Show every group' line sits 8px below the title row's bottom edge and the feed chips sit 24px below the line's box; the unscoped feed's layout is unchanged; the fallback scope Skeleton and the loaded line's box are both 24px tall at the same top position.",
+        "verify": "browser",
+        "how_to_verify": "Playwright at 375x812 and 1280x800: sign up, create a group, open /activity?group=<id>; header.bottom to the scope <p>.top = 8, the <p> height >= 24, <p>.bottom to the chips' top = 24 (one-line name). Also open /activity unscoped and an empty scoped group (scope line present, empty state follows). The skeleton half is asserted by class in the source test, not painted."
+      },
+      {
+        "id": "AC-5",
+        "check": "The comment above the failed branch, the helper's comment, and the wire test's title and assertion describe the same condition as the code (raw id only when the groups read could not confirm a scope).",
+        "verify": "test",
+        "how_to_verify": "guard-wire-status.test.ts passes against the helper call and would fail against the old loose expression; read the diff for comment agreement."
+      }
+    ],
+    "qa_script": [
+      "Sign up a fresh account, create a group, add one expense so the feed has a row.",
+      "Open /activity (unscoped) at 375x812 and 1280x800: title row, chips and rows unchanged from main; no scope line.",
+      "Open /activity?group=<that group's id>: measure header bottom to scope line top (8px) and scope line bottom to chips top (24px).",
+      "Open /activity?group=<a random valid uuid that is not the viewer's group>: the full feed shows with no scope line and the chips' links carry no group param.",
+      "Create a second empty group and open /activity?group=<its id>: the scope line is 8px under the title and the empty state follows.",
+      "Fetch /activity?group=<id> raw (curl with the session cookie) and confirm the page is not broken; the fallback and the failed branch cannot be painted or triggered in the live app, so rely on the unit and source tests for AC-1, AC-2, AC-3.",
+      "Check the built CSS contains the -mt-4 and min-h-5 rules."
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Proposal's shape: `groupsFailed = failed && !groupsLoaded` const and an inline `groupsFailed ? rawGroupScope(rawGroup) : (scoped?.id ?? null)`, pinned by a regex.",
+        "rejected_because": "The `failed &&` is redundant inside `if (failed)`, and a regex on the expression repeats the exact defect of finding 4 (a test pinning one spelling). A pure helper with its own unit test covers all three cases, including the keep case."
+      },
+      {
+        "approach": "Index-order wire test that groupsLoaded is assigned between the two awaits.",
+        "rejected_because": "Pins incidental source layout and a local variable name; the helper's behavioural test covers the invariant."
+      },
+      {
+        "approach": "Accept the 4px skeleton/loaded shift from h-5 vs a 20px line.",
+        "rejected_because": "Avoidable: min-h-5 on the loaded line reserves the same 24px, and docs/ui.md forbids layout shift on arrival."
+      },
+      {
+        "approach": "Wrap the scope line and feed in `flex-col gap-2`, or move the line back into <header>.",
+        "rejected_because": "The wrapper shrinks the line-to-chips distance as well; the header would need its own groups read outside Suspense, breaking the guard-first, one-read-at-a-time design the wire test pins."
+      },
+      {
+        "approach": "Put aria-busy and the status line in a wrapper around the whole fallback fragment in page.tsx, as the finding words it.",
+        "rejected_because": "The fragment is not exported, so failed-feed.test.ts cannot render it. The one decorative pulse block outside the busy region is an empty div to a screen reader; noted, not worth the lost testability."
+      },
+      {
+        "approach": "The review's literal `-mt-3`.",
+        "rejected_because": "--spacing-3 is 12px here, leaving 12px, not 8px; -mt-4 lands on 8px."
+      }
+    ],
+    "assumptions": [
+      "Tailwind v4 emits `-mt-4` as calc(var(--spacing-4) * -1) and `min-h-5` as 24px under the replaced --spacing-* keys; no negative margin class exists in the repo today, so this is unverified until the built CSS is grepped.",
+      "listActivityGroups and listUserActivity are the only awaits that can throw in the try; a withDb failure before the first leaves groupsLoaded false, the conservative side (carries the raw id, as today).",
+      "rawGroupScope already rejects non-uuid and array junk and activityHref encodes it, so carrying the raw value cannot inject into the hidden input or href."
+    ],
+    "unknowns": [
+      "Whether a wrapped scope line (a long group name at 375px) shifts content when it resolves from a 24px skeleton; same property as before #59, out of scope."
+    ],
+    "risks": [
+      "A negative margin is a first in this codebase and couples to main's 24px gap; the comment records the coupling. If Tailwind does not emit it, fall back to accepting 24px and saying so in the PR (AC-4 would then be amended, not worked around).",
+      "wire tests remain source-text assertions for the parts only a source test can hold (no loading.tsx, redirect before Suspense, the call to failedFeedScope).",
+      "No change under .sdlc/**, docs/** or .github/**; docs/ui.md untouched."
+    ],
+    "out_of_scope": [
+      "Making the failed branch triggerable in the live app or mocking withDb to throw per read.",
+      "Sibling skeletons (members, home) and their noscript notices.",
+      "Reserving a taller skeleton for a wrapped, long-named scope line."
+    ],
+    "residual_risks": [
+      "The failed branch and the loading fallback cannot be exercised in the running app; they are covered by unit and source tests only.",
+      "A wrapped scope line still shifts content on arrival.",
+      "The -mt-4 rule's generation is verified only at implementation time."
+    ],
+    "confidence": 86,
+    "confidence_rationale": "All four findings were re-read against main and confirmed; the edits are tiny and local, and the helper makes the one logic change directly testable. The one unverified piece is that Tailwind v4 emits -mt-4 and min-h-5 under the replaced spacing theme, which a build and a measured gap settle; a failure there lowers the outcome to documenting the 24px gap, not to a broken screen.",
+    "reproduced": true,
+    "evidence": [
+      "app/activity/page.tsx:140 `groupId={scoped?.id ?? rawGroupScope(rawGroup)}`: scoped is null for a stranger's uuid when only the rows read failed, rawGroupScope returns it.",
+      "components/activity-feed.tsx ActivityFeedSkeleton root is `<div className=\"flex flex-col gap-3\">` with no aria-busy or status; components/group-skeletons.tsx GroupPageSkeleton has both.",
+      "app/activity/page.tsx:76,148-149: scope <p> is a child of main (gap-5); app/globals.css defines --spacing-2: 8px, --spacing-4: 16px, --spacing-5: 24px; `h-6` skeleton is 32px against a 20px text-secondary line.",
+      "app/activity/guard-wire-status.test.ts:30-33 is titled for the groups-read case but only matches /groupId=\\{scoped\\?\\.id \\?\\? rawGroupScope\\(/.",
+      ".sdlc/memory/qa/environment.md: PGlite never yields so loading skeletons never paint locally, which is why the skeleton checks are test-verified.",
+      "ActivityFeedSkeleton and ActivityFailed are used only by app/activity/page.tsx and failed-feed.test.ts; no other call site is affected."
+    ],
+    "debate_summary": "The critique's verdict was 'sound' and I agree with the diagnosis; it changed three things. Accepted: the AC-1 and AC-4 skeleton halves cannot be observed in a browser here (environment.md says so), so they are test-verified and the 'throttle the network' QA steps are dropped. Accepted: the 4px arrival shift is avoidable, so the loaded scope line gets min-h-5 to match the 24px skeleton and the 'moves by no more than 4px' clause is gone. Accepted in spirit: the index-order wire test is brittle and a regex on the failed expression is the same flaw that finding 4 reported, so I went further than the critique's two options and extracted a pure failedFeedScope helper with a behavioural test, which also covers the groups-OK + own-group keep case the critique said was missed. The single-flag simplification (drop `failed &&`) is accepted and subsumed by the helper. Dismissed: the aria-busy placement finding (scope-line skeleton outside the busy region) is a note, not a defect, since an empty pulse div is not announced and the proposal's reason about testability stands; the repeated-param and withDb-before-reads edge cases are already handled by existing behaviour and are now unit-cased. Not resolved by debate: -mt-4 is a first in this repo and depends on Tailwind v4 negating the replaced spacing keys; both proposer and critic called it likely but unverified, so the implementer measures it.",
+    "mode": "committed"
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -74,320 +230,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "plan",
-  "validated_work_order": {
-    "issue": 62,
-    "version": 1,
-    "kind": "bug",
-    "understanding": "Four review findings from PR #59 on the /activity screen; all four still reproduce on main. (1) ActivityFeedSkeleton has no aria-busy and no sr-only role=status line, unlike GroupPageSkeleton, so the fallback is silent to a screen reader. (2) app/activity/page.tsx:140 passes `scoped?.id ?? rawGroupScope(rawGroup)` to ActivityFailed, so when the groups read succeeded but the feed read failed, a stranger's ?group= uuid still lands in the chip form's hidden input and the Retry href. (3) The 'Showing X only' line left <header className=\"flex flex-col gap-2\"> and is now a child of <main ... gap-5>; in this repo's replaced spacing scale (globals.css --spacing-2=8px, -4=16px, -5=24px) it sits 24px under the title instead of 8px, and its fallback Skeleton h-6 (32px) is taller than the 20px text line. (4) is (2) seen from the comment/test side: the comment says the raw id is carried only when the groups read failed, the code carries it whenever the feed failed and the id is not a confirmed scope, and the wire test's third case is titled for the groups-read case while matching only the loose expression. (2) and (4) are one change. One screen, one component: no split.",
-    "root_cause": "PR #59 moved the scope line and the failed branch into ActivityContent without tracking which read failed (one try block covers both awaits), so the failed branch falls back to the raw id regardless of whether the groups read could confirm it; and restructuring loading.tsx and the header dropped the loading semantics and the header's gap-2 wrapper.",
-    "approach": "Fold the critique's better test shape into the proposal. (a) ActivityFeedSkeleton root gets aria-busy=\"true\" and a first child `<p role=\"status\" className=\"sr-only\">Loading activity…</p>` as GroupPageSkeleton does (sr-only is absolutely positioned, so it adds no gap). It lives in the shared skeleton so failed-feed.test.ts can render it. (b)+(d) Add a pure helper `failedFeedScope(groupsLoaded: boolean, groups: ActivityGroup[], raw)` to lib/activity/queries.ts next to rawGroupScope: when the groups read completed, return the id only if it is one of the viewer's groups (else null); when it did not complete, return rawGroupScope(raw) because nothing can confirm it and dropping it would widen a scoped feed's Retry to every group. ActivityContent tracks a single `let groupsLoaded = false`, set true right after the listActivityGroups await and before the rows read, and the failed branch becomes `<ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />` with the comment reworded to 'the raw id is carried only when the groups read could not confirm anything (it did not complete)'. This is a behavioural unit test target instead of another source-text regex, and covers the groups-ok + own-group keep case that the proposal's tests missed. (c) Restore the 8px rhythm with `-mt-4` on the loaded scope `<p>` (main gap 24px - 16px = 8px; the review's `-mt-3` would leave 12px in this scale) plus `min-h-5` (24px) on that `<p>`, and give the fallback scope Skeleton `-mt-4 h-5` (24px). Both occupy 24px at the same position, so the 4px arrival shift the proposal accepted is avoided (docs/ui.md: no layout shift when data arrives). The text stays top-aligned in its box; the chips stay 24px below the block. A wrapper div is rejected because it would shrink the line-to-chips distance too; moving the line back into <header> would need a second groups read outside Suspense. The implementer must confirm Tailwind v4 emits `-mt-4` under the replaced --spacing-* keys by grepping the built CSS and measuring in a browser; if it does not, report back and fall back to accepting 24px and documenting it, not to an invented structure.",
-    "files": [
-      {
-        "path": "components/activity-feed.tsx",
-        "action": "edit",
-        "change": "In ActivityFeedSkeleton add aria-busy=\"true\" to the root `<div className=\"flex flex-col gap-3\">` and make `<p role=\"status\" className=\"sr-only\">Loading activity…</p>` its first child, above the <noscript>. Extend the doc comment by one clause: the busy flag and status line are what the deleted loading.tsx carried and what GroupPageSkeleton keeps.",
-        "why": "Finding 1."
-      },
-      {
-        "path": "lib/activity/queries.ts",
-        "action": "edit",
-        "change": "Add exported pure `failedFeedScope(groupsLoaded: boolean, groups: ActivityGroup[], raw: string | string[] | undefined): string | null` beside rawGroupScope: `groupsLoaded ? (groups.find((g) => g.id === rawGroupScope(raw))?.id ?? null) : rawGroupScope(raw)`, with a short comment: the raw id is only carried when the groups read could not confirm anything, so a failed feed keeps its scope instead of widening to every group, and a confirmed read never carries a stranger's id.",
-        "why": "Findings 2 and 4: one tested decision instead of a pinned source expression."
-      },
-      {
-        "path": "app/activity/page.tsx",
-        "action": "edit",
-        "change": "ActivityContent: add `let groupsLoaded = false;` beside `failed`, set `groupsLoaded = true;` immediately after the listActivityGroups await, import failedFeedScope, and change the failed branch to `<ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />` with its comment reworded to the helper's rule. Scope line `<p>`: className becomes `-mt-4 min-h-5 text-secondary text-ink-muted` with a one-line comment that it restores the 8px gap it had under the title when it lived in the header (main's gap is 24px) and reserves the skeleton's 24px. ActivityPage fallback: `<Skeleton className=\"-mt-4 h-5 w-64\" />` in place of `h-6 w-64`, comment updated to say it holds the loaded line's position and height.",
-        "why": "Findings 2, 3 and 4."
-      }
-    ],
-    "tests": [
-      {
-        "path": "app/activity/failed-feed.test.ts",
-        "action": "edit",
-        "cases": [
-          "ActivityFeedSkeleton: renderToStaticMarkup output contains aria-busy=\"true\" and `<p role=\"status\" class=\"sr-only\">Loading activity…</p>`"
-        ]
-      },
-      {
-        "path": "lib/activity/queries.test.ts",
-        "action": "edit",
-        "cases": [
-          "failedFeedScope: groups read did not complete -> returns the raw uuid (and the first uuid of a repeated param); non-uuid or missing -> null",
-          "failedFeedScope: groups read completed and the raw id is not one of the viewer's groups (stranger's uuid) -> null",
-          "failedFeedScope: groups read completed and the raw id is one of the viewer's groups -> that id"
-        ]
-      },
-      {
-        "path": "app/activity/guard-wire-status.test.ts",
-        "action": "edit",
-        "cases": [
-          "failed branch routes its scope through failedFeedScope(groupsLoaded, groups, rawGroup), with the title saying the raw id is carried only when the groups read could not confirm it; replaces the loose `scoped?.id ?? rawGroupScope(` regex",
-          "page sets groupsLoaded between the listActivityGroups call and the listUserActivity call is NOT asserted (index-order brittleness rejected); instead assert the source contains `groupsLoaded = true` and no longer contains `scoped?.id ?? rawGroupScope(`"
-        ]
-      }
-    ],
-    "acceptance": [
-      {
-        "id": "AC-1",
-        "check": "The /activity loading fallback (ActivityFeedSkeleton) carries aria-busy=\"true\" on its root and an sr-only role=status 'Loading activity…' line, as GroupPageSkeleton does; nothing visible moves because of it.",
-        "verify": "test",
-        "how_to_verify": "failed-feed.test.ts ActivityFeedSkeleton case. A browser cannot see the fallback locally (PGlite never yields; .sdlc/memory/qa/environment.md), so no throttling step is part of this check."
-      },
-      {
-        "id": "AC-2",
-        "check": "When the feed read fails but the groups read completed, the failed branch's chip hidden input and Retry carry only a ?group= id that is one of the viewer's groups; a stranger's uuid is dropped, matching the success branch; the viewer's own group id is kept.",
-        "verify": "test",
-        "how_to_verify": "queries.test.ts failedFeedScope cases (completed + stranger -> null; completed + own -> id) plus the existing ActivityFailed render cases. The live app cannot make a read fail."
-      },
-      {
-        "id": "AC-3",
-        "check": "When the groups read did not complete, the raw (uuid-shaped) ?group= id is still carried into the chips and Retry so a scoped feed's failure does not widen to every group.",
-        "verify": "test",
-        "how_to_verify": "queries.test.ts failedFeedScope groups-not-loaded case; existing 'keeps the group scope in the chip form and in Retry' case."
-      },
-      {
-        "id": "AC-4",
-        "check": "On /activity?group=<one of my groups>, the 'Showing <group> only. Show every group' line sits 8px below the title row's bottom edge and the feed chips sit 24px below the line's box; the unscoped feed's layout is unchanged; the fallback scope Skeleton and the loaded line's box are both 24px tall at the same top position.",
-        "verify": "browser",
-        "how_to_verify": "Playwright at 375x812 and 1280x800: sign up, create a group, open /activity?group=<id>; header.bottom to the scope <p>.top = 8, the <p> height >= 24, <p>.bottom to the chips' top = 24 (one-line name). Also open /activity unscoped and an empty scoped group (scope line present, empty state follows). The skeleton half is asserted by class in the source test, not painted."
-      },
-      {
-        "id": "AC-5",
-        "check": "The comment above the failed branch, the helper's comment, and the wire test's title and assertion describe the same condition as the code (raw id only when the groups read could not confirm a scope).",
-        "verify": "test",
-        "how_to_verify": "guard-wire-status.test.ts passes against the helper call and would fail against the old loose expression; read the diff for comment agreement."
-      }
-    ],
-    "qa_script": [
-      "Sign up a fresh account, create a group, add one expense so the feed has a row.",
-      "Open /activity (unscoped) at 375x812 and 1280x800: title row, chips and rows unchanged from main; no scope line.",
-      "Open /activity?group=<that group's id>: measure header bottom to scope line top (8px) and scope line bottom to chips top (24px).",
-      "Open /activity?group=<a random valid uuid that is not the viewer's group>: the full feed shows with no scope line and the chips' links carry no group param.",
-      "Create a second empty group and open /activity?group=<its id>: the scope line is 8px under the title and the empty state follows.",
-      "Fetch /activity?group=<id> raw (curl with the session cookie) and confirm the page is not broken; the fallback and the failed branch cannot be painted or triggered in the live app, so rely on the unit and source tests for AC-1, AC-2, AC-3.",
-      "Check the built CSS contains the -mt-4 and min-h-5 rules."
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Proposal's shape: `groupsFailed = failed && !groupsLoaded` const and an inline `groupsFailed ? rawGroupScope(rawGroup) : (scoped?.id ?? null)`, pinned by a regex.",
-        "rejected_because": "The `failed &&` is redundant inside `if (failed)`, and a regex on the expression repeats the exact defect of finding 4 (a test pinning one spelling). A pure helper with its own unit test covers all three cases, including the keep case."
-      },
-      {
-        "approach": "Index-order wire test that groupsLoaded is assigned between the two awaits.",
-        "rejected_because": "Pins incidental source layout and a local variable name; the helper's behavioural test covers the invariant."
-      },
-      {
-        "approach": "Accept the 4px skeleton/loaded shift from h-5 vs a 20px line.",
-        "rejected_because": "Avoidable: min-h-5 on the loaded line reserves the same 24px, and docs/ui.md forbids layout shift on arrival."
-      },
-      {
-        "approach": "Wrap the scope line and feed in `flex-col gap-2`, or move the line back into <header>.",
-        "rejected_because": "The wrapper shrinks the line-to-chips distance as well; the header would need its own groups read outside Suspense, breaking the guard-first, one-read-at-a-time design the wire test pins."
-      },
-      {
-        "approach": "Put aria-busy and the status line in a wrapper around the whole fallback fragment in page.tsx, as the finding words it.",
-        "rejected_because": "The fragment is not exported, so failed-feed.test.ts cannot render it. The one decorative pulse block outside the busy region is an empty div to a screen reader; noted, not worth the lost testability."
-      },
-      {
-        "approach": "The review's literal `-mt-3`.",
-        "rejected_because": "--spacing-3 is 12px here, leaving 12px, not 8px; -mt-4 lands on 8px."
-      }
-    ],
-    "assumptions": [
-      "Tailwind v4 emits `-mt-4` as calc(var(--spacing-4) * -1) and `min-h-5` as 24px under the replaced --spacing-* keys; no negative margin class exists in the repo today, so this is unverified until the built CSS is grepped.",
-      "listActivityGroups and listUserActivity are the only awaits that can throw in the try; a withDb failure before the first leaves groupsLoaded false, the conservative side (carries the raw id, as today).",
-      "rawGroupScope already rejects non-uuid and array junk and activityHref encodes it, so carrying the raw value cannot inject into the hidden input or href."
-    ],
-    "unknowns": [
-      "Whether a wrapped scope line (a long group name at 375px) shifts content when it resolves from a 24px skeleton; same property as before #59, out of scope."
-    ],
-    "risks": [
-      "A negative margin is a first in this codebase and couples to main's 24px gap; the comment records the coupling. If Tailwind does not emit it, fall back to accepting 24px and saying so in the PR (AC-4 would then be amended, not worked around).",
-      "wire tests remain source-text assertions for the parts only a source test can hold (no loading.tsx, redirect before Suspense, the call to failedFeedScope).",
-      "No change under .sdlc/**, docs/** or .github/**; docs/ui.md untouched."
-    ],
-    "out_of_scope": [
-      "Making the failed branch triggerable in the live app or mocking withDb to throw per read.",
-      "Sibling skeletons (members, home) and their noscript notices.",
-      "Reserving a taller skeleton for a wrapped, long-named scope line."
-    ],
-    "residual_risks": [
-      "The failed branch and the loading fallback cannot be exercised in the running app; they are covered by unit and source tests only.",
-      "A wrapped scope line still shifts content on arrival.",
-      "The -mt-4 rule's generation is verified only at implementation time."
-    ],
-    "confidence": 86,
-    "confidence_rationale": "All four findings were re-read against main and confirmed; the edits are tiny and local, and the helper makes the one logic change directly testable. The one unverified piece is that Tailwind v4 emits -mt-4 and min-h-5 under the replaced spacing theme, which a build and a measured gap settle; a failure there lowers the outcome to documenting the 24px gap, not to a broken screen.",
-    "reproduced": true,
-    "evidence": [
-      "app/activity/page.tsx:140 `groupId={scoped?.id ?? rawGroupScope(rawGroup)}`: scoped is null for a stranger's uuid when only the rows read failed, rawGroupScope returns it.",
-      "components/activity-feed.tsx ActivityFeedSkeleton root is `<div className=\"flex flex-col gap-3\">` with no aria-busy or status; components/group-skeletons.tsx GroupPageSkeleton has both.",
-      "app/activity/page.tsx:76,148-149: scope <p> is a child of main (gap-5); app/globals.css defines --spacing-2: 8px, --spacing-4: 16px, --spacing-5: 24px; `h-6` skeleton is 32px against a 20px text-secondary line.",
-      "app/activity/guard-wire-status.test.ts:30-33 is titled for the groups-read case but only matches /groupId=\\{scoped\\?\\.id \\?\\? rawGroupScope\\(/.",
-      ".sdlc/memory/qa/environment.md: PGlite never yields so loading skeletons never paint locally, which is why the skeleton checks are test-verified.",
-      "ActivityFeedSkeleton and ActivityFailed are used only by app/activity/page.tsx and failed-feed.test.ts; no other call site is affected."
-    ],
-    "debate_summary": "The critique's verdict was 'sound' and I agree with the diagnosis; it changed three things. Accepted: the AC-1 and AC-4 skeleton halves cannot be observed in a browser here (environment.md says so), so they are test-verified and the 'throttle the network' QA steps are dropped. Accepted: the 4px arrival shift is avoidable, so the loaded scope line gets min-h-5 to match the 24px skeleton and the 'moves by no more than 4px' clause is gone. Accepted in spirit: the index-order wire test is brittle and a regex on the failed expression is the same flaw that finding 4 reported, so I went further than the critique's two options and extracted a pure failedFeedScope helper with a behavioural test, which also covers the groups-OK + own-group keep case the critique said was missed. The single-flag simplification (drop `failed &&`) is accepted and subsumed by the helper. Dismissed: the aria-busy placement finding (scope-line skeleton outside the busy region) is a note, not a defect, since an empty pulse div is not announced and the proposal's reason about testability stands; the repeated-param and withDb-before-reads edge cases are already handled by existing behaviour and are now unit-cased. Not resolved by debate: -mt-4 is a first in this repo and depends on Tailwind v4 negating the replaced spacing keys; both proposer and critic called it likely but unverified, so the implementer measures it."
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-07T00:53:00.943Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "issue": 62,
-    "version": 1,
-    "kind": "bug",
-    "understanding": "Four review findings from PR #59 on the /activity screen; all four still reproduce on main. (1) ActivityFeedSkeleton has no aria-busy and no sr-only role=status line, unlike GroupPageSkeleton, so the fallback is silent to a screen reader. (2) app/activity/page.tsx:140 passes `scoped?.id ?? rawGroupScope(rawGroup)` to ActivityFailed, so when the groups read succeeded but the feed read failed, a stranger's ?group= uuid still lands in the chip form's hidden input and the Retry href. (3) The 'Showing X only' line left <header className=\"flex flex-col gap-2\"> and is now a child of <main ... gap-5>; in this repo's replaced spacing scale (globals.css --spacing-2=8px, -4=16px, -5=24px) it sits 24px under the title instead of 8px, and its fallback Skeleton h-6 (32px) is taller than the 20px text line. (4) is (2) seen from the comment/test side: the comment says the raw id is carried only when the groups read failed, the code carries it whenever the feed failed and the id is not a confirmed scope, and the wire test's third case is titled for the groups-read case while matching only the loose expression. (2) and (4) are one change. One screen, one component: no split.",
-    "root_cause": "PR #59 moved the scope line and the failed branch into ActivityContent without tracking which read failed (one try block covers both awaits), so the failed branch falls back to the raw id regardless of whether the groups read could confirm it; and restructuring loading.tsx and the header dropped the loading semantics and the header's gap-2 wrapper.",
-    "approach": "Fold the critique's better test shape into the proposal. (a) ActivityFeedSkeleton root gets aria-busy=\"true\" and a first child `<p role=\"status\" className=\"sr-only\">Loading activity…</p>` as GroupPageSkeleton does (sr-only is absolutely positioned, so it adds no gap). It lives in the shared skeleton so failed-feed.test.ts can render it. (b)+(d) Add a pure helper `failedFeedScope(groupsLoaded: boolean, groups: ActivityGroup[], raw)` to lib/activity/queries.ts next to rawGroupScope: when the groups read completed, return the id only if it is one of the viewer's groups (else null); when it did not complete, return rawGroupScope(raw) because nothing can confirm it and dropping it would widen a scoped feed's Retry to every group. ActivityContent tracks a single `let groupsLoaded = false`, set true right after the listActivityGroups await and before the rows read, and the failed branch becomes `<ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />` with the comment reworded to 'the raw id is carried only when the groups read could not confirm anything (it did not complete)'. This is a behavioural unit test target instead of another source-text regex, and covers the groups-ok + own-group keep case that the proposal's tests missed. (c) Restore the 8px rhythm with `-mt-4` on the loaded scope `<p>` (main gap 24px - 16px = 8px; the review's `-mt-3` would leave 12px in this scale) plus `min-h-5` (24px) on that `<p>`, and give the fallback scope Skeleton `-mt-4 h-5` (24px). Both occupy 24px at the same position, so the 4px arrival shift the proposal accepted is avoided (docs/ui.md: no layout shift when data arrives). The text stays top-aligned in its box; the chips stay 24px below the block. A wrapper div is rejected because it would shrink the line-to-chips distance too; moving the line back into <header> would need a second groups read outside Suspense. The implementer must confirm Tailwind v4 emits `-mt-4` under the replaced --spacing-* keys by grepping the built CSS and measuring in a browser; if it does not, report back and fall back to accepting 24px and documenting it, not to an invented structure.",
-    "files": [
-      {
-        "path": "components/activity-feed.tsx",
-        "action": "edit",
-        "change": "In ActivityFeedSkeleton add aria-busy=\"true\" to the root `<div className=\"flex flex-col gap-3\">` and make `<p role=\"status\" className=\"sr-only\">Loading activity…</p>` its first child, above the <noscript>. Extend the doc comment by one clause: the busy flag and status line are what the deleted loading.tsx carried and what GroupPageSkeleton keeps.",
-        "why": "Finding 1."
-      },
-      {
-        "path": "lib/activity/queries.ts",
-        "action": "edit",
-        "change": "Add exported pure `failedFeedScope(groupsLoaded: boolean, groups: ActivityGroup[], raw: string | string[] | undefined): string | null` beside rawGroupScope: `groupsLoaded ? (groups.find((g) => g.id === rawGroupScope(raw))?.id ?? null) : rawGroupScope(raw)`, with a short comment: the raw id is only carried when the groups read could not confirm anything, so a failed feed keeps its scope instead of widening to every group, and a confirmed read never carries a stranger's id.",
-        "why": "Findings 2 and 4: one tested decision instead of a pinned source expression."
-      },
-      {
-        "path": "app/activity/page.tsx",
-        "action": "edit",
-        "change": "ActivityContent: add `let groupsLoaded = false;` beside `failed`, set `groupsLoaded = true;` immediately after the listActivityGroups await, import failedFeedScope, and change the failed branch to `<ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />` with its comment reworded to the helper's rule. Scope line `<p>`: className becomes `-mt-4 min-h-5 text-secondary text-ink-muted` with a one-line comment that it restores the 8px gap it had under the title when it lived in the header (main's gap is 24px) and reserves the skeleton's 24px. ActivityPage fallback: `<Skeleton className=\"-mt-4 h-5 w-64\" />` in place of `h-6 w-64`, comment updated to say it holds the loaded line's position and height.",
-        "why": "Findings 2, 3 and 4."
-      }
-    ],
-    "tests": [
-      {
-        "path": "app/activity/failed-feed.test.ts",
-        "action": "edit",
-        "cases": [
-          "ActivityFeedSkeleton: renderToStaticMarkup output contains aria-busy=\"true\" and `<p role=\"status\" class=\"sr-only\">Loading activity…</p>`"
-        ]
-      },
-      {
-        "path": "lib/activity/queries.test.ts",
-        "action": "edit",
-        "cases": [
-          "failedFeedScope: groups read did not complete -> returns the raw uuid (and the first uuid of a repeated param); non-uuid or missing -> null",
-          "failedFeedScope: groups read completed and the raw id is not one of the viewer's groups (stranger's uuid) -> null",
-          "failedFeedScope: groups read completed and the raw id is one of the viewer's groups -> that id"
-        ]
-      },
-      {
-        "path": "app/activity/guard-wire-status.test.ts",
-        "action": "edit",
-        "cases": [
-          "failed branch routes its scope through failedFeedScope(groupsLoaded, groups, rawGroup), with the title saying the raw id is carried only when the groups read could not confirm it; replaces the loose `scoped?.id ?? rawGroupScope(` regex",
-          "page sets groupsLoaded between the listActivityGroups call and the listUserActivity call is NOT asserted (index-order brittleness rejected); instead assert the source contains `groupsLoaded = true` and no longer contains `scoped?.id ?? rawGroupScope(`"
-        ]
-      }
-    ],
-    "acceptance": [
-      {
-        "id": "AC-1",
-        "check": "The /activity loading fallback (ActivityFeedSkeleton) carries aria-busy=\"true\" on its root and an sr-only role=status 'Loading activity…' line, as GroupPageSkeleton does; nothing visible moves because of it.",
-        "verify": "test",
-        "how_to_verify": "failed-feed.test.ts ActivityFeedSkeleton case. A browser cannot see the fallback locally (PGlite never yields; .sdlc/memory/qa/environment.md), so no throttling step is part of this check."
-      },
-      {
-        "id": "AC-2",
-        "check": "When the feed read fails but the groups read completed, the failed branch's chip hidden input and Retry carry only a ?group= id that is one of the viewer's groups; a stranger's uuid is dropped, matching the success branch; the viewer's own group id is kept.",
-        "verify": "test",
-        "how_to_verify": "queries.test.ts failedFeedScope cases (completed + stranger -> null; completed + own -> id) plus the existing ActivityFailed render cases. The live app cannot make a read fail."
-      },
-      {
-        "id": "AC-3",
-        "check": "When the groups read did not complete, the raw (uuid-shaped) ?group= id is still carried into the chips and Retry so a scoped feed's failure does not widen to every group.",
-        "verify": "test",
-        "how_to_verify": "queries.test.ts failedFeedScope groups-not-loaded case; existing 'keeps the group scope in the chip form and in Retry' case."
-      },
-      {
-        "id": "AC-4",
-        "check": "On /activity?group=<one of my groups>, the 'Showing <group> only. Show every group' line sits 8px below the title row's bottom edge and the feed chips sit 24px below the line's box; the unscoped feed's layout is unchanged; the fallback scope Skeleton and the loaded line's box are both 24px tall at the same top position.",
-        "verify": "browser",
-        "how_to_verify": "Playwright at 375x812 and 1280x800: sign up, create a group, open /activity?group=<id>; header.bottom to the scope <p>.top = 8, the <p> height >= 24, <p>.bottom to the chips' top = 24 (one-line name). Also open /activity unscoped and an empty scoped group (scope line present, empty state follows). The skeleton half is asserted by class in the source test, not painted."
-      },
-      {
-        "id": "AC-5",
-        "check": "The comment above the failed branch, the helper's comment, and the wire test's title and assertion describe the same condition as the code (raw id only when the groups read could not confirm a scope).",
-        "verify": "test",
-        "how_to_verify": "guard-wire-status.test.ts passes against the helper call and would fail against the old loose expression; read the diff for comment agreement."
-      }
-    ],
-    "qa_script": [
-      "Sign up a fresh account, create a group, add one expense so the feed has a row.",
-      "Open /activity (unscoped) at 375x812 and 1280x800: title row, chips and rows unchanged from main; no scope line.",
-      "Open /activity?group=<that group's id>: measure header bottom to scope line top (8px) and scope line bottom to chips top (24px).",
-      "Open /activity?group=<a random valid uuid that is not the viewer's group>: the full feed shows with no scope line and the chips' links carry no group param.",
-      "Create a second empty group and open /activity?group=<its id>: the scope line is 8px under the title and the empty state follows.",
-      "Fetch /activity?group=<id> raw (curl with the session cookie) and confirm the page is not broken; the fallback and the failed branch cannot be painted or triggered in the live app, so rely on the unit and source tests for AC-1, AC-2, AC-3.",
-      "Check the built CSS contains the -mt-4 and min-h-5 rules."
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Proposal's shape: `groupsFailed = failed && !groupsLoaded` const and an inline `groupsFailed ? rawGroupScope(rawGroup) : (scoped?.id ?? null)`, pinned by a regex.",
-        "rejected_because": "The `failed &&` is redundant inside `if (failed)`, and a regex on the expression repeats the exact defect of finding 4 (a test pinning one spelling). A pure helper with its own unit test covers all three cases, including the keep case."
-      },
-      {
-        "approach": "Index-order wire test that groupsLoaded is assigned between the two awaits.",
-        "rejected_because": "Pins incidental source layout and a local variable name; the helper's behavioural test covers the invariant."
-      },
-      {
-        "approach": "Accept the 4px skeleton/loaded shift from h-5 vs a 20px line.",
-        "rejected_because": "Avoidable: min-h-5 on the loaded line reserves the same 24px, and docs/ui.md forbids layout shift on arrival."
-      },
-      {
-        "approach": "Wrap the scope line and feed in `flex-col gap-2`, or move the line back into <header>.",
-        "rejected_because": "The wrapper shrinks the line-to-chips distance as well; the header would need its own groups read outside Suspense, breaking the guard-first, one-read-at-a-time design the wire test pins."
-      },
-      {
-        "approach": "Put aria-busy and the status line in a wrapper around the whole fallback fragment in page.tsx, as the finding words it.",
-        "rejected_because": "The fragment is not exported, so failed-feed.test.ts cannot render it. The one decorative pulse block outside the busy region is an empty div to a screen reader; noted, not worth the lost testability."
-      },
-      {
-        "approach": "The review's literal `-mt-3`.",
-        "rejected_because": "--spacing-3 is 12px here, leaving 12px, not 8px; -mt-4 lands on 8px."
-      }
-    ],
-    "assumptions": [
-      "Tailwind v4 emits `-mt-4` as calc(var(--spacing-4) * -1) and `min-h-5` as 24px under the replaced --spacing-* keys; no negative margin class exists in the repo today, so this is unverified until the built CSS is grepped.",
-      "listActivityGroups and listUserActivity are the only awaits that can throw in the try; a withDb failure before the first leaves groupsLoaded false, the conservative side (carries the raw id, as today).",
-      "rawGroupScope already rejects non-uuid and array junk and activityHref encodes it, so carrying the raw value cannot inject into the hidden input or href."
-    ],
-    "unknowns": [
-      "Whether a wrapped scope line (a long group name at 375px) shifts content when it resolves from a 24px skeleton; same property as before #59, out of scope."
-    ],
-    "risks": [
-      "A negative margin is a first in this codebase and couples to main's 24px gap; the comment records the coupling. If Tailwind does not emit it, fall back to accepting 24px and saying so in the PR (AC-4 would then be amended, not worked around).",
-      "wire tests remain source-text assertions for the parts only a source test can hold (no loading.tsx, redirect before Suspense, the call to failedFeedScope).",
-      "No change under .sdlc/**, docs/** or .github/**; docs/ui.md untouched."
-    ],
-    "out_of_scope": [
-      "Making the failed branch triggerable in the live app or mocking withDb to throw per read.",
-      "Sibling skeletons (members, home) and their noscript notices.",
-      "Reserving a taller skeleton for a wrapped, long-named scope line."
-    ],
-    "residual_risks": [
-      "The failed branch and the loading fallback cannot be exercised in the running app; they are covered by unit and source tests only.",
-      "A wrapped scope line still shifts content on arrival.",
-      "The -mt-4 rule's generation is verified only at implementation time."
-    ],
-    "confidence": 86,
-    "confidence_rationale": "All four findings were re-read against main and confirmed; the edits are tiny and local, and the helper makes the one logic change directly testable. The one unverified piece is that Tailwind v4 emits -mt-4 and min-h-5 under the replaced spacing theme, which a build and a measured gap settle; a failure there lowers the outcome to documenting the 24px gap, not to a broken screen.",
-    "reproduced": true,
-    "evidence": [
-      "app/activity/page.tsx:140 `groupId={scoped?.id ?? rawGroupScope(rawGroup)}`: scoped is null for a stranger's uuid when only the rows read failed, rawGroupScope returns it.",
-      "components/activity-feed.tsx ActivityFeedSkeleton root is `<div className=\"flex flex-col gap-3\">` with no aria-busy or status; components/group-skeletons.tsx GroupPageSkeleton has both.",
-      "app/activity/page.tsx:76,148-149: scope <p> is a child of main (gap-5); app/globals.css defines --spacing-2: 8px, --spacing-4: 16px, --spacing-5: 24px; `h-6` skeleton is 32px against a 20px text-secondary line.",
-      "app/activity/guard-wire-status.test.ts:30-33 is titled for the groups-read case but only matches /groupId=\\{scoped\\?\\.id \\?\\? rawGroupScope\\(/.",
-      ".sdlc/memory/qa/environment.md: PGlite never yields so loading skeletons never paint locally, which is why the skeleton checks are test-verified.",
-      "ActivityFeedSkeleton and ActivityFailed are used only by app/activity/page.tsx and failed-feed.test.ts; no other call site is affected."
-    ],
-    "debate_summary": "The critique's verdict was 'sound' and I agree with the diagnosis; it changed three things. Accepted: the AC-1 and AC-4 skeleton halves cannot be observed in a browser here (environment.md says so), so they are test-verified and the 'throttle the network' QA steps are dropped. Accepted: the 4px arrival shift is avoidable, so the loaded scope line gets min-h-5 to match the 24px skeleton and the 'moves by no more than 4px' clause is gone. Accepted in spirit: the index-order wire test is brittle and a regex on the failed expression is the same flaw that finding 4 reported, so I went further than the critique's two options and extracted a pure failedFeedScope helper with a behavioural test, which also covers the groups-OK + own-group keep case the critique said was missed. The single-flag simplification (drop `failed &&`) is accepted and subsumed by the helper. Dismissed: the aria-busy placement finding (scope-line skeleton outside the busy region) is a note, not a defect, since an empty pulse div is not announced and the proposal's reason about testability stands; the repeated-param and withDb-before-reads edge cases are already handled by existing behaviour and are now unit-cased. Not resolved by debate: -mt-4 is a first in this repo and depends on Tailwind v4 negating the replaced spacing keys; both proposer and critic called it likely but unverified, so the implementer measures it."
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-07T00:56:25.223Z",
+  "work_order_from": "plan",
+  "work_order_comment": "6028512543"
 }

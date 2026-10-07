@@ -25,5 +25,12 @@
   "review_root_caused": [],
   "created_at": "2026-10-07T01:40:16.258Z",
   "updated_at": "2026-10-07T01:40:16.258Z",
-  "history": []
+  "history": [],
+  "issue_snapshot": {
+    "title": "Follow-ups from #65: 1 from the review",
+    "body": "What the review and QA of PR #66 (for #65) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### The mutant builders are keyed to page.tsx's exact text (the 4-space indent of `groupsLoaded = true;`, ` } catch (error) {`, `failed = true;`), so a harmless reformat or a renamed catch variable breaks the test through the `mutant changed nothing` guard rather than through the invariant it protects.\n\n> The mutant builders are keyed to page.tsx's exact text (the 4-space indent of `groupsLoaded = true;`, `  } catch (error) {`, `failed = true;`), so a harmless reformat or a renamed catch variable breaks the test through the `mutant changed nothing` guard rather than through the invariant it protects.\n> \n> `app/activity/guard-wire-status.test.ts:98`\n> \n> Evidence: Mutants are built with String.replace on literals such as '    groupsLoaded = true;\\n' and '  } catch (error) {'; the work order records this as a known residual risk.\n> \n> Fix: Accepted as designed: the guard fails loudly with a message that names the mutant, so the next author updates it on purpose. No change needed.\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #65.",
+    "sha256": "b1ea9eb1b36f6aad8b404f1725e189fdac9ea9e0d45ccade6d0ea0b72473ed73",
+    "by": "github-actions[bot]",
+    "at": "2026-10-07T01:40:33.219Z"
+  }
 }

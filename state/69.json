@@ -116,7 +116,11 @@
       "Other multi-line JSX comments in this block remain by design."
     ]
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "app/groups/[id]/page.tsx",
+    "app/groups/[id]/transfer-line-wrap.test.ts",
+    "app/groups/[id]/transfer-line-wrap.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

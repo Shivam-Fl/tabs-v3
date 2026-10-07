@@ -114,7 +114,10 @@
       "No UI change: no browser walk is needed. Run `npx vitest run app/groups/[id]/transfer-line-wrap.test.ts` and confirm 4 passed (not 'no tests found')."
     ]
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "app/groups/[id]/transfer-line-wrap.test.ts",
+    "app/groups/[id]/transfer-line-wrap.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

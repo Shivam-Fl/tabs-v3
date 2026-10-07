@@ -1,7 +1,7 @@
 {
   "issue": 69,
   "pr": null,
-  "state": "triage",
+  "state": "planning",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -24,8 +24,14 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-07T02:36:29.013Z",
-  "updated_at": "2026-10-07T02:36:29.013Z",
-  "history": [],
+  "updated_at": "2026-10-07T02:36:49.645Z",
+  "history": [
+    {
+      "at": "2026-10-07T02:36:49.645Z",
+      "agent": "intake",
+      "action": "-> planning"
+    }
+  ],
   "issue_snapshot": {
     "title": "Follow-ups from #60: 1 from the review",
     "body": "What the review and QA of PR #61 (for #60) found and did not fix there — filed as it merged, one ticket for the lot.\n\n## From the review\n\nNon-blocking findings the reviewer approved despite: a statement about severity, not a judgement that they are wrong.\n\n### The added JSX comment is two lines and also describes the amount span from a position above the name span; the repo's guidance is one short line, and the test header already carries the same explanation.\n\n> The added JSX comment is two lines and also describes the amount span from a position above the name span; the repo's guidance is one short line, and the test header already carries the same explanation.\n> \n> `app/groups/[id]/page.tsx:547`\n> \n> Evidence: gh pr diff 61 adds a two-line {/* min-w-0: ... ml-auto on the amount ... */} block between the li and the outer span.\n> \n> Fix: Trim to one line (\"min-w-0: overflow-wrap cannot lower a flex item's min-content floor.\") or drop it in favour of the test header.\n\n---\n\n**Check each one still reproduces before planning it.** They were written against the PR as it stood, and a later round can have fixed one. Some may not hold up: say so and drop them rather than implementing something that was never wrong. Split this if they turn out to be unrelated.\n\nDepends on #60.",

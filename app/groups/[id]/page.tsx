@@ -544,8 +544,7 @@ function GroupDetail({
                   key={`${transfer.fromMembershipId}:${transfer.toMembershipId}:${transfer.amountMinor}`}
                   className="flex flex-wrap items-baseline justify-between gap-2"
                 >
-                  {/* min-w-0: overflow-wrap cannot lower a flex item's min-content floor.
-                      ml-auto on the amount keeps it right when the name takes the line. */}
+                  {/* min-w-0: overflow-wrap cannot lower a flex item's min-content floor. */}
                   <span className="flex min-w-0 flex-wrap items-baseline gap-2">
                     <span
                       className={`min-w-0 break-words text-body ${directionTone(transfer, membership.id)}`}

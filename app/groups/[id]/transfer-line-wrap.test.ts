@@ -69,4 +69,23 @@ describe('the transfer line wraps a long name', () => {
   it('renders the transfer words at exactly one site', () => {
     expect(pageSource().split(CALL).length - 1).toBe(1);
   });
+
+  it("keeps the comment above the name wrapper to one line about min-w-0 and not the amount's ml-auto", () => {
+    const source = pageSource();
+    const li = source.lastIndexOf('<li', source.indexOf(CALL));
+    const outer = source.indexOf('<span', li);
+    const start = source.indexOf('{/*', li);
+    const end = source.indexOf('*/}', start);
+
+    expect(li, 'no transfer row found').toBeGreaterThanOrEqual(0);
+    expect(start, 'no comment above the name wrapper').toBeGreaterThanOrEqual(0);
+    expect(end, 'the comment is not closed').toBeGreaterThanOrEqual(0);
+    expect(start).toBeLessThan(outer);
+    expect(end).toBeLessThan(outer);
+
+    const comment = source.slice(start, end);
+    expect(comment).toContain('min-w-0');
+    expect(comment).not.toContain('\n');
+    expect(comment).not.toContain('ml-auto');
+  });
 });

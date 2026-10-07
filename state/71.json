@@ -73,5 +73,104 @@
     "decided_at": "2026-10-07T03:05:31.351Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "issue": 71,
+    "version": 1,
+    "kind": "chore",
+    "mode": "committed",
+    "understanding": "Issue #71 carries one non-blocking review finding from PR #70: the last case in app/groups/[id]/transfer-line-wrap.test.ts (lines 73-90) asserts on the wording of a JSX comment above the transfer-row name wrapper (must contain 'min-w-0', must not contain 'ml-auto' or a newline). It is prose, not markup, so a legitimate rewording of the comment fails CI with no behaviour change. The finding still reproduces on main: the case is present and page.tsx:547 holds the one-line comment it pins. The reviewer's own stated fix is 'drop it rather than loosening it'. The inner name span's classes (min-w-0, break-words, tone, body type), the amount span's classes and the single transferWords call site are pinned by the four earlier cases, which stay. The outer name wrapper (page.tsx:548) is not pinned by any case, before or after this change.",
+    "approach": "Delete the fifth `it(...)` block (\"keeps the comment above the name wrapper ...\") from transfer-line-wrap.test.ts and nothing else. Do not touch page.tsx: the comment stays as written, merely no longer test-pinned. The file's header doc comment describes the classes, not the comment case, so it stays accurate. Loosening the assertion is not done because a case that still greps comment prose has the same defect; deleting follows the finding's own instruction. Adding a new assertion for the outer wrapper's min-w-0 is deliberately left out: that gap pre-dates this change and the ticket is a one-finding cleanup.",
+    "files": [
+      {
+        "path": "app/groups/[id]/transfer-line-wrap.test.ts",
+        "action": "edit",
+        "change": "Remove the last `it(\"keeps the comment above the name wrapper to one line about min-w-0 and not the amount's ml-auto\", ...)` block (lines 73-90) and the blank line before it, leaving the describe closing `});` intact. The four remaining cases and the helpers (CALL, pageSource, spanClasses, nameClasses, amountClasses) are all still used and unchanged.",
+        "why": "The case pins comment wording, so rewording the comment fails CI without any behaviour change; the reviewer recommended dropping it."
+      }
+    ],
+    "tests": [
+      {
+        "path": "app/groups/[id]/transfer-line-wrap.test.ts",
+        "action": "edit",
+        "cases": [
+          "lets the name span shrink and break (kept)",
+          "keeps the direction tone and body type on the name (kept)",
+          "keeps the amount right-aligned, tabular and toned when the name takes the line (kept)",
+          "renders the transfer words at exactly one site (kept)",
+          "comment-wording case removed: no remaining assertion reads text inside a JSX comment"
+        ]
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "The comment-wording case is gone from transfer-line-wrap.test.ts and the file's remaining four cases pass.",
+        "verify": "test",
+        "how_to_verify": "Run `npx vitest run app/groups` (or the file's path) and confirm the output reports 4 tests passed for transfer-line-wrap.test.ts, not 'no tests found'. The file no longer contains `indexOf('{/*'` or `.not.toContain('ml-auto')`, and its title 'keeps the comment above the name wrapper' is absent."
+      },
+      {
+        "id": "AC-2",
+        "check": "Rewording the comment at page.tsx:547 (for example making it two lines or mentioning ml-auto) no longer fails any test, while removing min-w-0 or break-words from the inner name span still does.",
+        "verify": "test",
+        "how_to_verify": "Temporarily reword the comment at page.tsx:547 and run the file: green. Temporarily remove `min-w-0` from the className at page.tsx:550 (the span around transferWords): the 'lets the name span shrink and break' case fails. Revert both. (The outer wrapper at page.tsx:548 is not covered by any case; do not use it for this check.)"
+      },
+      {
+        "id": "AC-3",
+        "check": "No production file changed and the verify suite is green.",
+        "verify": "test",
+        "how_to_verify": "`git diff --stat` shows only transfer-line-wrap.test.ts; `npm run typecheck && npm run test:ci` pass."
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Loosen the case: keep the min-w-0 check but drop the newline and ml-auto assertions.",
+        "rejected_because": "It still asserts on comment prose, so rewording that omits the phrase fails CI; the reviewer said to drop it rather than loosen it, and the markup is covered by the class cases."
+      },
+      {
+        "approach": "Delete the comment from page.tsx and the case together.",
+        "rejected_because": "The comment explains a non-obvious fact (overflow-wrap cannot lower a flex item's min-content floor) that conventions.md also records; removing it is a production-file change the finding does not ask for."
+      },
+      {
+        "approach": "Replace the case with a markup assertion on the outer name wrapper's classes (page.tsx:548, min-w-0 flex-wrap).",
+        "rejected_because": "Sound in itself and the critique's suggestion, but it is a new test for a gap that existed before #70 and is not what this finding asks; it would turn a pure deletion into new test design. Recorded as a residual risk instead."
+      }
+    ],
+    "assumptions": [
+      "The case was added in #70 only to guard the comment's wording, not to prove any rendered behaviour.",
+      "Nothing else references the deleted case by name (the proposer's grep found only the case itself).",
+      "Memory is the Librarian's and is not edited here."
+    ],
+    "unknowns": [
+      "Whether a later ticket intends to re-pin comment wording; none visible in the repo."
+    ],
+    "risks": [
+      "The comment's one-line form is no longer enforced, so a future edit could grow it back to two lines or reintroduce the misleading ml-auto mention; cosmetic and accepted per the review's severity.",
+      "No .sdlc/memory edit is proposed (reserved to the Librarian) even though conventions/qa notes might mention the case."
+    ],
+    "out_of_scope": [
+      "Any change to app/groups/[id]/page.tsx, including the comment text.",
+      "A test pinning min-w-0 on the outer name wrapper at page.tsx:548: no case reads that span today (nameClasses resolves to the inner span), a gap that pre-dates this change.",
+      "Pixel-width proof at 375px, which the file header already says is a browser concern."
+    ],
+    "evidence": [
+      "transfer-line-wrap.test.ts:73-90 is the comment-wording case; it reads source.indexOf('{/*', li) and asserts contains 'min-w-0', not contains '\\n', not contains 'ml-auto'.",
+      "page.tsx:547 holds the one-line comment directly above the outer name wrapper span at :548, so the finding reproduces on main.",
+      "page.tsx:550 (inner span, min-w-0 break-words) and :565 (amount, ml-auto tabular-nums) carry the classes asserted by cases 1-3; nameClasses() uses lastIndexOf('<span', call of transferWords) which resolves to the inner span at :549, confirming the outer wrapper at :548 is unread.",
+      "transfer-line-wrap.test.ts:10 (file header) also mentions ml-auto, so a literal grep for it still hits after the deletion."
+    ],
+    "confidence": 93,
+    "confidence_rationale": "Single-file deletion of one test block, finding verified present on main, the reviewer's own recommended fix, no production code or callers involved. The only soft spot is judgement: whether to also pin the outer wrapper, which I chose not to; a reviewer who wants that would move this, not the correctness of the deletion.",
+    "debate_summary": "The critic called the proposal 'sound' but raised one major and two minor findings. Major (outer wrapper's min-w-0 unpinned, so 'the four other cases cover all class behaviour' is false): upheld on the facts - I re-read page.tsx:543-565 and the helpers, and cases 1-2 read only the inner span. But I rejected the proposed remedy of adding a new assertion in this ticket: the gap pre-dates #70, the deleted case never asserted that class either (it read only comment text), and the finding being fixed says to drop the case. I corrected the claim in the work order's understanding and recorded the gap in out_of_scope and residual_risks instead of widening the diff. Minor 1 (AC-1's grep for ml-auto is inexact because the file header also mentions it): upheld, AC-1 reworded. Minor 2 (AC-2 must name the inner span): upheld, AC-2 now names page.tsx:550. The bracketed-path 'no tests found' edge case is folded into AC-1. No decision in the brief applied; none was recorded.",
+    "residual_risks": [
+      "The outer name wrapper's min-w-0 and flex-wrap (page.tsx:548) are asserted by no test, before or after this change: removing them passes CI while a long name could widen the page at 375px. QA should check it in a browser if it walks the layout.",
+      "The comment at page.tsx:547 is no longer pinned and may drift back to two lines or mention ml-auto."
+    ],
+    "qa_script": [
+      "No UI change: no browser walk is needed. Run `npx vitest run app/groups/[id]/transfer-line-wrap.test.ts` and confirm 4 passed (not 'no tests found')."
+    ]
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-07T03:09:26.043Z",
+  "validated_ac_changes": []
 }

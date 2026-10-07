@@ -23,9 +23,9 @@
     "requested_at_head": "096ae3ab40eef840eed0503676e8d9648ab68edb",
     "qa_run": null,
     "from": null,
-    "pr": "61",
+    "pr": 61,
     "work_order_version": 1,
-    "at": "2026-10-06T13:16:26.680Z"
+    "at": "2026-10-07T00:44:54.885Z"
   },
   "work_order": {
     "issue": 60,
@@ -300,7 +300,7 @@
     "by": "github-actions[bot]",
     "at": "2026-10-06T12:23:24.782Z"
   },
-  "resume_at": "implement",
+  "resume_at": null,
   "flow_plan": {
     "kind": "feature",
     "confidence": 0,
@@ -309,7 +309,7 @@
     "councils": {},
     "decided_at": "2026-10-06T12:24:36.330Z"
   },
-  "stopped_at": "implement",
+  "stopped_at": null,
   "dispatched_stage": "implement",
   "validated_from": "plan",
   "validated_at": "2026-10-06T12:40:01.264Z",

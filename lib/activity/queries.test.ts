@@ -8,6 +8,7 @@ import {
   ACTIVITY_FILTERS,
   activityFilterFrom,
   activityHref,
+  failedFeedScope,
   listGroupActivity,
   listUserActivity,
   rawGroupScope,
@@ -440,5 +441,30 @@ describe('the raw group scope', () => {
     for (const value of ['nope', '', '   ', [], ['nope', SCOPE_ID], undefined]) {
       expect(rawGroupScope(value)).toBeNull();
     }
+  });
+});
+
+describe('the scope a failed feed carries', () => {
+  const OWN = { id: SCOPE_ID, name: 'Trip', archived: false, currency: 'INR' };
+  const STRANGER = '22222222-2222-4222-8222-222222222222';
+
+  it('is the raw uuid when the groups read did not complete', () => {
+    expect(failedFeedScope(false, [], SCOPE_ID)).toBe(SCOPE_ID);
+    expect(failedFeedScope(false, [], [SCOPE_ID, STRANGER])).toBe(SCOPE_ID);
+  });
+
+  it('is null when the groups read did not complete and the value is not a uuid', () => {
+    for (const value of ['nope', '', [], undefined]) {
+      expect(failedFeedScope(false, [], value)).toBeNull();
+    }
+  });
+
+  it('drops a uuid that is not one of the viewer’s groups once the groups read completed', () => {
+    expect(failedFeedScope(true, [OWN], STRANGER)).toBeNull();
+    expect(failedFeedScope(true, [], SCOPE_ID)).toBeNull();
+  });
+
+  it('keeps the id of one of the viewer’s groups once the groups read completed', () => {
+    expect(failedFeedScope(true, [OWN], SCOPE_ID)).toBe(SCOPE_ID);
   });
 });

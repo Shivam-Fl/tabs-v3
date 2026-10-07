@@ -478,11 +478,16 @@ export function ActivityFailed({
  *
  * Exported from here rather than written beside the page it serves so the skeleton and the feed
  * it stands in for cannot drift out of shape — the fallback is only worth having if nothing moves
- * when the data arrives.
+ * when the data arrives. The busy flag and status line are what the deleted loading.tsx carried and
+ * what GroupPageSkeleton keeps, so a screen reader is told something is loading.
  */
 export function ActivityFeedSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div aria-busy="true" className="flex flex-col gap-3">
+      <p role="status" className="sr-only">
+        Loading activity…
+      </p>
+
       {/* A reader with scripting off is left holding this fallback: the resolved feed waits in the
           streamed payload for a client-side swap that never runs, so say what is missing instead
           of pulsing forever (AC-16). */}

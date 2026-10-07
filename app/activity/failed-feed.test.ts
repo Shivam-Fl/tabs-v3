@@ -52,6 +52,13 @@ describe('ActivityFailed', () => {
 });
 
 describe('ActivityFeedSkeleton', () => {
+  it('is marked busy and announces the loading to a screen reader', () => {
+    const html = renderToStaticMarkup(createElement(ActivityFeedSkeleton));
+
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('<p role="status" class="sr-only">Loading activity…</p>');
+  });
+
   it('tells a reader without JavaScript what is missing', () => {
     const html = renderToStaticMarkup(createElement(ActivityFeedSkeleton));
 

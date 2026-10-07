@@ -294,5 +294,17 @@
   "work_order_posted_at": "2026-10-07T00:56:25.223Z",
   "work_order_from": "plan",
   "work_order_comment": "6028512543",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "Nothing tests where groupsLoaded is set, and the page's try block is untested, so the one wiring that makes failedFeedScope correct can silently regress.",
+        "detail": "Nothing tests where groupsLoaded is set, and the page's try block is untested, so the one wiring that makes failedFeedScope correct can silently regress.\n\n`app/activity/guard-wire-status.test.ts:32`\n\nEvidence: The wire test only asserts the source contains 'groupsLoaded = true' and the helper call. If the assignment moved below the listUserActivity await (or above the groups read), a feed-read failure would pass groupsLoaded=false and carry a stranger's uuid again (the original defect), and every test would still pass. The helper itself is correctly unit-tested.\n\nFix: Optionally assert the order of 'listActivityGroups', 'groupsLoaded = true' and 'listUserActivity' in the page source, or accept the residual risk the work order already recorded.",
+        "severity": "minor",
+        "category": "test",
+        "file": "app/activity/guard-wire-status.test.ts"
+      }
+    ],
+    "pr": "64"
+  }
 }

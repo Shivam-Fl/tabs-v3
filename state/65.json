@@ -117,7 +117,10 @@
     ],
     "mode": "committed"
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "app/activity/guard-wire-status.test.ts",
+    "app/activity/guard-wire-status.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

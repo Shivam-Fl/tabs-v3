@@ -125,7 +125,10 @@
       "A comment line inside ActivityContent that contains 'groupsLoaded = true;' or 'failed = true;' would be matched by the mutant regexes, which run on raw source unlike the comment-stripping checker; none exist today."
     ]
   },
-  "touch_paths": [],
+  "touch_paths": [
+    "app/activity/guard-wire-status.test.ts",
+    "app/activity/guard-wire-status.test.ts"
+  ],
   "acceptance": [],
   "planned_route": [
     "plan",

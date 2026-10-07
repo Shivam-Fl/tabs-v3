@@ -356,7 +356,15 @@
   "work_order_comment": "6016478927",
   "implemented_version": 1,
   "follow_ups": {
-    "review": [],
+    "review": [
+      {
+        "title": "The added JSX comment is two lines and also describes the amount span from a position above the name span; the repo's guidance is one short line, and the test header already carries the same explanation.",
+        "detail": "The added JSX comment is two lines and also describes the amount span from a position above the name span; the repo's guidance is one short line, and the test header already carries the same explanation.\n\n`app/groups/[id]/page.tsx:547`\n\nEvidence: gh pr diff 61 adds a two-line {/* min-w-0: ... ml-auto on the amount ... */} block between the li and the outer span.\n\nFix: Trim to one line (\"min-w-0: overflow-wrap cannot lower a flex item's min-content floor.\") or drop it in favour of the test header.",
+        "severity": "minor",
+        "category": "design",
+        "file": "app/groups/[id]/page.tsx"
+      }
+    ],
     "pr": "61"
   },
   "qa": {

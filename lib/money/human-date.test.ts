@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { formatExpenseDate } from '../dates';
 import { humanDateLabel } from './human-date';
 
 /**
@@ -85,5 +86,12 @@ describe('a value it cannot read', () => {
 
   it('falls back when it is the today argument it cannot read', () => {
     expect(humanDateLabel('2026-10-05', 'not-a-date')).toBe('2026-10-05');
+  });
+});
+
+describe('the two date ladders', () => {
+  it('differ on purpose: the editor preview pairs the word with the day, a ledger row says only the word', () => {
+    expect(humanDateLabel('2026-10-06', '2026-10-06')).toBe('Today · 6 Oct');
+    expect(formatExpenseDate('2026-10-06', '2026-10-06')).toBe('Today');
   });
 });

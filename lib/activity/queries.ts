@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm';
+import { z } from 'zod';
 import type { Db } from '../db/client';
 import { activityEvents, groups, memberships, users } from '../db/schema';
 import type { ExpenseEditPayload } from '../expenses/validation';
-import { MEMBERSHIP_EVENTS } from '../groups/validation';
+import { MEMBERSHIP_EVENTS, firstQueryValue } from '../groups/validation';
 import { PAYMENT_EVENTS, type PaymentSnapshot } from '../settle/validation';
 
 /**
@@ -90,11 +91,35 @@ function kindCondition(filter: ActivityFilter): SQL | undefined {
  * not refused. This is a filter on a feed somebody is reading, and the useful answer to a bad
  * filter is every row with the chips still on screen, not an error card (AC-1).
  */
-export function activityFilterFrom(raw: string | undefined): ActivityFilter {
-  const value = (raw ?? '').trim().toLowerCase();
+export function activityFilterFrom(raw: string | string[] | undefined): ActivityFilter {
+  const value = firstQueryValue(raw).trim().toLowerCase();
   return (ACTIVITY_FILTERS as readonly string[]).includes(value)
     ? (value as ActivityFilter)
     : DEFAULT_ACTIVITY_FILTER;
+}
+
+/**
+ * The group id a `?group=` carried, when it is shaped like one. It is what the failed feed falls
+ * back on: the groups read that would have confirmed the scope is the read that failed, so the
+ * raw value is all there is — and a uuid check is all it takes to carry it safely into a link.
+ */
+export function rawGroupScope(raw: string | string[] | undefined): string | null {
+  const value = firstQueryValue(raw).trim();
+  return z.uuid().safeParse(value).success ? value : null;
+}
+
+/**
+ * This feed's own URL, carrying the filter and the scope — what a retry, a chip and the way back
+ * to every group all resolve to. Only values that are set travel, so the unscoped, unfiltered
+ * feed stays `/activity` rather than gaining two empty parameters.
+ */
+export function activityHref(filter: ActivityFilter, groupId: string | null): string {
+  const params = new URLSearchParams();
+  if (groupId !== null) params.set(ACTIVITY_GROUP_PARAM, groupId);
+  if (filter !== DEFAULT_ACTIVITY_FILTER) params.set(ACTIVITY_FILTER_PARAM, filter);
+
+  const search = params.toString();
+  return search === '' ? '/activity' : `/activity?${search}`;
 }
 
 /** One row of either feed, already resolved into the names and links a view renders. */

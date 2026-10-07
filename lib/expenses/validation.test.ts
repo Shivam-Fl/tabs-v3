@@ -543,6 +543,24 @@ describe('expenseFiltersFrom', () => {
       search: 'x',
     });
   });
+
+  it('takes the first of a repeated q, member and category', () => {
+    // ?q=a&q=b reaches the page as an array; it used to throw on .trim().
+    expect(
+      expenseFiltersFrom({ member: [ADa, 'x'], category: ['Food', 'travel'], q: [' a ', 'b'] }),
+    ).toEqual({ memberId: ADa, category: 'food', search: 'a' });
+  });
+
+  it('never throws on repeated garbage and reads it as no filter', () => {
+    expect(
+      expenseFiltersFrom({ member: ['nope', ADa], category: ['yachts'], q: ['  ', 'b'] }),
+    ).toEqual({ memberId: null, category: null, search: null });
+    expect(expenseFiltersFrom({ member: [], category: [], q: [] })).toEqual({
+      memberId: null,
+      category: null,
+      search: null,
+    });
+  });
 });
 
 describe('expenseScope', () => {

@@ -54,10 +54,24 @@ const DAY_MONTH_YEAR = new Intl.DateTimeFormat(LOCALE, {
 /** The one formatter that is allowed a zone, and it is the viewer's: no `timeZone` option. */
 const VIEWER_STAMP = new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
 
-interface CalendarDay {
+export interface CalendarDay {
   year: number;
   month: number;
   day: number;
+}
+
+/**
+ * Whether a year/month/day triple is a day on the calendar. Round-tripped through `Date.UTC`,
+ * which normalizes an impossible day into the next month: a triple that does not come back as the
+ * three numbers that went in was never a date. The one validator `lib/money/human-date.ts` shares.
+ */
+export function isRealCalendarDay(year: number, month: number, day: number): boolean {
+  const asDate = new Date(Date.UTC(year, month - 1, day));
+  return (
+    asDate.getUTCFullYear() === year &&
+    asDate.getUTCMonth() === month - 1 &&
+    asDate.getUTCDate() === day
+  );
 }
 
 /**
@@ -71,14 +85,8 @@ function calendarDay(raw: string): CalendarDay | null {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const asDate = new Date(Date.UTC(year, month - 1, day));
 
-  const roundTrips =
-    asDate.getUTCFullYear() === year &&
-    asDate.getUTCMonth() === month - 1 &&
-    asDate.getUTCDate() === day;
-
-  return roundTrips ? { year, month, day } : null;
+  return isRealCalendarDay(year, month, day) ? { year, month, day } : null;
 }
 
 function utcMidnight(day: CalendarDay): Date {
@@ -111,6 +119,12 @@ export function formatZoneNeutralDate(raw: string): string {
  * rather than "this week", so a Monday expense read on a Tuesday says "Yesterday" and a Tuesday
  * expense read the next Monday says "Mon" without either answer depending on where the week is
  * held to start. Past that the year is shown only when it is not the current one.
+ *
+ * This is the ladder for ledger rows, and it is deliberately not `humanDateLabel`'s
+ * (`lib/money/human-date.ts`): a row stands alone, so it says Today, Yesterday, a weekday or a
+ * date. The editor's preview is read while the date is being typed against the viewer's own
+ * local day, so it pairs the relative word with the absolute day ("Today · 6 Oct") and also names
+ * Tomorrow, which a stored row never needs.
  */
 export function formatExpenseDate(date: string, today: string): string {
   const day = calendarDay(date);

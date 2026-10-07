@@ -81,7 +81,7 @@ const FILTER_CONTROL_ID = 'expense-filters';
  * ledger takes the payment notice's pair (ADR-0008).
  */
 type GroupSearchParams = {
-  section?: string;
+  section?: string | string[];
   archived?: string;
   expense?: string;
   // A just-recorded or just-deleted payment lands here carrying the outcome and the pair it was
@@ -90,9 +90,9 @@ type GroupSearchParams = {
   payment?: string;
   from?: string;
   to?: string;
-  member?: string;
-  category?: string;
-  q?: string;
+  member?: string | string[];
+  category?: string | string[];
+  q?: string | string[];
 };
 
 /**
@@ -102,7 +102,8 @@ type GroupSearchParams = {
  * between the four things that question is made of: the expenses, the balances and the settle-up,
  * the activity, and the members. The move is a **navigation**, not a client-side toggle: each
  * panel is a `?section=` value, so a section can be linked, bookmarked and reloaded, the panels
- * are server-rendered, and a reader without JavaScript gets all four.
+ * are server-rendered navigations for a reader with JavaScript. A reader without it gets the
+ * skeleton and a notice that JavaScript is required (AC-16), not the panels.
  *
  * Every balance on it comes from the one recompute path (TR-9) and every transfer from the one
  * simplification beside it, so the hero number, the member rows, the suggested payments and the
@@ -544,11 +545,21 @@ function GroupDetail({
                   className="flex flex-wrap items-baseline justify-between gap-2"
                 >
                   {/* min-w-0: overflow-wrap cannot lower a flex item's min-content floor.
-                      ml-auto keeps the amount right when the name takes the line. */}
-                  <span
-                    className={`min-w-0 break-words text-body ${directionTone(transfer, membership.id)}`}
-                  >
-                    {transferWords(transfer, membership.id)}
+                      ml-auto on the amount keeps it right when the name takes the line. */}
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-2">
+                    <span
+                      className={`min-w-0 break-words text-body ${directionTone(transfer, membership.id)}`}
+                    >
+                      {transferWords(transfer, membership.id)}
+                    </span>
+                    {/* The same label the Balances rows carry (ADR-0007): a departed seat can still
+                        be owed or owe, and a line that names one should say it is gone. */}
+                    {currentIds.has(transfer.fromMembershipId) &&
+                    currentIds.has(transfer.toMembershipId) ? null : (
+                      <span className="shrink-0">
+                        <Badge>No longer in the group</Badge>
+                      </span>
+                    )}
                   </span>
                   <span
                     data-amount
@@ -953,11 +964,13 @@ function Panel({
  * state the disclosure starts in depends on the width of the screen, and the only thing that
  * knows the width at first paint is the stylesheet. A `<details>` server-rendered open would
  * flash open and then collapse on every phone; server-rendered closed would leave desktop readers
- * folding it out until hydration. A checkbox costs one hidden input — still focusable, with its
- * focus ring drawn on the label — and gets both widths right before any JavaScript runs.
+ * folding it out until hydration. A checkbox costs one hidden input — focusable on a phone, with
+ * its focus ring drawn on the label — and gets both widths right before any JavaScript runs.
  *
- * The label is `sm:hidden`, so on desktop the form is simply there with no summary above it, and
- * the whole thing degrades to a plain GET form when scripting is off.
+ * The label and the checkbox are both `sm:hidden`, so on desktop the form is simply there with no
+ * summary above it and no invisible stop in the tab order, and the whole thing degrades to a plain
+ * GET form when scripting is off. Only the chevron rotates (the `chevron` class), not the sliders
+ * glyph beside it.
  */
 function FilterDisclosure({
   summary,
@@ -968,14 +981,14 @@ function FilterDisclosure({
 }) {
   return (
     <div className="flex flex-col rounded-token border border-border bg-surface p-3 shadow-sm sm:p-4">
-      <input id={FILTER_CONTROL_ID} type="checkbox" className="peer sr-only" />
+      <input id={FILTER_CONTROL_ID} type="checkbox" className="peer sr-only sm:hidden" />
       <label
         htmlFor={FILTER_CONTROL_ID}
-        className="flex min-h-11 cursor-pointer items-center gap-2 font-medium text-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-checked:[&>svg]:rotate-180 sm:hidden"
+        className="flex min-h-11 cursor-pointer items-center gap-2 font-medium text-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-checked:[&_.chevron]:rotate-180 sm:hidden"
       >
         <SlidersHorizontal aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
         <span className="min-w-0 flex-1 truncate">{summary}</span>
-        <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
+        <ChevronDown aria-hidden="true" className="chevron size-5 shrink-0 text-ink-muted" />
       </label>
       <div className="hidden pt-3 peer-checked:block sm:block sm:pt-0">{children}</div>
     </div>
@@ -1073,7 +1086,7 @@ function memberBadges(member: MemberRow, viewerMembershipId: string): ReactNode 
 
   if (member.id === viewerMembershipId) badges.push({ key: 'you', label: 'You', tone: 'accent' });
   if (member.role === 'owner') badges.push({ key: 'owner', label: 'Owner' });
-  if (member.userId === null) badges.push({ key: 'placeholder', label: 'Hasn\u2019t joined yet' });
+  if (member.userId === null) badges.push({ key: 'placeholder', label: 'Placeholder' });
 
   if (badges.length === 0) return undefined;
   return (

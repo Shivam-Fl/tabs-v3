@@ -10,6 +10,7 @@ import {
   addPlaceholderSchema,
   claimPlaceholderSchema,
   createGroupSchema,
+  firstQueryValue,
   groupScope,
   groupSectionFrom,
   inviteNoticeText,
@@ -204,6 +205,29 @@ describe('groupSectionFrom', () => {
     for (const value of [undefined, '', '   ', 'settings', 'feed', 'members,activity', '0', '/']) {
       expect(groupSectionFrom(value)).toBe(DEFAULT_GROUP_SECTION);
     }
+  });
+
+  it('takes the first value of a repeated key instead of throwing', () => {
+    // ?section=expenses&section=balances reaches the page as an array.
+    expect(groupSectionFrom(['expenses', 'balances'])).toBe('expenses');
+    expect(groupSectionFrom([' Balances ', 'members'])).toBe('balances');
+  });
+
+  it('defaults an array of unknowns and an empty array to expenses', () => {
+    expect(groupSectionFrom(['bogus'])).toBe(DEFAULT_GROUP_SECTION);
+    expect(groupSectionFrom([])).toBe(DEFAULT_GROUP_SECTION);
+  });
+});
+
+describe('firstQueryValue', () => {
+  it('is empty for nothing', () => {
+    expect(firstQueryValue(undefined)).toBe('');
+    expect(firstQueryValue([])).toBe('');
+  });
+
+  it('is the first element of an array and the string itself otherwise', () => {
+    expect(firstQueryValue(['a', 'b'])).toBe('a');
+    expect(firstQueryValue('c')).toBe('c');
   });
 });
 

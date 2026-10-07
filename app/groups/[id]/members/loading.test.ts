@@ -40,6 +40,12 @@ describe('members loading boundary', () => {
     expect(html).toContain('aria-busy="true"');
   });
 
+  it('tells a reader without JavaScript what is missing', () => {
+    const html = render();
+
+    expect(html).toMatch(/<noscript>[\s\S]*JavaScript[\s\S]*<\/noscript>/);
+  });
+
   it('pulses only for a viewer who has not asked for less motion', () => {
     const html = render();
 

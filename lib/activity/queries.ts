@@ -109,6 +109,21 @@ export function rawGroupScope(raw: string | string[] | undefined): string | null
 }
 
 /**
+ * The scope a failed feed carries into its chips and Retry. The raw id is only carried when the
+ * groups read could not confirm anything, so a failed feed keeps its scope instead of widening to
+ * every group; a confirmed read never carries a stranger's id.
+ */
+export function failedFeedScope(
+  groupsLoaded: boolean,
+  groups: ActivityGroup[],
+  raw: string | string[] | undefined,
+): string | null {
+  const scope = rawGroupScope(raw);
+  if (!groupsLoaded) return scope;
+  return groups.find((group) => group.id === scope)?.id ?? null;
+}
+
+/**
  * This feed's own URL, carrying the filter and the scope — what a retry, a chip and the way back
  * to every group all resolve to. Only values that are set travel, so the unscoped, unfiltered
  * feed stays `/activity` rather than gaining two empty parameters.

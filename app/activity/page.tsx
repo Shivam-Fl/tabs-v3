@@ -13,6 +13,7 @@ import {
   activityHref,
   listActivityGroups,
   listUserActivity,
+  failedFeedScope,
   rawGroupScope,
   type ActivityFilter,
   type ActivityGroup,
@@ -63,10 +64,10 @@ export default async function ActivityPage({
   }
 
   // Reserves the "Showing X only" line only when the URL holds a group id, so an unscoped feed
-  // does not gain a gap when the data lands.
+  // does not gain a gap when the data lands. It holds the loaded line's position and height.
   const fallback = (
     <>
-      {rawGroupScope(query[ACTIVITY_GROUP_PARAM]) === null ? null : <Skeleton className="h-6 w-64" />}
+      {rawGroupScope(query[ACTIVITY_GROUP_PARAM]) === null ? null : <Skeleton className="-mt-4 h-5 w-64" />}
       <ActivityFeedSkeleton />
     </>
   );
@@ -117,9 +118,11 @@ async function ActivityContent({
   let groups: ActivityGroup[] = [];
   let rows: ActivityRow[] = [];
   let failed = false;
+  let groupsLoaded = false;
 
   try {
     groups = await withDb((handle) => listActivityGroups(handle.db, viewerId));
+    groupsLoaded = true;
     rows = await withDb((handle) => listUserActivity(handle.db, viewerId, filter));
   } catch (error) {
     // Both reads are the same failure to the reader: the feed did not load. The technical
@@ -136,8 +139,11 @@ async function ActivityContent({
   const shown = scoped === null ? rows : rows.filter((row) => row.groupId === scoped.id);
 
   if (failed) {
-    // When the groups read is what failed there is no confirmed scope, so the raw id is carried.
-    return <ActivityFailed filter={filter} groupId={scoped?.id ?? rawGroupScope(rawGroup)} />;
+    // The raw id is carried only when the groups read could not confirm anything (it did not
+    // complete); a completed read drops an id that is not one of the viewer's groups.
+    return (
+      <ActivityFailed filter={filter} groupId={failedFeedScope(groupsLoaded, groups, rawGroup)} />
+    );
   }
 
   // Built once: the empty state's sentence and its action are one decision about one case.
@@ -146,7 +152,9 @@ async function ActivityContent({
   return (
     <>
       {scoped === null ? null : (
-        <p className="text-secondary text-ink-muted">
+        // -mt-4 undoes main's 24px gap down to the 8px this line had under the title when it lived
+        // in the header; min-h-5 reserves the 24px the fallback Skeleton holds.
+        <p className="-mt-4 min-h-5 text-secondary text-ink-muted">
           Showing{' '}
           <Link
             className="font-medium text-accent underline-offset-4 hover:underline"

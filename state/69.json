@@ -247,5 +247,17 @@
   "work_order_posted_at": "2026-10-07T02:48:21.065Z",
   "work_order_from": "plan",
   "work_order_comment": "6029851894",
-  "implemented_version": 1
+  "implemented_version": 1,
+  "follow_ups": {
+    "review": [
+      {
+        "title": "The new case pins the wording of a JSX comment (must contain 'min-w-0', must not contain 'ml-auto' or a newline), so a legitimate rewording of the comment fails CI without any behaviour change.",
+        "detail": "The new case pins the wording of a JSX comment (must contain 'min-w-0', must not contain 'ml-auto' or a newline), so a legitimate rewording of the comment fails CI without any behaviour change.\n\n`app/groups/[id]/transfer-line-wrap.test.ts:73`\n\nEvidence: Ran the case's anchors by hand on main's page.tsx: comment spans two lines and contains ml-auto (case would fail); on the PR's page.tsx it is one line, min-w-0, no ml-auto (passes). The case asserts on prose, not on markup, which the existing cases already cover.\n\nFix: Acceptable as shipped because the work order chose it deliberately and the plan review required a CI proof; if it becomes a nuisance, drop it rather than loosening it.",
+        "severity": "minor",
+        "category": "test",
+        "file": "app/groups/[id]/transfer-line-wrap.test.ts"
+      }
+    ],
+    "pr": "70"
+  }
 }

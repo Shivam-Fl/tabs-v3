@@ -1,7 +1,7 @@
 {
   "issue": 62,
   "pr": 64,
-  "state": "qa-pass",
+  "state": "merged",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -16,7 +16,6 @@
     "n": 1,
     "run": "37555673411"
   },
-  "halted": null,
   "pending": {
     "stage": "implement",
     "rework": null,
@@ -205,7 +204,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-07T00:45:02.942Z",
-  "updated_at": "2026-10-07T01:16:20.002Z",
+  "updated_at": "2026-10-07T01:16:35.380Z",
   "history": [
     {
       "at": "2026-10-07T00:45:19.076Z",
@@ -281,6 +280,11 @@
       "at": "2026-10-07T01:16:20.002Z",
       "agent": "qa",
       "action": "-> qa-pass"
+    },
+    {
+      "at": "2026-10-07T01:16:35.380Z",
+      "agent": "release",
+      "action": "-> merged"
     }
   ],
   "issue_snapshot": {

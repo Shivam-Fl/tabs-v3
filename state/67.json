@@ -183,5 +183,113 @@
   },
   "validated_from": "plan",
   "validated_at": "2026-10-07T01:46:43.341Z",
-  "validated_ac_changes": []
+  "validated_ac_changes": [],
+  "approved_work_order": {
+    "issue": 67,
+    "version": 1,
+    "kind": "chore",
+    "mode": "committed",
+    "understanding": "The one finding (PR #66 review, app/activity/guard-wire-status.test.ts:93-105) still reproduces: the four mutants of the 'sets groupsLoaded only after the groups read and before the feed read' test are built by String.replace on literal text ('    groupsLoaded = true;\\n' with its 4-space indent, '  } catch (error) {', '    groups = await', '    failed = true;\\n'), while the checker groupsLoadedWiring is regex-based and formatting-tolerant. A reindent or a renamed catch variable therefore fails the test through the 'mutant changed nothing' guard (line 108), a message about the mutant, not about the invariant. The reviewer classed it non-blocking and its own Fix line says 'accepted as designed, no change needed'; the arbiter decides to implement anyway because the repair is small, confined to one test file, and the critique found a real weakness in the same builders (a half-applied mutant passes vacuously) that the same rewrite closes. No product code, no UI surface: frontend-design and ux do not apply.",
+    "root_cause": "Mutants are made from literal source text while the invariant checker reads the same source through tolerant regexes, so the two disagree about what 'the same code' is. Separately, the test asserts only that a mutant differs from the page and yields some violation, so a remove-then-reinsert mutant whose reinsert step matches nothing still passes while never testing the ordering invariant it is named for.",
+    "approach": "Edit only app/activity/guard-wire-status.test.ts. (1) Add a module-level buildMutants(src) returning { [name]: { source, expects: RegExp } }, built with tolerant regexes and no indentation, spacing, line-ending or catch-variable literals. Scope each replacement to the text from 'async function ActivityContent' onward so nothing earlier in page.tsx can match. Flag removal: /[ \\t]*\\bgroupsLoaded\\s*=\\s*true\\s*;[^\\S\\n]*\\r?\\n?/ (the declaration is '= false', so it cannot match). 'flag above the groups read': remove it, then replace /\\bgroups\\s*=\\s*await\\b/ with 'groupsLoaded = true; $&'; expects /order must be/. 'flag below the feed read': remove it, then replace /\\}\\s*catch\\b/ with 'groupsLoaded = true; $&' (no assumption about the catch binding, so 'catch (cause)' and bare 'catch {' both work); expects /order must be/. 'await dropped': replace /(\\bgroups\\s*=\\s*)await\\s+(withDb)/ with '$1$2'; expects /groups read must be/. 'second assignment in the catch': replace /(\\bfailed\\s*=\\s*true\\s*;)/ with '$1 groupsLoaded = false;' (unanchored, so a one-line catch body works); expects /written only/. (2) The loop keeps the 'mutant \"<name>\" changed nothing' guard, and adds expect(groupsLoadedWiring(mutant.source).join('\\n')).toMatch(mutant.expects) in place of the bare not.toEqual([]), so a half-applied mutant (flag deleted, reinsert matched nothing) now fails on 'must be assigned' instead of passing. (3) Add one test that runs buildMutants and groupsLoadedWiring over a small inline synthetic ActivityContent source (about 12 lines, containing the checker's required shapes: let groupsLoaded = false; try { groups = await withDb((handle) => listActivityGroups(handle.db, viewerId)); <tab>groupsLoaded<spaces>=<spaces>true; rows = await withDb((handle) => listUserActivity(handle.db, viewerId, filter)); } catch (cause) { failed<spaces>=<spaces>true; } failedFeedScope(groupsLoaded, ...)). It asserts the synthetic source passes groupsLoadedWiring with no violations, and that every mutant built from it differs from it and matches its expects. Use CRLF line endings in a second variant of the same fixture (source.replace(/\\n/g, '\\r\\n')) and a bare 'catch {' in a third, so the tolerance claims are exercised; the fixture does not derive from page.tsx, so the new test does not depend on page.tsx's text. (4) Delete the dead 'flag' and 'catchOpen' constants. (5) Remove the redundant expect(page).toContain('groupsLoaded = true') at line 85, which is a literal check that a respacing would trip and that groupsLoadedWiring already holds. Other literal assertions (loading.tsx absence, redirect-before-Suspense indexOf, toContain of 'failedFeedScope(groupsLoaded, groups, rawGroup)', '<ActivityFailed', the not.toContain) stay as they are by design and are out of scope. Do not touch page.tsx.",
+    "files": [
+      {
+        "path": "app/activity/guard-wire-status.test.ts",
+        "action": "edit",
+        "change": "Replace the literal-string mutants (lines 93-105) with a module-level buildMutants(src) using whitespace-, line-ending- and catch-binding-tolerant regexes scoped to ActivityContent, each mutant carrying the violation it must trigger; assert that violation by regex in the loop (keep the 'changed nothing' guard); add a test running the builders and the wiring check over an inline synthetic fixture (tab indent, spaced '=', 'catch (cause)', CRLF and bare-catch variants); delete the flag/catchOpen constants and the redundant toContain('groupsLoaded = true') at line 85.",
+        "why": "A reformat or renamed catch variable must not fail through the mutant-did-nothing guard, and a half-applied mutant must not pass without testing the ordering invariant."
+      }
+    ],
+    "tests": [
+      {
+        "path": "app/activity/guard-wire-status.test.ts",
+        "action": "edit",
+        "cases": [
+          "the four mutants of the real page each differ from it and each triggers its declared violation (order, order, groups read, written only)",
+          "an inline synthetic ActivityContent with a tab-indented flag, spaced '=' and 'catch (cause)' passes groupsLoadedWiring with no violations",
+          "every mutant built from that fixture, and from its CRLF and bare 'catch {' variants, changes it and triggers its declared violation"
+        ]
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "The mutant builders in guard-wire-status.test.ts contain no literal that depends on indentation, line ending, the catch variable name or the spacing of 'failed = true;' / 'groupsLoaded = true;'.",
+        "verify": "test",
+        "how_to_verify": "Read the diff: no String.replace with a string literal containing leading spaces, '} catch (error) {' or 'failed = true;' remains in the mutant construction; npx vitest run app/activity/guard-wire-status.test.ts passes."
+      },
+      {
+        "id": "AC-2",
+        "check": "Each mutant declares the violation it must trigger and the test asserts it, so a mutant that is only half applied (flag removed but not reinserted) fails the test.",
+        "verify": "test",
+        "how_to_verify": "In a scratch run, break one builder's reinsert regex so it matches nothing; the 'flag above the groups read' case must then fail on the expected /order must be/ match. Restore it afterwards."
+      },
+      {
+        "id": "AC-3",
+        "check": "A synthetic ActivityContent with a tab-indented flag, spaced 'groupsLoaded   =   true', 'catch (cause)', CRLF line endings, or a bare 'catch {' passes groupsLoadedWiring, and all four mutants built from each variant still apply and are caught.",
+        "verify": "test",
+        "how_to_verify": "The new fixture test in guard-wire-status.test.ts passes."
+      },
+      {
+        "id": "AC-4",
+        "check": "The test still has teeth on the real page: moving the flag above the groups read, below the feed read, dropping the await, or adding a second assignment in the catch each makes the suite fail.",
+        "verify": "test",
+        "how_to_verify": "Temporarily apply each of the four edits to app/activity/page.tsx and confirm 'sets groupsLoaded only after...' fails with the violation list; restore page.tsx with git checkout so it has no net diff."
+      },
+      {
+        "id": "AC-5",
+        "check": "The verify suite is green and only app/activity/guard-wire-status.test.ts changed.",
+        "verify": "test",
+        "how_to_verify": "npm run typecheck && npm run test:ci && npm run build; git diff --stat lists one file."
+      }
+    ],
+    "qa_script": [
+      "Run npx vitest run app/activity and confirm guard-wire-status.test.ts passes.",
+      "Re-indent 'groupsLoaded = true;' in app/activity/page.tsx with a tab and rename 'catch (error)' to 'catch (cause)' (also update the console.error argument); rerun the guard test and confirm it passes; then move the flag above 'groups = await withDb(...)' and confirm it fails naming the order violation; restore with git checkout.",
+      "Run npm run typecheck and npm run test:ci."
+    ],
+    "risks": [
+      "Regex mutants could mis-target in a future page.tsx; the per-mutant expected-violation assertion is what catches a mutant that applied somewhere else or only partly.",
+      "Test-only change: nothing a user sees, and no .sdlc, docs or memory path is touched. No browser verification is possible or needed."
+    ],
+    "out_of_scope": [
+      "Any change to app/activity/page.tsx or failedFeedScope.",
+      "Rewriting groupsLoadedWiring as an AST check.",
+      "The other literal assertions in the same file (loading.tsx absence, redirect-before-Suspense indexOf, toContain of failedFeedScope(groupsLoaded, groups, rawGroup) and '<ActivityFailed'): they are not what the finding names and stay literal by design, so the test is made tolerant of the mutant builders' formatting only, not of every reformat of page.tsx."
+    ],
+    "confidence": 80,
+    "confidence_rationale": "Root cause and every literal were re-read against the test file and page.tsx; the change is test-only with one importer-free file, and the checker's expected violation strings are visible at lines 41-62. It stops short of 90 because nothing was run in planning: the exact insertion whitespace for the regex mutants and the synthetic fixture satisfying every checker regex are verified by reading, and the 'drop versus implement' call is a judgement the reviewer itself leaned the other way on. A failing first run that needs a tweak to a regex would not change the plan; a human preferring to close the ticket as 'accepted as designed' would.",
+    "alternatives_considered": [
+      {
+        "approach": "Drop the finding as the reviewer's own Fix line says (accepted as designed, no change needed).",
+        "rejected_because": "A legitimate option for a non-blocking finding with no formatter configured in the repo, but the ticket exists, the repair is small, and the critique showed the same builders also let a half-applied mutant pass vacuously, which is worth fixing in the same edit."
+      },
+      {
+        "approach": "Build the mutants from a TypeScript AST (ts.createSourceFile) and rewrite groupsLoadedWiring to match.",
+        "rejected_because": "Robust to every reformat but heavier than the problem and introduces a second way of reading the file beside the working regex checker."
+      },
+      {
+        "approach": "Remove the 'mutant changed nothing' guard so unmatched mutants are skipped.",
+        "rejected_because": "A mutant that silently does nothing makes the mutation test vacuous; the guard is right and the builders are what should stop being brittle."
+      },
+      {
+        "approach": "Derive the 'reformatted' test fixture from page.tsx.",
+        "rejected_because": "Critique finding 2: producing it would need literal or hand-written-regex edits of page.tsx, reintroducing the same brittleness in a second place; an inline synthetic source pins the builders without depending on page.tsx."
+      }
+    ],
+    "assumptions": [
+      "page.tsx's ActivityContent has exactly one try/catch, one 'groupsLoaded = true;' and one 'failed = true;' (the wiring checker already requires one try/catch and two groupsLoaded writes), so first-match regexes are unambiguous within the slice from 'async function ActivityContent'.",
+      "Vitest runs on Node with modern regex features (lookbehind is already used in this file)."
+    ],
+    "unknowns": [
+      "Nothing was run during planning; the implementer must run the test and adjust insertion whitespace if a mutant yields a different violation message than declared."
+    ],
+    "debate_summary": "The proposer committed to implementing a finding the reviewer called 'accepted as designed'; the critic called the plan 'flawed' and also suggested the arbiter decide drop-versus-implement explicitly. I implement, narrowly. Accepted: finding 3 (major) - the half-applied mutant hole is real, since a failed reinsert leaves the flag deleted, which still differs from the page and still yields violations; each mutant now declares the violation it must trigger. Accepted: finding 2 (major) - the reformatted-copy test would itself be keyed to page.tsx; replaced by an inline synthetic fixture. Accepted: both minor regex findings (CRLF, line-start anchoring), and the missed bare-catch case; added to AC-3. Partly accepted: finding 1 (major) - the other literal assertions would still trip on some reformats; I remove only the line-85 toContain, which groupsLoadedWiring makes redundant, and keep the rest literal and say so in out_of_scope instead of claiming the whole test is reformat-proof; I do not think regexing lines 74-75 and 84 is what the finding asked for. Weighed, not adopted as a reason to drop: the minor point that no formatter exists, so a mass reformat is hypothetical; the critic is right on that, and the value here is mostly the stronger per-mutant assertion, which is why the plan is kept small. Disagreement left open: the reviewer and the critic lean to 'no change'; the proposer and I lean to a small fix.",
+    "residual_risks": [
+      "Other literal assertions in the same file (indexOf of 'redirect(`/signin' and '<Suspense fallback=', toContain of 'failedFeedScope(groupsLoaded, groups, rawGroup)') still fail on a respacing of page.tsx, by design.",
+      "Regex mutants scoped from 'async function ActivityContent' could mis-target if that function is split or a second catch is added; the checker's exactly-one-try/catch rule and the per-mutant expected violation are the only guards.",
+      "A comment line inside ActivityContent that contains 'groupsLoaded = true;' or 'failed = true;' would be matched by the mutant regexes, which run on raw source unlike the comment-stripping checker; none exist today."
+    ]
+  },
+  "approved_too_high": false
 }

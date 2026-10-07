@@ -1,7 +1,7 @@
 {
   "issue": 67,
   "pr": 68,
-  "state": "merged",
+  "state": "done",
   "owner": null,
   "lock_expires": null,
   "lock_run": null,
@@ -150,7 +150,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-07T01:40:16.258Z",
-  "updated_at": "2026-10-07T02:04:38.155Z",
+  "updated_at": "2026-10-07T02:04:44.130Z",
   "history": [
     {
       "at": "2026-10-07T01:40:35.713Z",
@@ -236,6 +236,11 @@
       "at": "2026-10-07T02:04:38.155Z",
       "agent": "system",
       "action": "lock released"
+    },
+    {
+      "at": "2026-10-07T02:04:44.130Z",
+      "agent": "release",
+      "action": "-> done"
     }
   ],
   "issue_snapshot": {

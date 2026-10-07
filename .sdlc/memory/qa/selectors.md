@@ -66,6 +66,14 @@ lib/groups/validation.ts; a blank or unknown value renders nothing.
   `/favicon.ico` 404'd on every page.
 - `data-skeleton="…"` blocks and `aria-busy="true"` on the members `loading.tsx` fallback —
   how the streamed skeleton is asserted (it never paints locally; see environment.md).
+  `/activity`'s in-page fallback carries `aria-busy="true"` plus an sr-only `role=status`
+  "Loading activity…" (`ActivityFeedSkeleton`, PR #64).
+- `[data-amount]` — every amount on the group page (hero balance, transfer lines, expense and
+  member rows); each carries `tabular-nums`, and `amounts-tabular.test.ts` reads the same class
+  lists from source.
+- Overflow reads at 375px are `document.documentElement.scrollWidth` against `clientWidth`. A
+  negative control that has held: strip the fix's classes from the live DOM and the overflow
+  returns (753/375 for an 80-char transfer name), so a 375/375 read is not vacuous (PR #61).
 - Destructive flows each open a confirm naming their object (shared `ConfirmStep`); rename
   deliberately does not — save-then-note. The rotate/disable/remove/archive/leave regression
   cases assert a confirm naming the object; the rename case asserts its absence.

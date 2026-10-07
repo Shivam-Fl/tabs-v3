@@ -73,5 +73,83 @@
     "decided_at": "2026-10-07T02:37:48.827Z"
   },
   "stopped_at": null,
-  "dispatched_stage": "plan"
+  "dispatched_stage": "plan",
+  "validated_work_order": {
+    "issue": 69,
+    "version": 1,
+    "kind": "chore",
+    "mode": "committed",
+    "reproduced": true,
+    "understanding": "The one review finding from PR #61 still holds on main: app/groups/[id]/page.tsx:547-548 carries a two-line JSX comment between the transfer <li> and its outer name <span>. It explains min-w-0 on the name span and also describes ml-auto on the amount span, which sits further down, not at this position. Repo guidance is one short line, and app/groups/[id]/transfer-line-wrap.test.ts (header, lines 8-11) already explains both min-w-0 and ml-auto. This is a comment-only trim; rendered markup is unchanged.",
+    "approach": "Replace the two-line comment with the reviewer's suggested single line: {/* min-w-0: overflow-wrap cannot lower a flex item's min-content floor. */}, same indentation, leaving the markup beneath it untouched. The ml-auto half is dropped because it describes a different element and the test header carries it (and a test pins the ml-auto class). The new line must not contain the literal strings '<span', '{transferWords(' or 'data-amount', which transfer-line-wrap.test.ts and amounts-tabular.test.ts locate by indexOf/lastIndexOf; the suggested text contains none. No test change is needed. Do not touch the other multi-line JSX comments in this block (:538-541, :555-556): the issue names only :547.",
+    "files": [
+      {
+        "path": "app/groups/[id]/page.tsx",
+        "action": "edit",
+        "change": "Lines 547-548: replace the two-line JSX comment with the single line {/* min-w-0: overflow-wrap cannot lower a flex item's min-content floor. */}; keep it a JSX child comment inside the <li>, and leave the <span className=\"flex min-w-0 flex-wrap items-baseline gap-2\"> that follows unchanged.",
+        "why": "Resolves the review finding: guidance is one short line, and the amount's ml-auto is already explained in the test header."
+      }
+    ],
+    "tests": [],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "The JSX comment above the transfer line's outer name wrapper in app/groups/[id]/page.tsx is a single line and no longer mentions ml-auto or the amount.",
+        "verify": "test",
+        "how_to_verify": "Read the diff of app/groups/[id]/page.tsx: two comment lines become one, nothing else changes. This is judged from the diff (no test asserts comment wording)."
+      },
+      {
+        "id": "AC-2",
+        "check": "The transfer line's rendered classes are unchanged: transfer-line-wrap.test.ts and amounts-tabular.test.ts still pass, and typecheck and build are green.",
+        "verify": "test",
+        "how_to_verify": "Run npx vitest run app/groups/[id]/transfer-line-wrap.test.ts, then the sdlc:verify suite (typecheck + test:ci + build)."
+      }
+    ],
+    "qa_script": [
+      "Open app/groups/[id]/page.tsx at the transfer list and confirm the comment is one line and the markup beneath it is unchanged.",
+      "Run the transfer-line-wrap test and the verify suite; all pass."
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Delete the comment entirely and rely on the test header.",
+        "rejected_because": "The min-w-0 rationale is non-obvious next to break-words and a reader would likely strip it; the reviewer's first-named fix keeps one short line on the spot."
+      },
+      {
+        "approach": "Keep both facts in one long line.",
+        "rejected_because": "Still describes the amount span from the wrong position, which is the second half of the finding."
+      },
+      {
+        "approach": "Also shorten the neighbouring multi-line comments at :538-541 and :555-556.",
+        "rejected_because": "Not in the issue; they carry a real ADR-linked rationale and widening a chore is scope creep."
+      }
+    ],
+    "assumptions": [
+      "No test reads the comment text; both tests that scan this region (transfer-line-wrap.test.ts, amounts-tabular.test.ts) anchor on '<span', '{transferWords(' and 'data-amount', which the new comment does not contain."
+    ],
+    "unknowns": [],
+    "risks": [
+      ".sdlc/memory/conventions.md quotes the same min-content-floor sentence; it is the Librarian's and no ticket may change it, so it is left alone."
+    ],
+    "out_of_scope": [
+      "Any change to the transfer line's classes or layout.",
+      "Changes to transfer-line-wrap.test.ts.",
+      "Other multi-line JSX comments in page.tsx (:538-541, :555-556).",
+      "Edits to .sdlc/memory/**."
+    ],
+    "confidence": 97,
+    "confidence_rationale": "One finding, reproduced by reading the current file; a comment-only edit whose only textual readers (two source-assertion tests) I read and which cannot collide with the one-line text. Would drop only if the implementer retyped the comment with a literal '<span' or 'data-amount'.",
+    "evidence": [
+      "app/groups/[id]/page.tsx:547-548 is the two-line comment on main (HEAD 6c7bda0); ml-auto sits on the amount span at ~:566.",
+      "app/groups/[id]/transfer-line-wrap.test.ts:8-11 already explains min-w-0 and ml-auto; line 63 pins ml-auto on the amount span's classes, so the class is protected without the comment.",
+      "transfer-line-wrap.test.ts only reads this region via indexOf('{transferWords(') / indexOf('data-amount') / lastIndexOf('<span'); the new comment contains none."
+    ],
+    "debate_summary": "The critique returned 'sound' with three minor findings and no blocking ones; I agreed with the proposal's diagnosis after reading page.tsx and the test myself. Finding 1 (AC-1 labelled 'test' though no test asserts the comment): accepted in substance — kept the verify label required by the schema but reworded how_to_verify to say it is judged from the diff; no test for comment wording, which would be over-engineering. Finding 2 (neighbouring comments at :538-541 and :555-556 are also multi-line, so 'one-line rule' is not what the file does): accepted as a scope note, not acted on; the issue names only :547, so they stay and the PR must not claim the file is now one-line throughout. Finding 3 (ml-auto left without a comment at its use site): dismissed as a defect — the issue asks for exactly this and the test pinning ml-auto protects it. The critique's missed edge cases (anchor strings, must remain a JSX child comment, ~94-column line) are folded into the approach; the width is not a failure since the repo has no lint/format script. No real disagreement between proposer and critic.",
+    "residual_risks": [
+      "AC-1 is judged from the diff only; nothing will fail if the comment is later re-expanded.",
+      "Other multi-line JSX comments in this block remain by design."
+    ]
+  },
+  "validated_from": "plan",
+  "validated_at": "2026-10-07T02:41:16.040Z",
+  "validated_ac_changes": []
 }

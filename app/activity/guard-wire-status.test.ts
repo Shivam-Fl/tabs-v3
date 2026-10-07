@@ -65,6 +65,68 @@ function groupsLoadedWiring(src: string): string[] {
   return violations;
 }
 
+type Mutant = { source: string; expects: RegExp };
+
+function buildMutants(src: string): Record<string, Mutant> {
+  const start = src.indexOf('async function ActivityContent');
+  const head = start < 0 ? '' : src.slice(0, start);
+  const tail = start < 0 ? src : src.slice(start);
+  const build = (edit: (body: string) => string, expects: RegExp): Mutant => ({
+    source: head + edit(tail),
+    expects,
+  });
+
+  const withoutFlag = (body: string) =>
+    body.replace(/[ \t]*\bgroupsLoaded\s*=\s*true\s*;[^\S\n]*\r?\n?/, '');
+
+  return {
+    'flag above the groups read': build(
+      (body) => withoutFlag(body).replace(/\bgroups\s*=\s*await\b/, 'groupsLoaded = true; $&'),
+      /order must be/,
+    ),
+    'flag below the feed read': build(
+      (body) => withoutFlag(body).replace(/\}\s*catch\b/, 'groupsLoaded = true; $&'),
+      /order must be/,
+    ),
+    'await dropped from the groups read': build(
+      (body) => body.replace(/(\bgroups\s*=\s*)await\s+(withDb)/, '$1$2'),
+      /groups read must be/,
+    ),
+    'second assignment in the catch': build(
+      (body) => body.replace(/(\bfailed\s*=\s*true\s*;)/, '$1 groupsLoaded = false;'),
+      /written only/,
+    ),
+  };
+}
+
+function expectMutantsCaught(src: string, label: string) {
+  for (const [name, mutant] of Object.entries(buildMutants(src))) {
+    expect(mutant.source, `${label}: mutant "${name}" changed nothing`).not.toBe(src);
+    expect(groupsLoadedWiring(mutant.source).join('\n'), `${label}: mutant "${name}"`).toMatch(
+      mutant.expects,
+    );
+  }
+}
+
+const syntheticActivityContent = [
+  'export default function Page() {}',
+  '',
+  'async function ActivityContent() {',
+  '\tlet groupsLoaded = false;',
+  '\tlet failed  =  false;',
+  '\ttry {',
+  '\t\tgroups = await withDb((handle) => listActivityGroups(handle.db, viewerId));',
+  '\t\tgroupsLoaded   =   true;',
+  '\t\trows = await withDb((handle) => listUserActivity(handle.db, viewerId, filter));',
+  '\t} catch (cause) {',
+  '\t\tconsole.error(cause);',
+  '\t\tfailed  =  true;',
+  '\t}',
+  '\treturn failedFeedScope(groupsLoaded, groups, rawGroup);',
+  '}',
+  '',
+].join('\n');
+
 describe('the activity route', () => {
   it('has no route-level loading boundary above its guard', () => {
     expect(existsSync(new URL('./loading.tsx', import.meta.url))).toBe(false);
@@ -82,7 +144,6 @@ describe('the activity route', () => {
   it('carries the raw group id on the failed branch only when the groups read could not confirm it', () => {
     expect(page).toContain('<ActivityFailed');
     expect(page).toContain('failedFeedScope(groupsLoaded, groups, rawGroup)');
-    expect(page).toContain('groupsLoaded = true');
     expect(page).not.toContain('scoped?.id ?? rawGroupScope(');
   });
 
@@ -90,23 +151,21 @@ describe('the activity route', () => {
     expect(page.indexOf('async function ActivityContent')).toBeGreaterThanOrEqual(0);
     expect(groupsLoadedWiring(page), 'the real page').toEqual([]);
 
-    const flag = '    groupsLoaded = true;\n';
-    const catchOpen = '  } catch (error) {';
-    const mutants: Record<string, string> = {
-      'flag above the groups read': page
-        .replace(flag, '')
-        .replace('    groups = await', `${flag}    groups = await`),
-      'flag below the feed read': page.replace(flag, '').replace(catchOpen, `${flag}${catchOpen}`),
-      'await dropped from the groups read': page.replace('groups = await withDb', 'groups = withDb'),
-      'second assignment in the catch': page.replace(
-        '    failed = true;\n',
-        '    failed = true;\n    groupsLoaded = false;\n',
-      ),
+    expectMutantsCaught(page, 'the real page');
+  });
+
+  it('applies and catches every mutant on a reformatted ActivityContent', () => {
+    const variants: Record<string, string> = {
+      'tab indent, spaced "=", catch (cause)': syntheticActivityContent,
+      CRLF: syntheticActivityContent.replace(/\n/g, '\r\n'),
+      'bare one-line catch': syntheticActivityContent
+        .replace('catch (cause) {\n\t\tconsole.error(cause);\n\t\tfailed  =  true;\n\t}', 'catch { failed  =  true; }'),
     };
 
-    for (const [name, mutant] of Object.entries(mutants)) {
-      expect(mutant, `mutant "${name}" changed nothing`).not.toBe(page);
-      expect(groupsLoadedWiring(mutant), `mutant "${name}"`).not.toEqual([]);
+    for (const [label, src] of Object.entries(variants)) {
+      expect(groupsLoadedWiring(src), `the ${label} fixture`).toEqual([]);
+      expectMutantsCaught(src, label);
     }
+    expect(variants['bare one-line catch']).toContain('catch { failed');
   });
 });

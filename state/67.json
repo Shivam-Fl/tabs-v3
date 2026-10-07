@@ -150,7 +150,7 @@
   "review_history": [],
   "review_root_caused": [],
   "created_at": "2026-10-07T01:40:16.258Z",
-  "updated_at": "2026-10-07T02:04:30.898Z",
+  "updated_at": "2026-10-07T02:04:38.155Z",
   "history": [
     {
       "at": "2026-10-07T01:40:35.713Z",
@@ -231,6 +231,11 @@
       "at": "2026-10-07T02:04:30.898Z",
       "agent": "release",
       "action": "-> merged"
+    },
+    {
+      "at": "2026-10-07T02:04:38.155Z",
+      "agent": "system",
+      "action": "lock released"
     }
   ],
   "issue_snapshot": {

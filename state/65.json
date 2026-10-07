@@ -18,7 +18,105 @@
   },
   "halted": null,
   "pending": null,
-  "work_order": null,
+  "work_order": {
+    "issue": 65,
+    "version": 1,
+    "kind": "chore",
+    "understanding": "The single finding in #65 (from PR #64's review) still reproduces on main. app/activity/guard-wire-status.test.ts only asserts that page.tsx contains the substrings 'failedFeedScope(groupsLoaded, groups, rawGroup)' and 'groupsLoaded = true', never where the assignment sits. failedFeedScope(false, ...) deliberately carries the raw ?group= uuid into the Retry/chip links, so if 'groupsLoaded = true' moved above the groups read (page.tsx:124) or below the feed read (page.tsx:126), a feed-read failure would give groupsLoaded=false and carry a stranger's uuid again (the original #62 defect) with every test green. The helper is already unit-tested (lib/activity/queries.test.ts:452-468); only the page wiring in ActivityContent's try block is unguarded. This is test-only hardening: page.tsx, queries.ts and the /activity screen are untouched, so there is nothing for frontend-design or ux to apply beyond leaving the UI alone.",
+    "root_cause": "The wiring test checks presence of substrings rather than their order and exact count inside ActivityContent, so the invariant 'groups read awaited -> groupsLoaded = true -> feed read awaited, all inside try, flag assigned nowhere else' is unprotected.",
+    "approach": "Edit only app/activity/guard-wire-status.test.ts. Keep the three existing `it` blocks untouched (the plain toContain('groupsLoaded = true') stays; it is merely redundant) and add one new `it`, so the file ends with four passing tests. The new check lives in a small local function `groupsLoadedWiring(src: string): string[]` that returns a list of violated-invariant messages (empty when the wiring is right). It (1) slices src from 'async function ActivityContent' (the test asserts that index is >= 0 first, so a rename fails with a clear message instead of slice(-1) nonsense) and strips // line comments and /* */ blocks so prose cannot satisfy a match; (2) locates, with whitespace-tolerant regexes, the awaited groups read /groups\\s*=\\s*await\\s+withDb\\(\\s*\\(handle\\)\\s*=>\\s*listActivityGroups\\(handle\\.db/, the flag assignment /(?<!let\\s)\\bgroupsLoaded\\s*=\\s*true\\s*;/, the awaited feed read /rows\\s*=\\s*await\\s+withDb\\(\\s*\\(handle\\)\\s*=>\\s*listUserActivity\\(handle\\.db/, the single /\\btry\\s*\\{/, the single /\\}\\s*catch\\b/, and /failedFeedScope\\(\\s*groupsLoaded/; (3) reports a violation for each missing piece, for more than one try or catch, for any order other than try < groups read < flag < feed read < catch < failedFeedScope, for a declaration other than exactly one /let\\s+groupsLoaded\\s*=\\s*false\\s*;/, and for a total of anything other than 2 matches of /\\bgroupsLoaded\\s*=(?![=>])/g (the declaration plus the one assignment — this catches `groupsLoaded = !failed`, a reset in the catch, or a changed declaration). Anchoring on the `await`ed statements means dropping the await from the groups read also trips it. The new `it` asserts groupsLoadedWiring(page) is [] with each violation message naming the invariant (so the next author of a legitimate refactor updates the test deliberately), and — taking the critique's major finding — also asserts that in-memory mutants of the real page text each produce a non-empty violation list: (a) flag assignment removed from its line and inserted before the groups read, (b) flag assignment moved after the feed read, (c) `await` dropped from the groups read, (d) a second `groupsLoaded = false;` added in the catch. Each mutant is built with String.replace and the test first asserts mutant !== page so a mutation that silently did nothing cannot make the check vacuous. That makes the 'can fail' proof committed and CI-visible rather than a manual uncommitted edit. Update the header comment with one short line that the ordering of the two reads around the flag is the other source-level fact held here. No change to page.tsx.",
+    "files": [
+      {
+        "path": "app/activity/guard-wire-status.test.ts",
+        "action": "edit",
+        "change": "Add a local `groupsLoadedWiring(src)` function (comment-stripped slice from 'async function ActivityContent'; whitespace-tolerant regexes anchored on the awaited groups read, the flag assignment, the awaited feed read, the single try/catch and failedFeedScope(groupsLoaded; returns violation messages for missing pieces, wrong order, a declaration other than one `let groupsLoaded = false;`, or assignment count other than 2). Add one new `it` that expects it to return [] for the real page and non-empty for four in-memory mutants (flag above groups read, flag below feed read, await dropped from groups read, second assignment in the catch), each asserting mutant !== page first. Leave the three existing `it` blocks as they are. Add one short line to the header comment. Imports and the `page` constant are reused.",
+        "why": "The invariant is a source-order fact: the page's try block cannot be exercised by a unit test (the embedded database resolves in the microtask queue and the server component has no harness), and this file already holds exactly that kind of fact for the guard/Suspense order."
+      }
+    ],
+    "tests": [
+      {
+        "path": "app/activity/guard-wire-status.test.ts",
+        "action": "edit",
+        "cases": [
+          "real page.tsx: groupsLoadedWiring returns no violations (try < awaited groups read < groupsLoaded = true < awaited feed read < catch < failedFeedScope(groupsLoaded)",
+          "mutant: groupsLoaded = true moved above the groups read is reported",
+          "mutant: groupsLoaded = true moved below the feed read is reported",
+          "mutant: await dropped from the groups read is reported",
+          "mutant: a second groupsLoaded assignment in the catch is reported (assignment count != 2)",
+          "each mutant differs from the real page text, so a no-op mutation cannot pass vacuously",
+          "the three existing blocks (no loading.tsx, redirect before Suspense, failed-branch substrings) still pass; file ends with four passing tests"
+        ]
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "AC-1",
+        "check": "The wiring test fails if 'groupsLoaded = true' is moved before the awaited listActivityGroups read or after the awaited listUserActivity read in ActivityContent, shown by committed in-memory mutants of page.tsx rather than a manual edit.",
+        "verify": "test",
+        "how_to_verify": "Run `npx vitest run app/activity/guard-wire-status.test.ts`: green on the real page.tsx, and the mutant assertions inside the new `it` pass (each mutant yields a non-empty violation list)."
+      },
+      {
+        "id": "AC-2",
+        "check": "The wiring test also fails when the await on the groups read is dropped or when groupsLoaded is assigned anywhere beyond the declaration and the one assignment inside the try; the three pre-existing `it` blocks remain unchanged and pass, so the file reports four passing tests.",
+        "verify": "test",
+        "how_to_verify": "Run the whole file and confirm four tests pass; read the diff to confirm the three original `it` bodies are untouched."
+      },
+      {
+        "id": "AC-3",
+        "check": "No product code changed: `git diff --stat` lists only app/activity/guard-wire-status.test.ts (page.tsx and lib/activity/queries.ts byte-identical), and typecheck, test:ci and build still pass.",
+        "verify": "test",
+        "how_to_verify": "`git diff --stat`, then `npm run typecheck && npm run test:ci && npm run build` (the sdlc verify suite)."
+      }
+    ],
+    "alternatives_considered": [
+      {
+        "approach": "Extract the try block into a lib function returning {groups, rows, groupsLoaded} and unit-test it with a failing feed read.",
+        "rejected_because": "A behavioural test is stronger but adds an abstraction with one caller and moves page code for a non-blocking, test-only follow-up; the issue itself offers 'assert the order' or accept the risk."
+      },
+      {
+        "approach": "Render ActivityContent with mocked withDb/listActivityGroups/listUserActivity and assert ActivityFailed's groupId prop.",
+        "rejected_because": "ActivityContent is an async server component importing next/navigation, next/link and the DB client; mocking those in Vitest is heavy and brittle for one invariant."
+      },
+      {
+        "approach": "Manual-only mutation check (proposal's version): move the assignment in page.tsx locally, confirm red, revert.",
+        "rejected_because": "Nothing in CI or QA would show the order check can fail, so a later edit making it vacuous would pass silently — the very defect this issue is about. In-memory mutants committed in the test replace it."
+      },
+      {
+        "approach": "Accept the residual risk and close without change.",
+        "rejected_because": "The finding reproduces (the test checks substring presence only) and the fix is a few dozen lines in an existing test file."
+      }
+    ],
+    "assumptions": [
+      "The anchored patterns match page.tsx as formatted today (page.tsx:121-133); a prettier reflow is absorbed by \\s* tolerance, and a deliberate refactor fails loudly with a message naming the invariant.",
+      "ActivityContent is the only place in page.tsx with try/catch or groupsLoaded (grep: lines 121, 123, 125, 127, 145 only), so slicing to end of file is safe.",
+      "No other file depends on guard-wire-status.test.ts; groupsLoaded and failedFeedScope appear only in page.tsx, queries.ts and their tests.",
+      "Vitest's expect(value, message) form is available so assertion messages can name the invariant."
+    ],
+    "unknowns": [],
+    "out_of_scope": [
+      "Refactoring ActivityContent's data loading into a testable function",
+      "Any change to page.tsx, failedFeedScope, ActivityFailed or the /activity UI",
+      "Edits to .sdlc/memory/** (the Librarian's)"
+    ],
+    "risks": [
+      "A source-text test is coupled to the shape of the try block and goes red on a harmless refactor; the violation messages name the invariant so the next author updates it on purpose.",
+      "It protects statement order and assignment count, not that a feed-read failure reaches ActivityFailed at runtime; that stays covered by the failedFeedScope unit tests in lib/activity/queries.test.ts.",
+      "Exotic rewrites (e.g. `groupsLoaded = (rows = await ...) && true`) are only caught by the assignment-count and ordering checks, not individually."
+    ],
+    "qa_script": [
+      "No browser walk: the change is test-only and /activity is untouched.",
+      "Run `npx vitest run app/activity/guard-wire-status.test.ts` and confirm four tests pass.",
+      "Confirm `git diff --stat` lists only app/activity/guard-wire-status.test.ts."
+    ],
+    "confidence": 88,
+    "confidence_rationale": "One finding, re-verified against page.tsx:121-133 and the current test; the change is confined to one existing test file with no product code, and committed mutants prove the check can fail. Residual uncertainty is only the exact regexes matching the formatted source on the first try (the implementer runs the test) and reviewer taste on source-text tests; a behavioural harness would raise the ceiling but was judged disproportionate.",
+    "debate_summary": "The critique judged the proposal sound and I agree on the diagnosis; I accepted every finding with changes. Accepted (major): the manual-only mutation check meant nothing visible proves the order test can fail — replaced with committed in-memory mutants, which is the change that matters most. Accepted (minor): anchor on the awaited statements so dropping `await` is caught; count all assignments rather than the literal 'groupsLoaded = true'; fix the inconsistent block counts (three existing `it` blocks stay, one added, four total); use whitespace-tolerant regexes with invariant-naming messages. Folded in from the critique's missed edge cases: assert the ActivityContent slice index first, require a single try/catch, and strip comments so prose cannot satisfy a match. Not adopted: nothing was dismissed outright, but I did not chase the contrived `groupsLoaded = (rows = await ...) && true` form beyond what ordering and the assignment count already catch, and I kept the source-text technique over a behavioural harness (both agree it is weaker than a runtime test; the issue offers it as the fix and the file already uses it). No route change: the route fits a test-only chore.",
+    "residual_risks": [
+      "Statement order and assignment count are held, not runtime behaviour; a future refactor of how the reads are written needs a matching test update.",
+      "The mutants are string replacements keyed to today's formatting: if the reads are restructured, the mutation builders must be updated or the `mutant !== page` guard will fail loudly."
+    ],
+    "mode": "committed"
+  },
   "touch_paths": [],
   "acceptance": [],
   "planned_route": [
@@ -74,204 +172,12 @@
   },
   "stopped_at": null,
   "dispatched_stage": "plan",
-  "validated_work_order": {
-    "issue": 65,
-    "version": 1,
-    "kind": "chore",
-    "understanding": "The single finding in #65 (from PR #64's review) still reproduces on main. app/activity/guard-wire-status.test.ts only asserts that page.tsx contains the substrings 'failedFeedScope(groupsLoaded, groups, rawGroup)' and 'groupsLoaded = true', never where the assignment sits. failedFeedScope(false, ...) deliberately carries the raw ?group= uuid into the Retry/chip links, so if 'groupsLoaded = true' moved above the groups read (page.tsx:124) or below the feed read (page.tsx:126), a feed-read failure would give groupsLoaded=false and carry a stranger's uuid again (the original #62 defect) with every test green. The helper is already unit-tested (lib/activity/queries.test.ts:452-468); only the page wiring in ActivityContent's try block is unguarded. This is test-only hardening: page.tsx, queries.ts and the /activity screen are untouched, so there is nothing for frontend-design or ux to apply beyond leaving the UI alone.",
-    "root_cause": "The wiring test checks presence of substrings rather than their order and exact count inside ActivityContent, so the invariant 'groups read awaited -> groupsLoaded = true -> feed read awaited, all inside try, flag assigned nowhere else' is unprotected.",
-    "approach": "Edit only app/activity/guard-wire-status.test.ts. Keep the three existing `it` blocks untouched (the plain toContain('groupsLoaded = true') stays; it is merely redundant) and add one new `it`, so the file ends with four passing tests. The new check lives in a small local function `groupsLoadedWiring(src: string): string[]` that returns a list of violated-invariant messages (empty when the wiring is right). It (1) slices src from 'async function ActivityContent' (the test asserts that index is >= 0 first, so a rename fails with a clear message instead of slice(-1) nonsense) and strips // line comments and /* */ blocks so prose cannot satisfy a match; (2) locates, with whitespace-tolerant regexes, the awaited groups read /groups\\s*=\\s*await\\s+withDb\\(\\s*\\(handle\\)\\s*=>\\s*listActivityGroups\\(handle\\.db/, the flag assignment /(?<!let\\s)\\bgroupsLoaded\\s*=\\s*true\\s*;/, the awaited feed read /rows\\s*=\\s*await\\s+withDb\\(\\s*\\(handle\\)\\s*=>\\s*listUserActivity\\(handle\\.db/, the single /\\btry\\s*\\{/, the single /\\}\\s*catch\\b/, and /failedFeedScope\\(\\s*groupsLoaded/; (3) reports a violation for each missing piece, for more than one try or catch, for any order other than try < groups read < flag < feed read < catch < failedFeedScope, for a declaration other than exactly one /let\\s+groupsLoaded\\s*=\\s*false\\s*;/, and for a total of anything other than 2 matches of /\\bgroupsLoaded\\s*=(?![=>])/g (the declaration plus the one assignment — this catches `groupsLoaded = !failed`, a reset in the catch, or a changed declaration). Anchoring on the `await`ed statements means dropping the await from the groups read also trips it. The new `it` asserts groupsLoadedWiring(page) is [] with each violation message naming the invariant (so the next author of a legitimate refactor updates the test deliberately), and — taking the critique's major finding — also asserts that in-memory mutants of the real page text each produce a non-empty violation list: (a) flag assignment removed from its line and inserted before the groups read, (b) flag assignment moved after the feed read, (c) `await` dropped from the groups read, (d) a second `groupsLoaded = false;` added in the catch. Each mutant is built with String.replace and the test first asserts mutant !== page so a mutation that silently did nothing cannot make the check vacuous. That makes the 'can fail' proof committed and CI-visible rather than a manual uncommitted edit. Update the header comment with one short line that the ordering of the two reads around the flag is the other source-level fact held here. No change to page.tsx.",
-    "files": [
-      {
-        "path": "app/activity/guard-wire-status.test.ts",
-        "action": "edit",
-        "change": "Add a local `groupsLoadedWiring(src)` function (comment-stripped slice from 'async function ActivityContent'; whitespace-tolerant regexes anchored on the awaited groups read, the flag assignment, the awaited feed read, the single try/catch and failedFeedScope(groupsLoaded; returns violation messages for missing pieces, wrong order, a declaration other than one `let groupsLoaded = false;`, or assignment count other than 2). Add one new `it` that expects it to return [] for the real page and non-empty for four in-memory mutants (flag above groups read, flag below feed read, await dropped from groups read, second assignment in the catch), each asserting mutant !== page first. Leave the three existing `it` blocks as they are. Add one short line to the header comment. Imports and the `page` constant are reused.",
-        "why": "The invariant is a source-order fact: the page's try block cannot be exercised by a unit test (the embedded database resolves in the microtask queue and the server component has no harness), and this file already holds exactly that kind of fact for the guard/Suspense order."
-      }
-    ],
-    "tests": [
-      {
-        "path": "app/activity/guard-wire-status.test.ts",
-        "action": "edit",
-        "cases": [
-          "real page.tsx: groupsLoadedWiring returns no violations (try < awaited groups read < groupsLoaded = true < awaited feed read < catch < failedFeedScope(groupsLoaded)",
-          "mutant: groupsLoaded = true moved above the groups read is reported",
-          "mutant: groupsLoaded = true moved below the feed read is reported",
-          "mutant: await dropped from the groups read is reported",
-          "mutant: a second groupsLoaded assignment in the catch is reported (assignment count != 2)",
-          "each mutant differs from the real page text, so a no-op mutation cannot pass vacuously",
-          "the three existing blocks (no loading.tsx, redirect before Suspense, failed-branch substrings) still pass; file ends with four passing tests"
-        ]
-      }
-    ],
-    "acceptance": [
-      {
-        "id": "AC-1",
-        "check": "The wiring test fails if 'groupsLoaded = true' is moved before the awaited listActivityGroups read or after the awaited listUserActivity read in ActivityContent, shown by committed in-memory mutants of page.tsx rather than a manual edit.",
-        "verify": "test",
-        "how_to_verify": "Run `npx vitest run app/activity/guard-wire-status.test.ts`: green on the real page.tsx, and the mutant assertions inside the new `it` pass (each mutant yields a non-empty violation list)."
-      },
-      {
-        "id": "AC-2",
-        "check": "The wiring test also fails when the await on the groups read is dropped or when groupsLoaded is assigned anywhere beyond the declaration and the one assignment inside the try; the three pre-existing `it` blocks remain unchanged and pass, so the file reports four passing tests.",
-        "verify": "test",
-        "how_to_verify": "Run the whole file and confirm four tests pass; read the diff to confirm the three original `it` bodies are untouched."
-      },
-      {
-        "id": "AC-3",
-        "check": "No product code changed: `git diff --stat` lists only app/activity/guard-wire-status.test.ts (page.tsx and lib/activity/queries.ts byte-identical), and typecheck, test:ci and build still pass.",
-        "verify": "test",
-        "how_to_verify": "`git diff --stat`, then `npm run typecheck && npm run test:ci && npm run build` (the sdlc verify suite)."
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Extract the try block into a lib function returning {groups, rows, groupsLoaded} and unit-test it with a failing feed read.",
-        "rejected_because": "A behavioural test is stronger but adds an abstraction with one caller and moves page code for a non-blocking, test-only follow-up; the issue itself offers 'assert the order' or accept the risk."
-      },
-      {
-        "approach": "Render ActivityContent with mocked withDb/listActivityGroups/listUserActivity and assert ActivityFailed's groupId prop.",
-        "rejected_because": "ActivityContent is an async server component importing next/navigation, next/link and the DB client; mocking those in Vitest is heavy and brittle for one invariant."
-      },
-      {
-        "approach": "Manual-only mutation check (proposal's version): move the assignment in page.tsx locally, confirm red, revert.",
-        "rejected_because": "Nothing in CI or QA would show the order check can fail, so a later edit making it vacuous would pass silently — the very defect this issue is about. In-memory mutants committed in the test replace it."
-      },
-      {
-        "approach": "Accept the residual risk and close without change.",
-        "rejected_because": "The finding reproduces (the test checks substring presence only) and the fix is a few dozen lines in an existing test file."
-      }
-    ],
-    "assumptions": [
-      "The anchored patterns match page.tsx as formatted today (page.tsx:121-133); a prettier reflow is absorbed by \\s* tolerance, and a deliberate refactor fails loudly with a message naming the invariant.",
-      "ActivityContent is the only place in page.tsx with try/catch or groupsLoaded (grep: lines 121, 123, 125, 127, 145 only), so slicing to end of file is safe.",
-      "No other file depends on guard-wire-status.test.ts; groupsLoaded and failedFeedScope appear only in page.tsx, queries.ts and their tests.",
-      "Vitest's expect(value, message) form is available so assertion messages can name the invariant."
-    ],
-    "unknowns": [],
-    "out_of_scope": [
-      "Refactoring ActivityContent's data loading into a testable function",
-      "Any change to page.tsx, failedFeedScope, ActivityFailed or the /activity UI",
-      "Edits to .sdlc/memory/** (the Librarian's)"
-    ],
-    "risks": [
-      "A source-text test is coupled to the shape of the try block and goes red on a harmless refactor; the violation messages name the invariant so the next author updates it on purpose.",
-      "It protects statement order and assignment count, not that a feed-read failure reaches ActivityFailed at runtime; that stays covered by the failedFeedScope unit tests in lib/activity/queries.test.ts.",
-      "Exotic rewrites (e.g. `groupsLoaded = (rows = await ...) && true`) are only caught by the assignment-count and ordering checks, not individually."
-    ],
-    "qa_script": [
-      "No browser walk: the change is test-only and /activity is untouched.",
-      "Run `npx vitest run app/activity/guard-wire-status.test.ts` and confirm four tests pass.",
-      "Confirm `git diff --stat` lists only app/activity/guard-wire-status.test.ts."
-    ],
-    "confidence": 88,
-    "confidence_rationale": "One finding, re-verified against page.tsx:121-133 and the current test; the change is confined to one existing test file with no product code, and committed mutants prove the check can fail. Residual uncertainty is only the exact regexes matching the formatted source on the first try (the implementer runs the test) and reviewer taste on source-text tests; a behavioural harness would raise the ceiling but was judged disproportionate.",
-    "debate_summary": "The critique judged the proposal sound and I agree on the diagnosis; I accepted every finding with changes. Accepted (major): the manual-only mutation check meant nothing visible proves the order test can fail — replaced with committed in-memory mutants, which is the change that matters most. Accepted (minor): anchor on the awaited statements so dropping `await` is caught; count all assignments rather than the literal 'groupsLoaded = true'; fix the inconsistent block counts (three existing `it` blocks stay, one added, four total); use whitespace-tolerant regexes with invariant-naming messages. Folded in from the critique's missed edge cases: assert the ActivityContent slice index first, require a single try/catch, and strip comments so prose cannot satisfy a match. Not adopted: nothing was dismissed outright, but I did not chase the contrived `groupsLoaded = (rows = await ...) && true` form beyond what ordering and the assignment count already catch, and I kept the source-text technique over a behavioural harness (both agree it is weaker than a runtime test; the issue offers it as the fix and the file already uses it). No route change: the route fits a test-only chore.",
-    "residual_risks": [
-      "Statement order and assignment count are held, not runtime behaviour; a future refactor of how the reads are written needs a matching test update.",
-      "The mutants are string replacements keyed to today's formatting: if the reads are restructured, the mutation builders must be updated or the `mutant !== page` guard will fail loudly."
-    ]
-  },
   "validated_from": "plan",
   "validated_at": "2026-10-07T01:23:15.931Z",
   "validated_ac_changes": [],
-  "approved_work_order": {
-    "issue": 65,
-    "version": 1,
-    "kind": "chore",
-    "understanding": "The single finding in #65 (from PR #64's review) still reproduces on main. app/activity/guard-wire-status.test.ts only asserts that page.tsx contains the substrings 'failedFeedScope(groupsLoaded, groups, rawGroup)' and 'groupsLoaded = true', never where the assignment sits. failedFeedScope(false, ...) deliberately carries the raw ?group= uuid into the Retry/chip links, so if 'groupsLoaded = true' moved above the groups read (page.tsx:124) or below the feed read (page.tsx:126), a feed-read failure would give groupsLoaded=false and carry a stranger's uuid again (the original #62 defect) with every test green. The helper is already unit-tested (lib/activity/queries.test.ts:452-468); only the page wiring in ActivityContent's try block is unguarded. This is test-only hardening: page.tsx, queries.ts and the /activity screen are untouched, so there is nothing for frontend-design or ux to apply beyond leaving the UI alone.",
-    "root_cause": "The wiring test checks presence of substrings rather than their order and exact count inside ActivityContent, so the invariant 'groups read awaited -> groupsLoaded = true -> feed read awaited, all inside try, flag assigned nowhere else' is unprotected.",
-    "approach": "Edit only app/activity/guard-wire-status.test.ts. Keep the three existing `it` blocks untouched (the plain toContain('groupsLoaded = true') stays; it is merely redundant) and add one new `it`, so the file ends with four passing tests. The new check lives in a small local function `groupsLoadedWiring(src: string): string[]` that returns a list of violated-invariant messages (empty when the wiring is right). It (1) slices src from 'async function ActivityContent' (the test asserts that index is >= 0 first, so a rename fails with a clear message instead of slice(-1) nonsense) and strips // line comments and /* */ blocks so prose cannot satisfy a match; (2) locates, with whitespace-tolerant regexes, the awaited groups read /groups\\s*=\\s*await\\s+withDb\\(\\s*\\(handle\\)\\s*=>\\s*listActivityGroups\\(handle\\.db/, the flag assignment /(?<!let\\s)\\bgroupsLoaded\\s*=\\s*true\\s*;/, the awaited feed read /rows\\s*=\\s*await\\s+withDb\\(\\s*\\(handle\\)\\s*=>\\s*listUserActivity\\(handle\\.db/, the single /\\btry\\s*\\{/, the single /\\}\\s*catch\\b/, and /failedFeedScope\\(\\s*groupsLoaded/; (3) reports a violation for each missing piece, for more than one try or catch, for any order other than try < groups read < flag < feed read < catch < failedFeedScope, for a declaration other than exactly one /let\\s+groupsLoaded\\s*=\\s*false\\s*;/, and for a total of anything other than 2 matches of /\\bgroupsLoaded\\s*=(?![=>])/g (the declaration plus the one assignment — this catches `groupsLoaded = !failed`, a reset in the catch, or a changed declaration). Anchoring on the `await`ed statements means dropping the await from the groups read also trips it. The new `it` asserts groupsLoadedWiring(page) is [] with each violation message naming the invariant (so the next author of a legitimate refactor updates the test deliberately), and — taking the critique's major finding — also asserts that in-memory mutants of the real page text each produce a non-empty violation list: (a) flag assignment removed from its line and inserted before the groups read, (b) flag assignment moved after the feed read, (c) `await` dropped from the groups read, (d) a second `groupsLoaded = false;` added in the catch. Each mutant is built with String.replace and the test first asserts mutant !== page so a mutation that silently did nothing cannot make the check vacuous. That makes the 'can fail' proof committed and CI-visible rather than a manual uncommitted edit. Update the header comment with one short line that the ordering of the two reads around the flag is the other source-level fact held here. No change to page.tsx.",
-    "files": [
-      {
-        "path": "app/activity/guard-wire-status.test.ts",
-        "action": "edit",
-        "change": "Add a local `groupsLoadedWiring(src)` function (comment-stripped slice from 'async function ActivityContent'; whitespace-tolerant regexes anchored on the awaited groups read, the flag assignment, the awaited feed read, the single try/catch and failedFeedScope(groupsLoaded; returns violation messages for missing pieces, wrong order, a declaration other than one `let groupsLoaded = false;`, or assignment count other than 2). Add one new `it` that expects it to return [] for the real page and non-empty for four in-memory mutants (flag above groups read, flag below feed read, await dropped from groups read, second assignment in the catch), each asserting mutant !== page first. Leave the three existing `it` blocks as they are. Add one short line to the header comment. Imports and the `page` constant are reused.",
-        "why": "The invariant is a source-order fact: the page's try block cannot be exercised by a unit test (the embedded database resolves in the microtask queue and the server component has no harness), and this file already holds exactly that kind of fact for the guard/Suspense order."
-      }
-    ],
-    "tests": [
-      {
-        "path": "app/activity/guard-wire-status.test.ts",
-        "action": "edit",
-        "cases": [
-          "real page.tsx: groupsLoadedWiring returns no violations (try < awaited groups read < groupsLoaded = true < awaited feed read < catch < failedFeedScope(groupsLoaded)",
-          "mutant: groupsLoaded = true moved above the groups read is reported",
-          "mutant: groupsLoaded = true moved below the feed read is reported",
-          "mutant: await dropped from the groups read is reported",
-          "mutant: a second groupsLoaded assignment in the catch is reported (assignment count != 2)",
-          "each mutant differs from the real page text, so a no-op mutation cannot pass vacuously",
-          "the three existing blocks (no loading.tsx, redirect before Suspense, failed-branch substrings) still pass; file ends with four passing tests"
-        ]
-      }
-    ],
-    "acceptance": [
-      {
-        "id": "AC-1",
-        "check": "The wiring test fails if 'groupsLoaded = true' is moved before the awaited listActivityGroups read or after the awaited listUserActivity read in ActivityContent, shown by committed in-memory mutants of page.tsx rather than a manual edit.",
-        "verify": "test",
-        "how_to_verify": "Run `npx vitest run app/activity/guard-wire-status.test.ts`: green on the real page.tsx, and the mutant assertions inside the new `it` pass (each mutant yields a non-empty violation list)."
-      },
-      {
-        "id": "AC-2",
-        "check": "The wiring test also fails when the await on the groups read is dropped or when groupsLoaded is assigned anywhere beyond the declaration and the one assignment inside the try; the three pre-existing `it` blocks remain unchanged and pass, so the file reports four passing tests.",
-        "verify": "test",
-        "how_to_verify": "Run the whole file and confirm four tests pass; read the diff to confirm the three original `it` bodies are untouched."
-      },
-      {
-        "id": "AC-3",
-        "check": "No product code changed: `git diff --stat` lists only app/activity/guard-wire-status.test.ts (page.tsx and lib/activity/queries.ts byte-identical), and typecheck, test:ci and build still pass.",
-        "verify": "test",
-        "how_to_verify": "`git diff --stat`, then `npm run typecheck && npm run test:ci && npm run build` (the sdlc verify suite)."
-      }
-    ],
-    "alternatives_considered": [
-      {
-        "approach": "Extract the try block into a lib function returning {groups, rows, groupsLoaded} and unit-test it with a failing feed read.",
-        "rejected_because": "A behavioural test is stronger but adds an abstraction with one caller and moves page code for a non-blocking, test-only follow-up; the issue itself offers 'assert the order' or accept the risk."
-      },
-      {
-        "approach": "Render ActivityContent with mocked withDb/listActivityGroups/listUserActivity and assert ActivityFailed's groupId prop.",
-        "rejected_because": "ActivityContent is an async server component importing next/navigation, next/link and the DB client; mocking those in Vitest is heavy and brittle for one invariant."
-      },
-      {
-        "approach": "Manual-only mutation check (proposal's version): move the assignment in page.tsx locally, confirm red, revert.",
-        "rejected_because": "Nothing in CI or QA would show the order check can fail, so a later edit making it vacuous would pass silently — the very defect this issue is about. In-memory mutants committed in the test replace it."
-      },
-      {
-        "approach": "Accept the residual risk and close without change.",
-        "rejected_because": "The finding reproduces (the test checks substring presence only) and the fix is a few dozen lines in an existing test file."
-      }
-    ],
-    "assumptions": [
-      "The anchored patterns match page.tsx as formatted today (page.tsx:121-133); a prettier reflow is absorbed by \\s* tolerance, and a deliberate refactor fails loudly with a message naming the invariant.",
-      "ActivityContent is the only place in page.tsx with try/catch or groupsLoaded (grep: lines 121, 123, 125, 127, 145 only), so slicing to end of file is safe.",
-      "No other file depends on guard-wire-status.test.ts; groupsLoaded and failedFeedScope appear only in page.tsx, queries.ts and their tests.",
-      "Vitest's expect(value, message) form is available so assertion messages can name the invariant."
-    ],
-    "unknowns": [],
-    "out_of_scope": [
-      "Refactoring ActivityContent's data loading into a testable function",
-      "Any change to page.tsx, failedFeedScope, ActivityFailed or the /activity UI",
-      "Edits to .sdlc/memory/** (the Librarian's)"
-    ],
-    "risks": [
-      "A source-text test is coupled to the shape of the try block and goes red on a harmless refactor; the violation messages name the invariant so the next author updates it on purpose.",
-      "It protects statement order and assignment count, not that a feed-read failure reaches ActivityFailed at runtime; that stays covered by the failedFeedScope unit tests in lib/activity/queries.test.ts.",
-      "Exotic rewrites (e.g. `groupsLoaded = (rows = await ...) && true`) are only caught by the assignment-count and ordering checks, not individually."
-    ],
-    "qa_script": [
-      "No browser walk: the change is test-only and /activity is untouched.",
-      "Run `npx vitest run app/activity/guard-wire-status.test.ts` and confirm four tests pass.",
-      "Confirm `git diff --stat` lists only app/activity/guard-wire-status.test.ts."
-    ],
-    "confidence": 88,
-    "confidence_rationale": "One finding, re-verified against page.tsx:121-133 and the current test; the change is confined to one existing test file with no product code, and committed mutants prove the check can fail. Residual uncertainty is only the exact regexes matching the formatted source on the first try (the implementer runs the test) and reviewer taste on source-text tests; a behavioural harness would raise the ceiling but was judged disproportionate.",
-    "debate_summary": "The critique judged the proposal sound and I agree on the diagnosis; I accepted every finding with changes. Accepted (major): the manual-only mutation check meant nothing visible proves the order test can fail — replaced with committed in-memory mutants, which is the change that matters most. Accepted (minor): anchor on the awaited statements so dropping `await` is caught; count all assignments rather than the literal 'groupsLoaded = true'; fix the inconsistent block counts (three existing `it` blocks stay, one added, four total); use whitespace-tolerant regexes with invariant-naming messages. Folded in from the critique's missed edge cases: assert the ActivityContent slice index first, require a single try/catch, and strip comments so prose cannot satisfy a match. Not adopted: nothing was dismissed outright, but I did not chase the contrived `groupsLoaded = (rows = await ...) && true` form beyond what ordering and the assignment count already catch, and I kept the source-text technique over a behavioural harness (both agree it is weaker than a runtime test; the issue offers it as the fix and the file already uses it). No route change: the route fits a test-only chore.",
-    "residual_risks": [
-      "Statement order and assignment count are held, not runtime behaviour; a future refactor of how the reads are written needs a matching test update.",
-      "The mutants are string replacements keyed to today's formatting: if the reads are restructured, the mutation builders must be updated or the `mutant !== page` guard will fail loudly."
-    ]
-  },
-  "approved_too_high": false
+  "approved_too_high": false,
+  "work_order_version": 1,
+  "work_order_posted_at": "2026-10-07T01:24:42.769Z",
+  "work_order_from": "plan",
+  "work_order_comment": "6028867589"
 }

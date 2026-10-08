@@ -1,7 +1,7 @@
-# Roadmap (survey 2026-10-07)
+# Roadmap (survey 2026-10-08)
 
-Rebuilt from what is actually open: issues #24 and #63; no open pull requests.
-Recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices.
+Rebuilt from what is actually open: issues #24 and #63, and one pull request (#73, the Librarian's nightly memory update).
+Recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
 No untrusted entries. Decisions on record from the earlier replans still stand:
 the redesign changed UI only; stack, data model, money rules, TRs and every
 other decision stay as they were, and docs/ui.md is approved as written.
@@ -38,17 +38,18 @@ What a user can do now that they could not before:
 
 ## In flight
 
-Nothing. No open PR, and no open issue is work: #24 is the Spec coverage
-tracking issue and #63 is an alert. Nothing has sat in a stage.
+Only PR #73 (memory: 2026-10-07), the Librarian's nightly memory update, which
+is bookkeeping and not product work. No open issue is work: #24 is the Spec
+coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
 
 ## Next
 
-1. Nothing filed. Reason: every known follow-up has landed (#60 and #62, the
-   last two, are closed along with their own follow-ups #67, #69, #71). The
-   deliberately deferred items (password reset, native apps, in-app payment,
-   receipts, recurring expenses, multi-currency rates, charts, email
-   notifications) are eventual per the PRD, not next, and writing them as
-   epics now would be a backlog against decisions nobody has made.
+1. Nothing filed. Reason: every known follow-up has landed and nothing new has
+   been opened or closed since the last survey. The deliberately deferred items
+   (password reset, native apps, in-app payment, receipts, recurring expenses,
+   multi-currency rates, charts, email notifications) are eventual per the PRD,
+   not next, and writing them as epics now would be a backlog against decisions
+   nobody has made.
 2. If a person wants more, the first useful move is the production deploy
    below, because every proof so far is local (PGlite) and that is the largest
    unverified assumption in the project.
@@ -60,6 +61,7 @@ tracking issue and #63 is an alert. Nothing has sat in a stage.
   it parked has drained. A person can close it; it needs no other action. If
   the ceiling is hit again, `limits.max_agent_sessions_per_day` in
   `.sdlc/config.yml` is the knob.
+- PR #73 awaits a person's merge (memory notes only).
 - First production deploy is blocked on a person: connect the repo to Vercel,
   add Neon from the Storage tab (pooled URL), set the required secrets, run the
   manual Neon smoke check. The `project.md` QA-auth-mode question is

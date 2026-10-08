@@ -1,11 +1,12 @@
 # QA environment notes
 
-Facts observed by QA runs and implementer browser walks on 2026-10-05 (PRs #9, #12, #14, #16, #19, #20, #23) and re-hit through 2026-10-06 (PRs #40–#54). Facts, not orders — each one was hit in the wild at least once.
+Facts observed by QA runs and implementer browser walks on 2026-10-05 (PRs #9–#23), re-hit through 2026-10-06 (PRs #40–#59) and 2026-10-07 (PRs #61–#72). Facts, not orders — each one was hit in the wild at least once.
 
 ## The preview on port 3000 lags the branch
 The compose preview is a static build served from before the branch's changes, and the process
 holding it sits outside a job's sandbox, so a run cannot restart it. Five of the eight PRs
-merged on 2026-10-05 hit it, with three symptoms that all look like the change is broken:
+merged on 2026-10-05 hit it; every QA round on PRs #56–#72 that probed the build id (below)
+found `:3000` current. Stale-preview symptoms all look like the change is broken:
 
 - a new route 404s while the home page still renders (`/signup`, `/groups/new`),
 - new `/_next/static/chunks/*` files 404, so React never hydrates and client islands look
@@ -63,14 +64,29 @@ on the streamed Flight response instead of pixels: the `<!--$?-->` marker and th
 `data-skeleton` attributes appear in the stream, ahead of the resolved content. Against real
 Neon latency the fallback paints first.
 
+The same hides the JavaScript-off notice on a screen whose boundary is in-page: `/activity`
+(Suspense below the session guard, no route-level `loading.tsx`) answers a scriptless reader
+with the resolved feed, so "skeleton plus notice" is unobservable there, while the members
+screen keeps a route-level `loading.tsx` and does show both (PR #59 QA, AC-11). Assert the
+`/activity` fallback — `aria-busy="true"` and the sr-only `role=status` "Loading activity…" —
+on the raw response, as PR #64's QA did, and the resolved page carries neither.
+
 ## The verify suite has known noise in it
 - **`lib/db/*.test.ts` flake at vitest's default 5s timeout under parallel load.** PGlite boot
   takes ~5.0s against a 5.0s limit; at high file parallelism one of `migrate.test.ts`,
   `client.test.ts` or `backend-invariant.test.ts` times out, each passes alone in ~3s, and the
   full suite is green on re-run. Seen twice independently (PRs #40 and #43). A timeout there
   is timing, not a product regression.
+  `app/api/health/route.test.ts` ("reports 503 degraded while the migration ledger is missing")
+  flakes the same way and moves between itself and `backend-invariant.test.ts`: the unmodified
+  base failed 2 of 3 full-suite runs on one implementer box (PR #56); each passes alone.
 - **Vitest's GitHub Actions reporter prints an `EROFS` stack** trying to write a step summary
-  into a read-only path. Reporter noise; the exit code is what counts (PR #22).
+  into a read-only path. Reporter noise; the exit code is what counts (PR #22). An
+  implementer in the sandbox ran `GITHUB_ACTIONS= npm run test:ci` to get a clean run, since
+  the reporter cannot write its summary there (PR #64).
+- **The `Vercel` check on a PR fails with "Deployment rate limited — retry in 24 hours"**
+  (PRs #56, #61, #64). Infrastructure, not the diff; `ci-verify` is the check that proves the
+  code, and QA passed with it red each time.
 - **This repo has no DOM/React-render test harness** — vitest is `environment: 'node'` over
   `lib/`, `app/` and `scripts/` only (vitest.config.ts). A client-half repaint bug cannot be
   unit-tested here, so a work order's unit test for one passes on the unfixed tree; the

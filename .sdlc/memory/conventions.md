@@ -29,10 +29,18 @@ TypeScript 5, Next.js 16 (App Router) + React 19 on Node 20+, Tailwind CSS v4, D
   chain — overflow-wrap cannot lower a flex item's min-content floor; list rows keep `truncate`
   plus the full value in `title`. Measure at 375px and fix the widest element, not the obvious one:
   notices get blamed while the h1 or breadcrumb usually sets the width (issue #49's replan,
-  PRs #49/#54).
+  PRs #49/#54). A fixed-width box (`w-64`) in a flex row is not helped by any wrapping class — it
+  becomes an `absolute right-0` overlay (the member-row remove confirm, PR #56); a transfer-style
+  row whose name wraps keeps its amount right with `ml-auto` (PR #61). The family took three
+  tickets (#49, #55, #60) because each fix left a sibling spot that interpolates the same name.
+- A test that reads a source file (`readFileSync` — the only way this node-environment suite can
+  pin a Server Component's markup, a statement order or an absent file) asserts on class tokens
+  and relative order, through patterns that survive a reformat: never on comment wording, indent,
+  line endings or the catch variable's name. Each mutant such a test builds declares the violation
+  it must trigger and the test asserts it, so a half-applied mutant cannot pass. Both failure modes
+  came back as follow-up tickets within hours: a case pinning a JSX comment's prose (#70, dropped
+  in #72) and mutant builders keyed to 4-space indent and `catch (error)` (#66, fixed in #68).
 
 ## Added by review and QA
 The rules above from "A refusal sentence renders exactly once" down were review-enforced on
-2026-10-05/06 (PRs #12–#54 diffusely; evidence per rule in its parenthesis) and now live in Rules
-so nothing is stated twice. Follow-ups in flight when this was written: #55 (the long-name family
-on the join page, expense screen and ConfirmStep) and the group page's stale-param-notices.
+2026-10-05/07 (evidence per rule in its parenthesis) and live in Rules so nothing is stated twice.

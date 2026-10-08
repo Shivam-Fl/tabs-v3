@@ -1,6 +1,6 @@
 # Roadmap (survey 2026-10-08)
 
-Rebuilt from what is actually open: issues #24 and #63, and one pull request (#73, the Librarian's nightly memory update).
+Rebuilt from what is actually open: issues #24 (Spec coverage) and #63 (an alert), and no open pull requests.
 Recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
 No untrusted entries. Decisions on record from the earlier replans still stand:
 the redesign changed UI only; stack, data model, money rules, TRs and every
@@ -38,9 +38,9 @@ What a user can do now that they could not before:
 
 ## In flight
 
-Only PR #73 (memory: 2026-10-07), the Librarian's nightly memory update, which
-is bookkeeping and not product work. No open issue is work: #24 is the Spec
-coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
+Nothing. No open pull request (the Librarian's memory update #73 has merged) and
+no open issue is work: #24 is the Spec coverage tracking issue and #63 is an
+alert. Nothing has sat in a stage.
 
 ## Next
 
@@ -61,7 +61,6 @@ coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
   it parked has drained. A person can close it; it needs no other action. If
   the ceiling is hit again, `limits.max_agent_sessions_per_day` in
   `.sdlc/config.yml` is the knob.
-- PR #73 awaits a person's merge (memory notes only).
 - First production deploy is blocked on a person: connect the repo to Vercel,
   add Neon from the Storage tab (pooled URL), set the required secrets, run the
   manual Neon smoke check. The `project.md` QA-auth-mode question is

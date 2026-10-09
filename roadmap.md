@@ -30,7 +30,7 @@ What a user can do now that they could not before:
   of pushing headings, notices, confirms and the group summary past the 375px
   viewport.
 - The /activity feed degrades to a scoped failed state with a retry, keeps its
-  loading announcement, and no longer carries a raw group id on a failed feed.
+  loading announcement, and carries no raw group id on a failed feed.
 - The whole v1 spec (accounts, groups, expenses with all split types, balances
   and settle-up, activity, seed and deploy guide) and the redesign epic #31 are
   built and closed. The review follow-up chain that ran from #35 through #71

@@ -1,4 +1,4 @@
-# Roadmap (survey 2026-10-08)
+# Roadmap (survey 2026-10-09)
 
 Rebuilt from what is actually open: issues #24 (Spec coverage) and #63 (an alert), and no open pull requests.
 Recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
@@ -38,14 +38,13 @@ What a user can do now that they could not before:
 
 ## In flight
 
-Nothing. No open pull request (the Librarian's memory update #73 has merged) and
-no open issue is work: #24 is the Spec coverage tracking issue and #63 is an
-alert. Nothing has sat in a stage.
+Nothing. No open pull request and no open issue is work: #24 is the Spec
+coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
 
 ## Next
 
-1. Nothing filed. Reason: every known follow-up has landed and nothing new has
-   been opened or closed since the last survey. The deliberately deferred items
+1. Nothing filed. Reason: every known follow-up has landed and nothing has been
+   opened or closed since the last survey. The deliberately deferred items
    (password reset, native apps, in-app payment, receipts, recurring expenses,
    multi-currency rates, charts, email notifications) are eventual per the PRD,
    not next, and writing them as epics now would be a backlog against decisions

@@ -1,7 +1,7 @@
 # Roadmap (survey 2026-10-14)
 
 Rebuilt from what is actually open: issues #24 (Spec coverage) and #63 (an alert), and no open pull requests.
-Recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
+Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
 No untrusted entries. Decisions on record from the earlier replans still stand:
 the redesign changed UI only; stack, data model, money rules, TRs and every
 other decision stay as they were, and docs/ui.md is approved as written.
@@ -38,17 +38,17 @@ What a user can do now that they could not before:
 
 ## In flight
 
-Nothing. No open pull request and no open issue is work: #24 is the Spec
+Nothing. No open pull request, and no open issue is work: #24 is the Spec
 coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
 
 ## Next
 
 1. Nothing filed. Reason: every known follow-up has landed and nothing has been
-   opened or closed since the last survey (a week ago). The deliberately
-   deferred items (password reset, native apps, in-app payment, receipts,
-   recurring expenses, multi-currency rates, charts, email notifications) are
-   eventual per the PRD, not next, and writing them as epics now would be a
-   backlog against decisions nobody has made.
+   opened or closed since the last survey. The deliberately deferred items
+   (password reset, native apps, in-app payment, receipts, recurring expenses,
+   multi-currency rates, charts, email notifications) are eventual per the PRD,
+   not next, and writing them as epics now would be a backlog against decisions
+   nobody has made.
 2. If a person wants more, the first useful move is the production deploy
    below, because every proof so far is local (PGlite) and that is the largest
    unverified assumption in the project.
@@ -76,7 +76,7 @@ EPIC DEPENDENCY GRAPH: none. No open epics, so no epic waits on another.
 
 No new issues filed. Spec coverage (#24): 11 sections, 8 built, 2 scope
 sections that read "not started" only because they are scope not requirements
-(S-1, S-11), 1 non-goal, nothing uncovered. Width overflow has now appeared
-three times (#49, #60 and its follow-up #69); a ticket for a sweep test of
-every screen at 375px with maximum-length names is the right response to a
-fourth, not before.
+(S-1, S-11), 1 non-goal, nothing uncovered. Width overflow has appeared three
+times (#49, #60 and its follow-up #69); a ticket for a sweep test of every
+screen at 375px with maximum-length names is the right response to a fourth,
+not before.

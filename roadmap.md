@@ -44,11 +44,11 @@ coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
 ## Next
 
 1. Nothing filed. Reason: every known follow-up has landed and nothing has been
-   opened or closed since the last survey. The deliberately deferred items
-   (password reset, native apps, in-app payment, receipts, recurring expenses,
-   multi-currency rates, charts, email notifications) are eventual per the PRD,
-   not next, and writing them as epics now would be a backlog against decisions
-   nobody has made.
+   opened or closed since the last survey (eight days). The deliberately
+   deferred items (password reset, native apps, in-app payment, receipts,
+   recurring expenses, multi-currency rates, charts, email notifications) are
+   eventual per the PRD, not next, and writing them as epics now would be a
+   backlog against decisions nobody has made.
 2. If a person wants more, the first useful move is the production deploy
    below, because every proof so far is local (PGlite) and that is the largest
    unverified assumption in the project.

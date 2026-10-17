@@ -1,6 +1,6 @@
-# Roadmap (survey 2026-10-16)
+# Roadmap (survey 2026-10-17)
 
-Rebuilt from what is actually open: issues #24 (Spec coverage) and #63 (an alert), and no open pull requests.
+Rebuilt from what is actually open: issues #24 (Spec coverage), #63 (an alert, 2026-10-06) and #74 (an alert, 2026-10-16), and no open pull requests.
 Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
 No untrusted entries. Decisions on record from the earlier replans still stand:
 the redesign changed UI only; stack, data model, money rules, TRs and every
@@ -39,13 +39,13 @@ What a user can do now that they could not before:
 ## In flight
 
 Nothing. No open pull request, and no open issue is work: #24 is the Spec
-coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
+coverage tracking issue and #63 and #74 are alerts. Nothing has sat in a stage.
 
 ## Next
 
 1. Nothing filed. Reason: every known follow-up has landed and nothing has been
-   opened or closed since the last survey (nine days since the last close).
-   The deliberately deferred items (password reset, native apps, in-app
+   opened as work or closed since the last survey (ten days since the last
+   close). The deliberately deferred items (password reset, native apps, in-app
    payment, receipts, recurring expenses, multi-currency rates, charts, email
    notifications) are eventual per the PRD, not next, and writing them as epics
    now would be a backlog against decisions nobody has made.
@@ -55,6 +55,13 @@ coverage tracking issue and #63 is an alert. Nothing has sat in a stage.
 
 ## Blocked, and on whom
 
+- #74 (alert, 2026-10-16: the model provider answered "weekly limit, resets
+  Oct 17, 2pm UTC") needs no work from the pipeline: stages that hit it park
+  and restart by themselves. It is the reason the repository has been quiet
+  since the 16th only if work was queued; nothing is queued now. If the limit
+  has not cleared after 14:00 UTC today, a person looks at the plan's quota and
+  runs `gh workflow run sdlc-canary.yml`. Once it has cleared a person can
+  close it.
 - #63 (alert: the 100-agent-session daily ceiling was reached on 2026-10-06)
   is still open although the ceiling reset at 2026-10-07T00:00Z and the queue
   it parked has drained. A person can close it; it needs no other action. If

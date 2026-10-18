@@ -57,9 +57,9 @@ coverage tracking issue and #63 and #74 are alerts. Nothing has sat in a stage.
 
 - #74 (alert, 2026-10-16: the model provider answered "weekly limit, resets
   Oct 17, 2pm UTC") needs no work from the pipeline: stages that hit it park
-  and restart by themselves. The reset time has now passed and nothing is
-  queued, so a person can close it; if the limit proves not to have cleared,
-  they look at the plan's quota and run `gh workflow run sdlc-canary.yml`.
+  and restart by themselves. The reset time has passed and nothing is queued,
+  so a person can close it; if the limit proves not to have cleared, they look
+  at the plan's quota and run `gh workflow run sdlc-canary.yml`.
 - #63 (alert: the 100-agent-session daily ceiling was reached on 2026-10-06)
   is still open although the ceiling reset at 2026-10-07T00:00Z and the queue
   it parked has drained. A person can close it; it needs no other action. If

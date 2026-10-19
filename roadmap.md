@@ -1,7 +1,7 @@
-# Roadmap (survey 2026-10-18)
+# Roadmap (survey 2026-10-19)
 
 Rebuilt from what is actually open: issues #24 (Spec coverage), #63 (an alert, 2026-10-06) and #74 (an alert, 2026-10-16), and no open pull requests.
-Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07 (eleven days).
+Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07 (twelve days).
 No untrusted entries. Decisions on record from the earlier replans still stand:
 the redesign changed UI only; stack, data model, money rules, TRs and every
 other decision stay as they were, and docs/ui.md is approved as written.

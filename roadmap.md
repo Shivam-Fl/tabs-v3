@@ -1,7 +1,7 @@
-# Roadmap (survey 2026-10-25)
+# Roadmap (survey 2026-10-26)
 
 Rebuilt from what is actually open: issues #24 (Spec coverage), #63 (an alert, 2026-10-06) and #74 (an alert, 2026-10-16), and no open pull requests.
-Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07 (eighteen days).
+Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07 (nineteen days).
 No untrusted entries. Decisions on record from the earlier replans still stand:
 the redesign changed UI only; stack, data model, money rules, TRs and every
 other decision stay as they were, and docs/ui.md is approved as written.
@@ -57,7 +57,7 @@ coverage tracking issue and #63 and #74 are alerts. Nothing has sat in a stage.
 
 - #74 (alert, 2026-10-16: the model provider answered "weekly limit, resets
   Oct 17, 2pm UTC") needs no work from the pipeline: stages that hit it park
-  and restart by themselves. The reset time passed eight days ago and nothing
+  and restart by themselves. The reset time passed nine days ago and nothing
   is queued, so a person can close it; if the limit proves not to have
   cleared, they look at the plan's quota and run `gh workflow run
   sdlc-canary.yml`. This survey ran on the model without error, which suggests

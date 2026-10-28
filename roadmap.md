@@ -25,7 +25,7 @@ Nothing. No open pull request, and no open issue is work: #24 is the Spec covera
 
 ## Next
 
-1. Nothing filed. Reason: every known follow-up has landed and nothing has been opened as work or closed since the last survey. The deliberately deferred items (password reset, native apps, in-app payment, receipts, recurring expenses, multi-currency rates, charts, email notifications) are eventual per the PRD, not next; writing them as epics now would be a backlog against decisions nobody has made.
+1. Nothing filed. Reason: every known follow-up has landed and nothing has been opened as work or closed since the last survey (three weeks of quiet). The deliberately deferred items (password reset, native apps, in-app payment, receipts, recurring expenses, multi-currency rates, charts, email notifications) are eventual per the PRD, not next; writing them as epics now would be a backlog against decisions nobody has made.
 2. If a person wants more, the first useful move is the production deploy below, because every proof so far is local (PGlite) and that is the largest unverified assumption in the project.
 
 ## Blocked, and on whom

@@ -1,4 +1,4 @@
-# Roadmap (survey 2026-10-28)
+# Roadmap (survey 2026-10-29)
 
 Rebuilt from what is actually open: issues #24 (Spec coverage), #63 (an alert, 2026-10-06) and #74 (an alert, 2026-10-16), and no open pull requests.
 Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07, and the latest commit on main is the 2026-10-07 memory update.
@@ -25,12 +25,12 @@ Nothing. No open pull request, and no open issue is work: #24 is the Spec covera
 
 ## Next
 
-1. Nothing filed. Reason: every known follow-up has landed and nothing has been opened as work or closed since the last survey (three weeks of quiet). The deliberately deferred items (password reset, native apps, in-app payment, receipts, recurring expenses, multi-currency rates, charts, email notifications) are eventual per the PRD, not next; writing them as epics now would be a backlog against decisions nobody has made.
+1. Nothing filed. Reason: every known follow-up has landed and nothing has been opened as work or closed since the last survey (about three weeks of quiet). The deliberately deferred items (password reset, native apps, in-app payment, receipts, recurring expenses, multi-currency rates, charts, email notifications) are eventual per the PRD, not next; writing them as epics now would be a backlog against decisions nobody has made.
 2. If a person wants more, the first useful move is the production deploy below, because every proof so far is local (PGlite) and that is the largest unverified assumption in the project.
 
 ## Blocked, and on whom
 
-- #74 (alert, 2026-10-16: the model provider answered "weekly limit, resets Oct 17, 2pm UTC") needs no work from the pipeline: stages that hit it park and restart by themselves. The reset passed eleven days ago and nothing is queued, so a person can close it; if the limit proves not to have cleared, they look at the plan's quota and run `gh workflow run sdlc-canary.yml`. This survey ran on the model without error, which suggests it has cleared.
+- #74 (alert, 2026-10-16: the model provider answered "weekly limit, resets Oct 17, 2pm UTC") needs no work from the pipeline: stages that hit it park and restart by themselves. The reset passed twelve days ago and nothing is queued, so a person can close it; if the limit proves not to have cleared, they look at the plan's quota and run `gh workflow run sdlc-canary.yml`. This survey ran on the model without error, which suggests it has cleared.
 - #63 (alert: the 100-agent-session daily ceiling was reached on 2026-10-06) is still open although the ceiling reset at 2026-10-07T00:00Z and the queue it parked has drained. A person can close it; it needs no other action. If the ceiling is hit again, `limits.max_agent_sessions_per_day` in `.sdlc/config.yml` is the knob.
 - First production deploy is blocked on a person: connect the repo to Vercel, add Neon from the Storage tab (pooled URL), set the required secrets, run the manual Neon smoke check. The `project.md` QA-auth-mode question is unanswered but blocks nothing.
 

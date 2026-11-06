@@ -1,4 +1,4 @@
-# Roadmap (survey 2026-11-05)
+# Roadmap (survey 2026-11-06)
 
 Rebuilt from what is actually open: issues #24 (Spec coverage), #63 (an alert, 2026-10-06) and #74 (an alert, 2026-10-16), and no open pull requests.
 Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
@@ -25,7 +25,7 @@ Nothing. No open pull request, and no open issue is work: #24 is the Spec covera
 
 ## Next
 
-1. Nothing filed. Reason: every known follow-up has landed and nothing has been opened as work or closed since 2026-10-07 (about four weeks of quiet). The deliberately deferred items (password reset, native apps, in-app payment, receipts, recurring expenses, multi-currency rates, charts, email notifications) are eventual per the PRD, not next; writing them as epics now would be a backlog against decisions nobody has made.
+1. Nothing filed. Reason: every known follow-up has landed and nothing has been opened as work or closed since 2026-10-07 (about a month of quiet). The deliberately deferred items (password reset, native apps, in-app payment, receipts, recurring expenses, multi-currency rates, charts, email notifications) are eventual per the PRD, not next; writing them as epics now would be a backlog against decisions nobody has made.
 2. If a person wants more, the first useful move is the production deploy below, because every proof so far is local (PGlite) and that is the largest unverified assumption in the project.
 
 ## Blocked, and on whom

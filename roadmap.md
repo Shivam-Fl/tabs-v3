@@ -1,4 +1,4 @@
-# Roadmap (survey 2026-11-27)
+# Roadmap (survey 2026-11-28)
 
 Rebuilt from what is open now: issues #24 (Spec coverage), #63 (alert, 2026-10-06) and #74 (alert, 2026-10-16), and no open pull requests.
 Most recently closed: #71, #69, #60, #67, #65, #62, #58, #55, #31 and earlier slices; nothing has closed since 2026-10-07.
